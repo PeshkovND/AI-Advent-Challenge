@@ -1,32 +1,76 @@
 import { FormEvent, KeyboardEvent, useEffect, useRef, useState } from 'react'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 
 type MessageRole = 'user' | 'assistant'
+type Page = 'chat' | 'compare'
 
 type ChatMessage = {
   id: string
   role: MessageRole
   content: string
 }
+type StopSequenceField = { id: string; value: string }
 
-type ChatStreamChunk = {
-  content?: string
-  error?: string
+type ChatStreamChunk = { content?: string; error?: string }
+type ComparisonSide = { content: string; tokens?: number }
+type ComparisonResult = {
+  prompt: string
+  unconstrained: ComparisonSide
+  constrained: ComparisonSide
+  controls: { format?: string; maxTokens?: number; stopSequences?: string[]; responseFormat?: 'json_object'; jsonExample?: string }
 }
-
-const starterPrompts = [
-  'Объясни простыми словами, как работает React',
-  'Помоги спланировать iOS-приложение',
-  'Напиши пример TypeScript-компонента',
-]
+type ApiError = { error?: string }
 
 const initialMessage: ChatMessage = {
   id: 'welcome',
   role: 'assistant',
-  content:
-    'Привет! Я ваш AI-помощник на базе DeepSeek. Задайте вопрос — я помогу разобраться в коде, спланировать функцию или найти решение.',
+  content: 'Привет! Я ваш AI-помощник на базе DeepSeek. Задайте вопрос — я помогу разобраться в коде, спланировать функцию или найти решение.',
 }
 
+const examplePrompts = [
+  'Объясни, зачем разделять клиентскую и серверную части приложения.',
+  'Составь план изучения React для iOS-разработчика.',
+  'Опиши, как работает потоковая выдача ответа от AI.',
+]
+const defaultFormatInstruction = 'Первая строка начинается с "КРАТКО:", затем ровно 3 строки, начинающиеся с "- ". Каждый пункт — не более 8 слов.'
+const defaultJsonExample = '{\n  "summary": "Краткое резюме",\n  "items": ["Пункт 1", "Пункт 2"]\n}'
+const createStopSequenceField = (value = ''): StopSequenceField => ({ id: crypto.randomUUID(), value })
+
 function App() {
+  const [activePage, setActivePage] = useState<Page>('chat')
+
+  return (
+    <div className="day-app">
+      <aside className="day-sidebar">
+        <div className="brand">
+          <div className="brand-mark">D</div>
+          <div><strong>DeepChat</strong><span>React + DeepSeek</span></div>
+        </div>
+
+        <nav className="page-nav" aria-label="Разделы приложения">
+          <button className={`page-nav-button ${activePage === 'chat' ? 'active' : ''}`} onClick={() => setActivePage('chat')}>
+            <span>⌁</span> Чат
+          </button>
+          <button className={`page-nav-button ${activePage === 'compare' ? 'active' : ''}`} onClick={() => setActivePage('compare')}>
+            <span>↔</span> Сравнение
+          </button>
+        </nav>
+
+        <div className="sidebar-bottom">
+          <div className="connection-status"><span className="status-dot" /> API подключён</div>
+          <p>Ключ API хранится только на сервере.</p>
+        </div>
+      </aside>
+
+      <main className="day-main">
+        {activePage === 'chat' ? <ChatPage /> : <ComparePage />}
+      </main>
+    </div>
+  )
+}
+
+function ChatPage() {
   const [messages, setMessages] = useState<ChatMessage[]>([initialMessage])
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
@@ -34,28 +78,16 @@ function App() {
   const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages, isLoading])
+  useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages, isLoading])
 
   async function sendMessage(event?: FormEvent) {
     event?.preventDefault()
-
     const content = input.trim()
     if (!content || isLoading) return
 
-    const userMessage: ChatMessage = {
-      id: crypto.randomUUID(),
-      role: 'user',
-      content,
-    }
+    const userMessage: ChatMessage = { id: crypto.randomUUID(), role: 'user', content }
     const assistantMessageId = crypto.randomUUID()
-
-    setMessages((currentMessages) => [
-      ...currentMessages,
-      userMessage,
-      { id: assistantMessageId, role: 'assistant', content: '' },
-    ])
+    setMessages((current) => [...current, userMessage, { id: assistantMessageId, role: 'assistant', content: '' }])
     setInput('')
     setError(null)
     setIsLoading(true)
@@ -65,59 +97,32 @@ function App() {
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          messages: [...messages, userMessage].map(({ role, content: messageContent }) => ({
-            role,
-            content: messageContent,
-          })),
-        }),
+        body: JSON.stringify({ messages: [...messages, userMessage].map(({ role, content: messageContent }) => ({ role, content: messageContent })) }),
       })
-
-      if (!response.ok) {
-        const data = (await response.json()) as ChatStreamChunk
-        throw new Error(data.error || 'Не удалось получить ответ.')
-      }
-
+      if (!response.ok) throw new Error(((await response.json()) as ChatStreamChunk).error || 'Не удалось получить ответ.')
       if (!response.body) throw new Error('Браузер не поддерживает потоковый ответ.')
 
       const reader = response.body.getReader()
       const decoder = new TextDecoder()
       let buffer = ''
       let streamFinished = false
-
       while (!streamFinished) {
         const { done, value } = await reader.read()
         buffer += decoder.decode(value, { stream: !done })
-
         const lines = buffer.split('\n')
         buffer = lines.pop() ?? ''
-
         for (const line of lines) {
           if (!line.startsWith('data: ')) continue
-
           const payload = line.slice(6).trim()
-          if (payload === '[DONE]') {
-            streamFinished = true
-            break
-          }
-
+          if (payload === '[DONE]') { streamFinished = true; break }
           const chunk = JSON.parse(payload) as ChatStreamChunk
           if (chunk.error) throw new Error(chunk.error)
-          if (!chunk.content) continue
-
-          setMessages((currentMessages) =>
-            currentMessages.map((message) =>
-              message.id === assistantMessageId
-                ? { ...message, content: message.content + chunk.content }
-                : message,
-            ),
-          )
+          if (chunk.content) setMessages((current) => current.map((message) => message.id === assistantMessageId ? { ...message, content: message.content + chunk.content } : message))
         }
-
         if (done) break
       }
     } catch (requestError) {
-      setMessages((currentMessages) => currentMessages.filter(({ id }) => id !== assistantMessageId))
+      setMessages((current) => current.filter(({ id }) => id !== assistantMessageId))
       setError(requestError instanceof Error ? requestError.message : 'Произошла неизвестная ошибка.')
     } finally {
       setIsLoading(false)
@@ -125,111 +130,133 @@ function App() {
     }
   }
 
-  function handleInputKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
-    if (event.key === 'Enter' && !event.shiftKey) {
-      event.preventDefault()
-      void sendMessage()
-    }
+  function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+    if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void sendMessage() }
   }
 
   function startNewChat() {
-    setMessages([initialMessage])
-    setInput('')
-    setError(null)
-    setStreamingMessageId(null)
+    setMessages([initialMessage]); setInput(''); setError(null); setStreamingMessageId(null)
   }
 
   return (
-    <div className="chat-app">
-      <aside className="chat-sidebar">
-        <div className="brand">
-          <div className="brand-mark">D</div>
-          <div>
-            <strong>DeepChat</strong>
-            <span>React + DeepSeek</span>
-          </div>
+    <div className="page-view chat-page">
+      <header className="chat-header">
+        <div><p className="eyebrow">Личный помощник</p><h1>Чат с DeepSeek</h1><p className="header-description">Общайтесь с моделью в обычном режиме с потоковой выдачей ответа.</p></div>
+        <div className="model-badge"><span className="pulse-dot" /> DeepSeek V4 Flash</div>
+      </header>
+      <section className="messages-area" aria-label="История сообщений">
+        <div className="messages-list">
+          {messages.map((message) => <article className={`single-message ${message.role}`} key={message.id}>
+            <div className={`message-avatar ${message.role}`}>{message.role === 'assistant' ? 'D' : 'Вы'}</div>
+            <div className="message-content"><div className="message-author">{message.role === 'assistant' ? 'DeepSeek' : 'Вы'}</div><div className={`message-bubble ${message.id === streamingMessageId && !message.content ? 'typing' : ''}`}>{message.id === streamingMessageId && !message.content ? <><span /><span /><span /></> : <MarkdownContent content={message.content} />}</div></div>
+          </article>)}
+          <div ref={messagesEndRef} />
         </div>
-
-        <button className="new-chat-button" onClick={startNewChat}>
-          <span aria-hidden="true">＋</span> Новый чат
-        </button>
-
-        <div className="sidebar-caption">Возможности</div>
-        <div className="feature-list">
-          <div><span className="feature-icon">✦</span> Умные ответы</div>
-          <div><span className="feature-icon">⌁</span> Контекст диалога</div>
-          <div><span className="feature-icon">✓</span> TypeScript-ready</div>
-        </div>
-
-        <div className="sidebar-bottom">
-          <div className="connection-status">
-            <span className="status-dot" />
-            <span>Сервер готов</span>
-          </div>
-          <p>Ключ API хранится только на сервере.</p>
-        </div>
-      </aside>
-
-      <main className="chat-main">
-        <header className="chat-header">
-          <div>
-            <p className="eyebrow">Личный помощник</p>
-            <h1>Чат с DeepSeek</h1>
-          </div>
-          <div className="model-badge"><span className="pulse-dot" /> DeepSeek V4 Flash</div>
-        </header>
-
-        <section className="messages-area" aria-label="История сообщений">
-          <div className="messages-list">
-            {messages.map((message) => (
-              <article className={`message-row ${message.role}`} key={message.id}>
-                <div className={`message-avatar ${message.role}`} aria-hidden="true">
-                  {message.role === 'assistant' ? 'D' : 'Вы'}
-                </div>
-                <div className="message-content">
-                  <div className="message-author">{message.role === 'assistant' ? 'DeepSeek' : 'Вы'}</div>
-                  <div className={`message-bubble ${message.id === streamingMessageId && !message.content ? 'typing' : ''}`}>
-                    {message.id === streamingMessageId && !message.content ? (
-                      <><span /><span /><span /></>
-                    ) : message.content}
-                  </div>
-                </div>
-              </article>
-            ))}
-            <div ref={messagesEndRef} />
-          </div>
-        </section>
-
-        <div className="composer-wrapper">
-          {messages.length === 1 && (
-            <div className="starter-prompts">
-              {starterPrompts.map((prompt) => (
-                <button key={prompt} onClick={() => setInput(prompt)}>{prompt}</button>
-              ))}
-            </div>
-          )}
-
-          {error && <div className="error-message" role="alert">{error}</div>}
-
-          <form className="composer" onSubmit={sendMessage}>
-            <textarea
-              value={input}
-              onChange={(event) => setInput(event.target.value)}
-              onKeyDown={handleInputKeyDown}
-              placeholder="Напишите сообщение..."
-              rows={1}
-              aria-label="Сообщение для DeepSeek"
-              disabled={isLoading}
-            />
-            <button className="send-button" type="submit" disabled={isLoading || !input.trim()} aria-label="Отправить сообщение">
-              ↑
-            </button>
-          </form>
-          <p className="composer-hint">Enter — отправить · Shift + Enter — новая строка</p>
-        </div>
-      </main>
+      </section>
+      <div className="composer-wrapper">
+        {error && <div className="error-message" role="alert">{error}</div>}
+        <form className="composer" onSubmit={sendMessage}>
+          <textarea value={input} onChange={(event) => setInput(event.target.value)} onKeyDown={handleKeyDown} placeholder="Напишите сообщение..." rows={1} aria-label="Сообщение для DeepSeek" disabled={isLoading} />
+          <button className="send-button" type="submit" disabled={isLoading || !input.trim()} aria-label="Отправить сообщение">↑</button>
+        </form>
+        <p className="composer-hint">Enter — отправить · Shift + Enter — новая строка</p>
+      </div>
+      <button className="reset-chat-button" onClick={startNewChat}>＋ Новый чат</button>
     </div>
   )
+}
+
+function ComparePage() {
+  const [prompt, setPrompt] = useState(examplePrompts[0])
+  const [result, setResult] = useState<ComparisonResult | null>(null)
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [formatEnabled, setFormatEnabled] = useState(true)
+  const [formatInstruction, setFormatInstruction] = useState(defaultFormatInstruction)
+  const [lengthEnabled, setLengthEnabled] = useState(true)
+  const [maxTokens, setMaxTokens] = useState('120')
+  const [stopEnabled, setStopEnabled] = useState(true)
+  const [stopSequences, setStopSequences] = useState<StopSequenceField[]>([createStopSequenceField('<END>')])
+  const [responseFormatEnabled, setResponseFormatEnabled] = useState(false)
+  const [jsonExample, setJsonExample] = useState(defaultJsonExample)
+
+  async function compareResponses(event: FormEvent) {
+    event.preventDefault()
+    const trimmedPrompt = prompt.trim()
+    if (!trimmedPrompt || isLoading) return
+    setIsLoading(true); setError(null); setResult(null)
+    const parsedMaxTokens = Number(maxTokens)
+    const stopSequenceValues = stopSequences.map(({ value }) => value.trim()).filter(Boolean)
+    const controls = {
+      ...(formatEnabled && formatInstruction.trim() ? { format: formatInstruction.trim() } : {}),
+      ...(lengthEnabled && Number.isFinite(parsedMaxTokens) ? { maxTokens: Math.min(Math.max(Math.floor(parsedMaxTokens), 16), 1000) } : {}),
+      ...(stopEnabled && stopSequenceValues.length ? { stopSequences: stopSequenceValues } : {}),
+      ...(responseFormatEnabled ? { responseFormat: 'json_object' as const, ...(jsonExample.trim() ? { jsonExample: jsonExample.trim() } : {}) } : {}),
+    }
+    try {
+      const response = await fetch('/api/compare', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt: trimmedPrompt, controls }) })
+      const data = (await response.json()) as ComparisonResult & ApiError
+      if (!response.ok || !data.unconstrained || !data.constrained) throw new Error(data.error || 'Не удалось получить сравнение.')
+      setResult(data)
+    } catch (requestError) { setError(requestError instanceof Error ? requestError.message : 'Произошла неизвестная ошибка.') }
+    finally { setIsLoading(false) }
+  }
+
+  return (
+    <div className="page-view compare-page">
+      <header className="page-header">
+        <div><p className="eyebrow">Эксперимент с API</p><h1>Один запрос. Два уровня контроля.</h1><p className="header-description">Сравните свободный ответ с ответом, где вы сами задали формат, длину, stop-условие или JSON-режим.</p></div>
+        <div className="model-badge"><span className="pulse-dot" /> DeepSeek V4 Flash</div>
+      </header>
+
+      <section className="prompt-panel"><div className="section-heading"><div><span className="step-number">01</span><div><p className="eyebrow">Одинаковый запрос</p><h2>Что спросим у модели?</h2></div></div><span className="request-label">2 API-запроса</span></div>
+        <form onSubmit={compareResponses}><textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} placeholder="Введите один и тот же запрос для обоих режимов..." rows={3} aria-label="Запрос для сравнения" /><div className="prompt-actions"><div className="example-prompts">{examplePrompts.map((example) => <button type="button" key={example} onClick={() => setPrompt(example)}>{example}</button>)}</div><button className="compare-button" type="submit" disabled={isLoading || !prompt.trim()}>{isLoading ? 'Сравниваем...' : 'Сравнить ответы'} <span>→</span></button></div></form>
+      </section>
+
+      <section className="controls-panel"><div className="section-heading compact"><div><span className="step-number">02</span><div><p className="eyebrow">Настройка контроля</p><h2>Выберите, какие параметры применить</h2></div></div><span className="request-label">Можно включить часть</span></div>
+        <div className="settings-grid">
+          <label className={`setting-card ${formatEnabled ? 'enabled' : ''}`}><div className="setting-title"><input type="radio" name="response-mode" checked={formatEnabled} onChange={() => { setFormatEnabled(true); setResponseFormatEnabled(false) }} /><span className="control-icon purple">⌘</span><div><strong>Формат ответа</strong><small>Явная инструкция модели</small></div></div><textarea value={formatInstruction} onChange={(event) => setFormatInstruction(event.target.value)} disabled={!formatEnabled} rows={3} aria-label="Инструкция формата ответа" /></label>
+          <label className={`setting-card ${responseFormatEnabled ? 'enabled' : ''}`}><div className="setting-title"><input type="radio" name="response-mode" checked={responseFormatEnabled} onChange={() => { setResponseFormatEnabled(true); setFormatEnabled(false) }} /><span className="control-icon orange">{'{}'}</span><div><strong>JSON-формат</strong><small>response_format</small></div></div><p className="setting-help">Только валидный JSON-объект</p><textarea className="json-example-input" value={jsonExample} onChange={(event) => setJsonExample(event.target.value)} disabled={!responseFormatEnabled} rows={3} aria-label="Пример структуры JSON" /></label>
+          <label className={`setting-card ${lengthEnabled ? 'enabled' : ''}`}><div className="setting-title"><input type="checkbox" checked={lengthEnabled} onChange={(event) => setLengthEnabled(event.target.checked)} /><span className="control-icon blue">↕</span><div><strong>Ограничение длины</strong><small>Максимум токенов</small></div></div><div className="number-input"><input type="number" min={16} max={1000} step={1} value={maxTokens} onChange={(event) => setMaxTokens(event.target.value.replace(/^0+(?=\d)/, ''))} disabled={!lengthEnabled} /><span>tokens</span></div></label>
+          <div className={`setting-card ${stopEnabled ? 'enabled' : ''}`}><div className="setting-title"><input type="checkbox" checked={stopEnabled} onChange={(event) => setStopEnabled(event.target.checked)} /><span className="control-icon green">■</span><div><strong>Условие завершения</strong><small>До 16 последовательностей</small></div></div><div className="stop-list">{stopSequences.map((sequence, index) => <div className="stop-row" key={sequence.id}><input className="stop-input" value={sequence.value} onChange={(event) => setStopSequences((current) => current.map((item) => item.id === sequence.id ? { ...item, value: event.target.value } : item))} disabled={!stopEnabled} placeholder={index === 0 ? 'Например: Конец ответа' : 'Stop-последовательность'} aria-label={`Stop-последовательность ${index + 1}`} /><button className="stop-remove" type="button" onClick={() => setStopSequences((current) => current.filter((item) => item.id !== sequence.id))} disabled={!stopEnabled} aria-label={`Удалить stop-последовательность ${index + 1}`}>×</button></div>)}<button className="stop-add" type="button" onClick={() => setStopSequences((current) => [...current, createStopSequenceField()])} disabled={!stopEnabled || stopSequences.length >= 16} aria-label="Добавить stop-последовательность" title="Добавить stop-последовательность">＋</button></div></div>
+        </div>
+      </section>
+
+      {error && <div className="error-message" role="alert">{error}</div>}
+      <section className="results-section"><div className="results-heading"><div><span className="step-number">03</span><div><p className="eyebrow">Результат</p><h2>Сравнение ответов</h2></div></div>{result && <span className="same-prompt">Один prompt · 2 запроса</span>}</div>
+        {!result && !isLoading && <div className="empty-result"><div className="empty-icon">↔</div><h3>Здесь появятся два ответа</h3><p>Введите запрос выше и нажмите «Сравнить ответы», чтобы увидеть разницу в уровне контроля.</p></div>}
+        {isLoading && <div className="loading-result"><span className="loading-spinner" /> DeepSeek готовит оба ответа...</div>}
+        {result && <div className="results-grid"><ResponseCard title="Без ограничений" subtitle="Только исходный prompt" variant="free" side={result.unconstrained} /><ResponseCard title="С выбранными параметрами" subtitle="Только включённые настройки" variant="controlled" side={result.constrained} /></div>}
+      </section>
+      {result && <p className="experiment-note">Ограничения применялись только ко второму запросу. {result.controls.responseFormat ? 'JSON-режим включён.' : 'JSON-режим отключён.'} {result.controls.stopSequences?.length ? <>Stop-последовательности <code>{result.controls.stopSequences.join(' · ')}</code> останавливают генерацию.</> : 'Stop-последовательности отключены.'}</p>}
+    </div>
+  )
+}
+
+function ResponseCard({ title, subtitle, variant, side }: { title: string; subtitle: string; variant: 'free' | 'controlled'; side: ComparisonSide }) {
+  return <article className={`response-card ${variant}`}><div className="response-card-header"><div><span className="response-marker">{variant === 'free' ? 'A' : 'B'}</span><div><h3>{title}</h3><p>{subtitle}</p></div></div><span className="response-status">{side.tokens ? `${side.tokens} output tokens` : 'Ответ готов'}</span></div><div className="response-content"><ResponseContent content={side.content} /></div></article>
+}
+
+function ResponseContent({ content }: { content: string }) {
+  const formattedJson = formatJson(content)
+  if (formattedJson) return <pre className="json-content"><code>{formattedJson}</code></pre>
+  return <MarkdownContent content={content} />
+}
+
+function formatJson(content: string) {
+  const trimmedContent = content.trim()
+  const fencedMatch = trimmedContent.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i)
+  const jsonCandidate = fencedMatch?.[1] ?? trimmedContent
+
+  try {
+    return JSON.stringify(JSON.parse(jsonCandidate), null, 2)
+  } catch {
+    return null
+  }
+}
+
+function MarkdownContent({ content }: { content: string }) {
+  return <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
 }
 
 export default App
