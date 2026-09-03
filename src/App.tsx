@@ -3,7 +3,7 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 
 type MessageRole = 'user' | 'assistant'
-type Page = 'chat' | 'compare' | 'reasoning'
+type Page = 'chat' | 'compare' | 'reasoning' | 'temperature'
 
 type ChatMessage = {
   id: string
@@ -40,6 +40,8 @@ type ReasoningResult = {
   council: ComparisonSide
   prompts: ReasoningPromptBundle
 }
+type TemperatureSide = { temperature: number; content: string; tokens?: number }
+type TemperatureResult = { prompt: string; results: TemperatureSide[] }
 type ApiError = { error?: string }
 
 const initialMessage: ChatMessage = {
@@ -57,6 +59,11 @@ const exampleReasoningTasks = [
   'У вас есть 8 монет, одна фальшивая и легче остальных. За сколько взвешиваний на чашечных весах можно гарантированно найти фальшивую монету?',
   'Есть массив из 10 чисел, в котором все элементы встречаются дважды, кроме одного. Как найти уникальный элемент за O(n) времени и O(1) дополнительной памяти?',
   'В команде 5 разработчиков. Каждый должен познакомиться с каждым один раз. Сколько всего знакомств произойдёт? Объясните формулу.',
+]
+const exampleTemperaturePrompts = [
+  'Объясни простыми словами третий закон Ньютона и приведи один пример из повседневной жизни.',
+  'Объясни простыми словами, зачем приложению разделение на клиентскую и серверную части.',
+  'Предложи идею небольшого проекта на React для разработчика, который знает Swift.',
 ]
 const defaultFormatInstruction = 'Первая строка начинается с "КРАТКО:", затем ровно 3 строки, начинающиеся с "- ". Каждый пункт — не более 8 слов.'
 const defaultJsonExample = '{\n  "summary": "Краткое резюме",\n  "items": ["Пункт 1", "Пункт 2"]\n}'
@@ -83,6 +90,9 @@ function App() {
           <button className={`page-nav-button ${activePage === 'reasoning' ? 'active' : ''}`} onClick={() => setActivePage('reasoning')}>
             <span>✦</span> Способы решения
           </button>
+          <button className={`page-nav-button ${activePage === 'temperature' ? 'active' : ''}`} onClick={() => setActivePage('temperature')}>
+            <span>◌</span> Температура
+          </button>
         </nav>
 
         <div className="sidebar-bottom">
@@ -92,7 +102,7 @@ function App() {
       </aside>
 
       <main className="day-main">
-        {activePage === 'chat' ? <ChatPage /> : activePage === 'compare' ? <ComparePage /> : <ReasoningPage />}
+        {activePage === 'chat' ? <ChatPage /> : activePage === 'compare' ? <ComparePage /> : activePage === 'reasoning' ? <ReasoningPage /> : <TemperaturePage />}
       </main>
     </div>
   )
@@ -318,6 +328,72 @@ function ReasoningPage() {
       </section>
     </div>
   )
+}
+
+function TemperaturePage() {
+  const [prompt, setPrompt] = useState(exampleTemperaturePrompts[0])
+  const [result, setResult] = useState<TemperatureResult | null>(null)
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function runExperiment(event: FormEvent) {
+    event.preventDefault()
+    const trimmedPrompt = prompt.trim()
+    if (!trimmedPrompt || isLoading) return
+
+    setIsLoading(true)
+    setError(null)
+    setResult(null)
+
+    try {
+      const response = await fetch('/api/temperature', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: trimmedPrompt }),
+      })
+      const data = (await response.json()) as TemperatureResult & ApiError
+      if (!response.ok || !Array.isArray(data.results) || data.results.length !== 5) {
+        throw new Error(data.error || 'Не удалось получить ответы для разных температур.')
+      }
+      setResult(data)
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : 'Произошла неизвестная ошибка.')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  return (
+    <div className="page-view temperature-page">
+      <header className="page-header">
+        <div><p className="eyebrow">Параметр генерации</p><h1>Один prompt. Пять температур.</h1><p className="header-description">Отправьте один и тот же запрос с temperature 0, 0.7, 1.2, 1.7 и 2.0, чтобы увидеть пять независимых ответов модели.</p></div>
+        <div className="model-badge"><span className="pulse-dot" /> DeepSeek V4 Flash</div>
+      </header>
+
+      <section className="prompt-panel temperature-prompt-panel"><div className="section-heading"><div><span className="step-number">01</span><div><p className="eyebrow">Одинаковый запрос</p><h2>Что отправим модели?</h2></div></div><span className="request-label">5 API-запросов</span></div>
+        <form onSubmit={runExperiment}><textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} placeholder="Введите запрос для эксперимента..." rows={4} aria-label="Запрос для сравнения температур" /><div className="prompt-actions"><div className="example-prompts">{exampleTemperaturePrompts.map((example) => <button type="button" key={example} onClick={() => setPrompt(example)}>{example}</button>)}</div><button className="compare-button" type="submit" disabled={isLoading || !prompt.trim()}>{isLoading ? 'Получаем ответы...' : 'Запустить эксперимент'} <span>→</span></button></div></form>
+      </section>
+
+      {error && <div className="error-message" role="alert">{error}</div>}
+      <section className="results-section temperature-results"><div className="results-heading"><div><span className="step-number">02</span><div><p className="eyebrow">Результат</p><h2>Ответы модели</h2></div></div>{result && <span className="same-prompt">Один prompt · 5 запросов</span>}</div>
+        {!result && !isLoading && <div className="empty-result"><div className="empty-icon">◌</div><h3>Здесь появятся пять ответов</h3><p>Введите один запрос и запустите эксперимент, чтобы получить результаты при разных значениях temperature.</p></div>}
+        {isLoading && <div className="loading-result"><span className="loading-spinner" /> DeepSeek готовит пять ответов...</div>}
+        {result && <div className="temperature-results-grid">{result.results.map((side) => <TemperatureCard key={side.temperature} side={side} />)}</div>}
+      </section>
+    </div>
+  )
+}
+
+function TemperatureCard({ side }: { side: TemperatureSide }) {
+  return <article className={`temperature-card temperature-${String(side.temperature).replace('.', '-')}`}><div className="temperature-card-header"><div><span className="temperature-value">{side.temperature}</span><div><h3>Temperature = {side.temperature}</h3><p>{temperatureCaption(side.temperature)}</p></div></div><span className="response-status">{side.tokens ? `${side.tokens} tokens` : 'Ответ готов'}</span></div><div className="response-content"><MarkdownContent content={side.content} /></div></article>
+}
+
+function temperatureCaption(temperature: number) {
+  if (temperature === 0) return 'Минимум случайности'
+  if (temperature === 0.7) return 'Сбалансированная настройка'
+  if (temperature === 1.2) return 'Больше вариативности'
+  if (temperature === 1.7) return 'Высокая вариативность'
+  return 'Максимальная вариативность'
 }
 
 function ReasoningCard({ marker, title, subtitle, side, variant = 'free', prompt }: { marker: string; title: string; subtitle: string; side: ComparisonSide; variant?: 'free' | 'controlled'; prompt: PromptMessage[] }) {

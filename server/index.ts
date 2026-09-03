@@ -54,6 +54,12 @@ type ReasoningExpert = {
   tokens?: number
 }
 
+type TemperatureResult = {
+  temperature: number
+  content: string
+  tokens?: number
+}
+
 const app = express()
 const port = Number(process.env.PORT ?? 8787)
 const apiKey = process.env.DEEPSEEK_API_KEY?.trim()
@@ -110,6 +116,35 @@ app.post('/api/compare', async (request, response) => {
     })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Не удалось сравнить ответы.'
+    response.status(502).json({ error: message })
+  }
+})
+
+app.post('/api/temperature', async (request, response) => {
+  const prompt = request.body?.prompt as unknown
+
+  if (typeof prompt !== 'string' || prompt.trim().length === 0) {
+    response.status(400).json({ error: 'Поле prompt должно быть непустой строкой.' })
+    return
+  }
+
+  const temperatures = [0, 0.7, 1.2, 1.7, 2.0] as const
+
+  try {
+    const results = await Promise.all(
+      temperatures.map(async (temperature): Promise<TemperatureResult> => {
+        const result = await requestCompletion(
+          [{ role: 'user', content: prompt.trim() }],
+          { temperature },
+        )
+
+        return { temperature, ...result }
+      }),
+    )
+
+    response.json({ prompt: prompt.trim(), results })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Не удалось получить ответы для разных температур.'
     response.status(502).json({ error: message })
   }
 })
@@ -320,7 +355,7 @@ app.post('/api/chat', async (request, response) => {
 
 async function requestCompletion(
   messages: ChatMessage[],
-  options: { max_tokens?: number; stop?: string[]; response_format?: { type: 'json_object' } } = {},
+  options: { max_tokens?: number; stop?: string[]; response_format?: { type: 'json_object' }; temperature?: number } = {},
 ): Promise<CompletionResult> {
   if (!apiKey) throw new Error('Добавьте DEEPSEEK_API_KEY в файл .env и перезапустите сервер.')
 

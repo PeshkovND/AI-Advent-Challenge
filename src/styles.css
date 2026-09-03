@@ -172,6 +172,24 @@ code { padding: 2px 4px; color: #5d60e6; background: #f0f0ff; border-radius: 4px
 .evaluation-heading > div { display: flex; align-items: center; gap: 13px; }
 .evaluation-heading h2 { margin: 5px 0 0; font-size: 17px; letter-spacing: -.04em; }
 .council-summary .reasoning-content { min-height: 0; }
+.temperature-results { margin-top: 27px; }
+.temperature-results-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 15px; margin-top: 17px; }
+.temperature-card { min-width: 0; overflow: hidden; background: #fff; border: 1px solid #e9ebf2; border-radius: 15px; box-shadow: 0 5px 17px #27304b05; }
+.temperature-card.temperature-0 { border-color: #dfe2eb; }
+.temperature-card.temperature-0-7 { border-color: #cfd0fa; box-shadow: 0 8px 22px #6668e914; }
+.temperature-card.temperature-1-2 { border-color: #f0d9c3; }
+.temperature-card.temperature-1-7 { border-color: #f0cbd1; }
+.temperature-card.temperature-2 { border-color: #edbdc7; }
+.temperature-card-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; padding: 16px 17px 13px; border-bottom: 1px solid #f0f1f5; }
+.temperature-card-header > div { display: flex; align-items: center; gap: 9px; min-width: 0; }
+.temperature-value { display: grid; flex: 0 0 34px; place-items: center; width: 34px; height: 34px; color: #686ae9; background: #f0f0ff; border-radius: 10px; font-size: 11px; font-weight: 800; }
+.temperature-0-7 .temperature-value { color: #fff; background: #686ae9; }
+.temperature-1-2 .temperature-value { color: #c87935; background: #fff3e6; }
+.temperature-1-7 .temperature-value { color: #bd5c70; background: #fff0f3; }
+.temperature-2 .temperature-value { color: #fff; background: #c65d73; }
+.temperature-card h3 { margin: 0 0 3px; color: #454a5b; font-size: 13px; }
+.temperature-card-header p { margin: 0; color: #a0a5b5; font-size: 9px; }
+.temperature-card .response-content { min-height: 240px; }
 
 .messages-area { min-height: 0; flex: 1; overflow-y: auto; padding: 0 0 24px; }
 .messages-list { max-width: 760px; margin: 0 auto; }
@@ -251,7 +269,7 @@ code { padding: 2px 4px; color: #5d60e6; background: #f0f0ff; border-radius: 4px
   .composer-wrapper { width: 100%; }
   .prompt-panel, .controls-panel { padding: 18px; }
   .section-heading h2, .results-heading h2 { font-size: 15px; }
-  .controls-grid, .results-grid, .reasoning-methods-grid, .expert-grid { grid-template-columns: 1fr; }
+  .controls-grid, .results-grid, .reasoning-methods-grid, .expert-grid, .temperature-results-grid { grid-template-columns: 1fr; }
   .experts-method { grid-column: auto; }
   .settings-grid { grid-template-columns: 1fr; }
   .request-label, .same-prompt { display: none; }
