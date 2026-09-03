@@ -8,6 +8,11 @@ type ChatMessage = {
   content: string
 }
 
+type CompletionResult = {
+  content: string
+  tokens?: number
+}
+
 type DeepSeekResponse = {
   model?: string
   usage?: {
@@ -40,6 +45,13 @@ type CompareControls = {
   stopSequences?: string[]
   responseFormat?: 'json_object'
   jsonExample?: string
+}
+
+type ReasoningExpert = {
+  id: string
+  title: string
+  content: string
+  tokens?: number
 }
 
 const app = express()
@@ -101,6 +113,94 @@ app.post('/api/compare', async (request, response) => {
     response.status(502).json({ error: message })
   }
 })
+
+app.post('/api/reasoning', async (request, response) => {
+  const task = request.body?.task as unknown
+
+  if (typeof task !== 'string' || task.trim().length === 0) {
+    response.status(400).json({ error: 'Поле task должно быть непустой строкой.' })
+    return
+  }
+
+  const trimmedTask = task.trim()
+  const expertDefinitions = [
+    { id: 'analyst', title: 'Аналитик', instruction: 'Разбери условия, выдели факты, ограничения и проверь логические связи.' },
+    { id: 'engineer', title: 'Инженер', instruction: 'Предложи практичный алгоритм решения и последовательно проверь его на задаче.' },
+    { id: 'critic', title: 'Критик', instruction: 'Реши задачу независимо и найди возможные ошибки, неоднозначности и контрпримеры.' },
+  ]
+  const directMessages: ChatMessage[] = [{ role: 'user', content: trimmedTask }]
+  const stepByStepMessages: ChatMessage[] = [
+    { role: 'system', content: 'Решай задачу пошагово. Показывай ход рассуждения, промежуточные выводы и итоговый ответ.' },
+    { role: 'user', content: trimmedTask },
+  ]
+  const promptEngineerMessages: ChatMessage[] = [
+    { role: 'system', content: 'Ты — prompt-инженер. Твоя задача — составить самостоятельный, точный и понятный prompt для другого AI-агента, которому будет передана исходная задача. Не решай задачу сам, не сообщай ответ, не добавляй вычисления, рассуждения, варианты решения или комментарии. В готовом prompt явно укажи роль AI-агента, исходную задачу, важные условия и ограничения, а также требования к форме итогового ответа. Не изменяй смысл задачи и не добавляй факты, которых в ней нет. Верни только готовый текст prompt без кавычек, пояснений и вводных фраз.' },
+    { role: 'user', content: `Составь промпт для решения этой задачи:\n\n${trimmedTask}` },
+  ]
+  const expertMessages = expertDefinitions.map(({ id, title, instruction }) => ({
+    id,
+    title,
+    messages: [
+      { role: 'system' as const, content: `Ты — ${title.toLowerCase()} в совете экспертов. ${instruction} Дай собственное решение задачи, а в конце сформулируй итог и уровень уверенности.` },
+      { role: 'user' as const, content: trimmedTask },
+    ],
+  }))
+
+  try {
+    const [direct, stepByStep, generatedPrompt, ...expertResults] = await Promise.all([
+      requestCompletion(directMessages),
+      requestCompletion(stepByStepMessages),
+      requestCompletion(promptEngineerMessages),
+      ...expertMessages.map(({ messages }) => requestCompletion(messages)),
+    ])
+
+    const promptBasedMessages: ChatMessage[] = [{ role: 'user', content: generatedPrompt.content }]
+    const promptBased = await requestCompletion(promptBasedMessages)
+
+    const experts: ReasoningExpert[] = expertDefinitions.map((expert, index) => ({
+      ...expert,
+      content: expertResults[index].content,
+      tokens: expertResults[index].tokens,
+    }))
+
+    const councilMessages: ChatMessage[] = [
+      { role: 'system', content: 'Ты — председатель совета экспертов. На основе задачи и полного ответа каждого эксперта сформируй единое решение совета. Сопоставь выводы аналитика, инженера и критика, укажи, где они совпадают и расходятся, проверь спорные места и не игнорируй ни одного участника. В конце дай ясный итоговый ответ. Отвечай на русском в Markdown.' },
+      { role: 'user', content: buildCouncilPrompt(trimmedTask, experts) },
+    ]
+    const council = await requestCompletion(councilMessages)
+
+    response.json({
+      task: trimmedTask,
+      direct,
+      stepByStep,
+      generatedPrompt: generatedPrompt.content,
+      promptBased,
+      experts,
+      council,
+      prompts: {
+        direct: directMessages,
+        stepByStep: stepByStepMessages,
+        promptEngineer: promptEngineerMessages,
+        promptBased: promptBasedMessages,
+        experts: expertMessages,
+        council: councilMessages,
+      },
+    })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Не удалось получить варианты решения.'
+    response.status(502).json({ error: message })
+  }
+})
+
+function buildCouncilPrompt(task: string, experts: ReasoningExpert[]) {
+  const expertText = experts.map(({ title, content }) => `${title}:\n${clipForPrompt(content)}`).join('\n\n')
+
+  return `Задача:\n${task}\n\nПолные ответы членов совета:\n${expertText}`
+}
+
+function clipForPrompt(value: string, maxLength = 7000) {
+  return value.length > maxLength ? `${value.slice(0, maxLength)}\n[текст сокращён]` : value
+}
 
 function normalizeCompareControls(value: unknown): CompareControls {
   if (typeof value !== 'object' || value === null) return {}
@@ -221,7 +321,7 @@ app.post('/api/chat', async (request, response) => {
 async function requestCompletion(
   messages: ChatMessage[],
   options: { max_tokens?: number; stop?: string[]; response_format?: { type: 'json_object' } } = {},
-): Promise<{ content: string; tokens?: number }> {
+): Promise<CompletionResult> {
   if (!apiKey) throw new Error('Добавьте DEEPSEEK_API_KEY в файл .env и перезапустите сервер.')
 
   const deepSeekResponse = await fetch('https://api.deepseek.com/chat/completions', {

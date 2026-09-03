@@ -134,6 +134,45 @@ h2, h3, p { margin-top: 0; }
 .experiment-note { margin: 18px 2px 0; color: #969bab; font-size: 10px; line-height: 1.6; }
 code { padding: 2px 4px; color: #5d60e6; background: #f0f0ff; border-radius: 4px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
 
+.reasoning-results { margin-top: 27px; }
+.reasoning-methods-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 15px; margin-top: 17px; }
+.reasoning-method-card, .council-summary { min-width: 0; overflow: hidden; background: #fff; border: 1px solid #e9ebf2; border-radius: 15px; box-shadow: 0 5px 17px #27304b05; }
+.reasoning-method-card.controlled, .reasoning-method-card.experts-method, .council-summary { border-color: #cfd0fa; box-shadow: 0 8px 22px #6668e914; }
+.reasoning-card-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 16px 17px 13px; border-bottom: 1px solid #f0f1f5; }
+.reasoning-card-header > div { display: flex; align-items: center; gap: 9px; min-width: 0; }
+.reasoning-card-header h3 { margin: 0 0 3px; color: #454a5b; font-size: 13px; }
+.reasoning-card-header p { margin: 0; color: #a0a5b5; font-size: 9px; }
+.controlled-marker { color: #fff; background: #686ae9; }
+.reasoning-content { min-height: 180px; padding: 17px; color: #626777; font-size: 12px; line-height: 1.75; overflow-wrap: anywhere; }
+.reasoning-content > :first-child { margin-top: 0; }
+.reasoning-content > :last-child { margin-bottom: 0; }
+.reasoning-content p { margin: 0 0 10px; }
+.reasoning-content ul, .reasoning-content ol { margin: 7px 0 11px; padding-left: 21px; }
+.reasoning-content li { margin: 4px 0; }
+.reasoning-content h1, .reasoning-content h2, .reasoning-content h3 { margin: 13px 0 7px; font-size: 1.05em; letter-spacing: -.02em; }
+.reasoning-content pre { max-width: 100%; overflow-x: auto; margin: 10px 0; padding: 12px; color: #e8eaff; background: #252942; border-radius: 9px; font-size: 11px; line-height: 1.55; }
+.reasoning-content pre code { padding: 0; color: inherit; background: transparent; }
+.experts-method { grid-column: 1 / -1; }
+.expert-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; padding: 15px 17px 17px; }
+.expert-card { min-width: 0; overflow: hidden; background: #fbfbfd; border: 1px solid #eceef4; border-radius: 10px; }
+.expert-card-heading { display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 10px 11px; border-bottom: 1px solid #eceef4; }
+.expert-card-heading strong { color: #5e6375; font-size: 10px; }
+.expert-card-heading span { color: #a0a5b5; font-size: 9px; white-space: nowrap; }
+.expert-card .reasoning-content { min-height: 130px; padding: 12px; font-size: 11px; line-height: 1.6; }
+.generated-prompt { margin-top: 15px; padding: 13px 15px; background: #fbfbfd; border: 1px solid #e9ebf2; border-radius: 11px; }
+.generated-prompt summary { color: #696e80; cursor: pointer; font-size: 11px; font-weight: 700; }
+.generated-prompt pre { max-height: 260px; overflow: auto; margin: 12px 0 0; padding: 12px; color: #626777; background: #fff; border: 1px solid #e4e6ee; border-radius: 8px; font: 10px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; }
+.generated-prompt pre code { padding: 0; color: inherit; background: transparent; }
+.prompt-message + .prompt-message { margin-top: 10px; }
+.prompt-message-label { display: block; margin-bottom: 5px; color: #a0a5b5; font-size: 9px; font-weight: 700; text-transform: uppercase; }
+.council-prompt { padding: 0 17px 17px; }
+.council-prompt .generated-prompt { margin-top: 0; }
+.council-summary { margin-top: 15px; }
+.evaluation-heading { display: flex; align-items: center; justify-content: space-between; gap: 15px; padding: 16px 17px 13px; border-bottom: 1px solid #f0f1f5; }
+.evaluation-heading > div { display: flex; align-items: center; gap: 13px; }
+.evaluation-heading h2 { margin: 5px 0 0; font-size: 17px; letter-spacing: -.04em; }
+.council-summary .reasoning-content { min-height: 0; }
+
 .messages-area { min-height: 0; flex: 1; overflow-y: auto; padding: 0 0 24px; }
 .messages-list { max-width: 760px; margin: 0 auto; }
 .single-message { display: flex; align-items: flex-start; gap: 12px; max-width: 760px; margin: 6px auto 20px; }
@@ -212,7 +251,8 @@ code { padding: 2px 4px; color: #5d60e6; background: #f0f0ff; border-radius: 4px
   .composer-wrapper { width: 100%; }
   .prompt-panel, .controls-panel { padding: 18px; }
   .section-heading h2, .results-heading h2 { font-size: 15px; }
-  .controls-grid, .results-grid { grid-template-columns: 1fr; }
+  .controls-grid, .results-grid, .reasoning-methods-grid, .expert-grid { grid-template-columns: 1fr; }
+  .experts-method { grid-column: auto; }
   .settings-grid { grid-template-columns: 1fr; }
   .request-label, .same-prompt { display: none; }
 }

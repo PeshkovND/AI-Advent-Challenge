@@ -3,7 +3,7 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 
 type MessageRole = 'user' | 'assistant'
-type Page = 'chat' | 'compare'
+type Page = 'chat' | 'compare' | 'reasoning'
 
 type ChatMessage = {
   id: string
@@ -11,6 +11,7 @@ type ChatMessage = {
   content: string
 }
 type StopSequenceField = { id: string; value: string }
+type PromptMessage = { role: 'system' | 'user'; content: string }
 
 type ChatStreamChunk = { content?: string; error?: string }
 type ComparisonSide = { content: string; tokens?: number }
@@ -19,6 +20,25 @@ type ComparisonResult = {
   unconstrained: ComparisonSide
   constrained: ComparisonSide
   controls: { format?: string; maxTokens?: number; stopSequences?: string[]; responseFormat?: 'json_object'; jsonExample?: string }
+}
+type ReasoningExpert = { id: string; title: string; content: string; tokens?: number }
+type ReasoningPromptBundle = {
+  direct: PromptMessage[]
+  stepByStep: PromptMessage[]
+  promptEngineer: PromptMessage[]
+  promptBased: PromptMessage[]
+  experts: Array<{ id: string; title: string; messages: PromptMessage[] }>
+  council: PromptMessage[]
+}
+type ReasoningResult = {
+  task: string
+  direct: ComparisonSide
+  stepByStep: ComparisonSide
+  generatedPrompt: string
+  promptBased: ComparisonSide
+  experts: ReasoningExpert[]
+  council: ComparisonSide
+  prompts: ReasoningPromptBundle
 }
 type ApiError = { error?: string }
 
@@ -32,6 +52,11 @@ const examplePrompts = [
   'Объясни, зачем разделять клиентскую и серверную части приложения.',
   'Составь план изучения React для iOS-разработчика.',
   'Опиши, как работает потоковая выдача ответа от AI.',
+]
+const exampleReasoningTasks = [
+  'У вас есть 8 монет, одна фальшивая и легче остальных. За сколько взвешиваний на чашечных весах можно гарантированно найти фальшивую монету?',
+  'Есть массив из 10 чисел, в котором все элементы встречаются дважды, кроме одного. Как найти уникальный элемент за O(n) времени и O(1) дополнительной памяти?',
+  'В команде 5 разработчиков. Каждый должен познакомиться с каждым один раз. Сколько всего знакомств произойдёт? Объясните формулу.',
 ]
 const defaultFormatInstruction = 'Первая строка начинается с "КРАТКО:", затем ровно 3 строки, начинающиеся с "- ". Каждый пункт — не более 8 слов.'
 const defaultJsonExample = '{\n  "summary": "Краткое резюме",\n  "items": ["Пункт 1", "Пункт 2"]\n}'
@@ -55,6 +80,9 @@ function App() {
           <button className={`page-nav-button ${activePage === 'compare' ? 'active' : ''}`} onClick={() => setActivePage('compare')}>
             <span>↔</span> Сравнение
           </button>
+          <button className={`page-nav-button ${activePage === 'reasoning' ? 'active' : ''}`} onClick={() => setActivePage('reasoning')}>
+            <span>✦</span> Способы решения
+          </button>
         </nav>
 
         <div className="sidebar-bottom">
@@ -64,7 +92,7 @@ function App() {
       </aside>
 
       <main className="day-main">
-        {activePage === 'chat' ? <ChatPage /> : <ComparePage />}
+        {activePage === 'chat' ? <ChatPage /> : activePage === 'compare' ? <ComparePage /> : <ReasoningPage />}
       </main>
     </div>
   )
@@ -231,6 +259,73 @@ function ComparePage() {
       {result && <p className="experiment-note">Ограничения применялись только ко второму запросу. {result.controls.responseFormat ? 'JSON-режим включён.' : 'JSON-режим отключён.'} {result.controls.stopSequences?.length ? <>Stop-последовательности <code>{result.controls.stopSequences.join(' · ')}</code> останавливают генерацию.</> : 'Stop-последовательности отключены.'}</p>}
     </div>
   )
+}
+
+function ReasoningPage() {
+  const [task, setTask] = useState(exampleReasoningTasks[0])
+  const [result, setResult] = useState<ReasoningResult | null>(null)
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function solveTask(event: FormEvent) {
+    event.preventDefault()
+    const trimmedTask = task.trim()
+    if (!trimmedTask || isLoading) return
+    setIsLoading(true); setError(null); setResult(null)
+
+    try {
+      const response = await fetch('/api/reasoning', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ task: trimmedTask }),
+      })
+      const data = (await response.json()) as ReasoningResult & ApiError
+      if (!response.ok || !data.direct || !data.stepByStep || !data.promptBased || !data.council || !data.prompts) {
+        throw new Error(data.error || 'Не удалось получить варианты решения.')
+      }
+      setResult(data)
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : 'Произошла неизвестная ошибка.')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  return (
+    <div className="page-view reasoning-page">
+      <header className="page-header">
+        <div><p className="eyebrow">Способы рассуждения</p><h1>Одна задача. Четыре решения.</h1><p className="header-description">Сравните прямой ответ, пошаговый подход, решение через подготовленный промпт и группу экспертов.</p></div>
+        <div className="model-badge"><span className="pulse-dot" /> DeepSeek V4 Flash</div>
+      </header>
+
+      <section className="prompt-panel reasoning-prompt-panel"><div className="section-heading"><div><span className="step-number">01</span><div><p className="eyebrow">Одна задача</p><h2>Что решаем?</h2></div></div><span className="request-label">Несколько API-запросов</span></div>
+        <form onSubmit={solveTask}><textarea value={task} onChange={(event) => setTask(event.target.value)} placeholder="Введите логическую, алгоритмическую или аналитическую задачу..." rows={4} aria-label="Задача для сравнения способов решения" /><div className="prompt-actions"><div className="example-prompts">{exampleReasoningTasks.map((example) => <button type="button" key={example} onClick={() => setTask(example)}>{example}</button>)}</div><button className="compare-button" type="submit" disabled={isLoading || !task.trim()}>{isLoading ? 'Получаем решения...' : 'Решить четырьмя способами'} <span>→</span></button></div></form>
+      </section>
+
+      {error && <div className="error-message" role="alert">{error}</div>}
+      <section className="results-section reasoning-results"><div className="results-heading"><div><span className="step-number">02</span><div><p className="eyebrow">Результат</p><h2>Решения одной задачи</h2></div></div>{result && <span className="same-prompt">Одна задача · 4 подхода</span>}</div>
+        {!result && !isLoading && <div className="empty-result"><div className="empty-icon">✦</div><h3>Здесь появятся решения</h3><p>Введите одну задачу и получите четыре варианта рассуждения для сравнения точности и качества ответа.</p></div>}
+        {isLoading && <div className="loading-result"><span className="loading-spinner" /> DeepSeek готовит решения и сравнение...</div>}
+        {result && <>
+          <div className="reasoning-methods-grid">
+            <ReasoningCard marker="A" title="Прямой ответ" subtitle="Только исходная задача" side={result.direct} prompt={result.prompts.direct} />
+            <ReasoningCard marker="B" title="Пошаговое решение" subtitle="Инструкция «решай пошагово»" side={result.stepByStep} variant="controlled" prompt={result.prompts.stepByStep} />
+            <ReasoningCard marker="C" title="Через свой промпт" subtitle="Сначала prompt engineer" side={result.promptBased} variant="controlled" prompt={result.prompts.promptBased} />
+            <article className="reasoning-method-card experts-method"><div className="reasoning-card-header"><div><span className="response-marker controlled-marker">D</span><div><h3>Группа экспертов</h3><p>Три независимые точки зрения</p></div></div></div><div className="expert-grid">{result.experts.map((expert) => <div className="expert-card" key={expert.id}><div className="expert-card-heading"><strong>{expert.title}</strong>{expert.tokens ? <span>{expert.tokens} tokens</span> : null}</div><div className="reasoning-content"><MarkdownContent content={expert.content} />{result.prompts.experts.find((prompt) => prompt.id === expert.id) && <PromptDetails messages={result.prompts.experts.find((prompt) => prompt.id === expert.id)?.messages ?? []} label="Показать prompt эксперта" />}</div></div>)}</div><div className="council-prompt"><PromptDetails messages={result.prompts.council} label="Показать prompt председателя" /></div></article>
+          </div>
+          <article className="council-summary"><div className="evaluation-heading"><div><span className="step-number">03</span><div><p className="eyebrow">Итог совета</p><h2>Общее решение экспертов</h2></div></div><span className="response-status">На основе трёх мнений</span></div><div className="reasoning-content"><MarkdownContent content={result.council.content} /></div></article>
+        </>}
+      </section>
+    </div>
+  )
+}
+
+function ReasoningCard({ marker, title, subtitle, side, variant = 'free', prompt }: { marker: string; title: string; subtitle: string; side: ComparisonSide; variant?: 'free' | 'controlled'; prompt: PromptMessage[] }) {
+  return <article className={`reasoning-method-card ${variant}`}><div className="reasoning-card-header"><div><span className={`response-marker ${variant === 'controlled' ? 'controlled-marker' : ''}`}>{marker}</span><div><h3>{title}</h3><p>{subtitle}</p></div></div><span className="response-status">{side.tokens ? `${side.tokens} tokens` : 'Ответ готов'}</span></div><div className="reasoning-content"><MarkdownContent content={side.content} /><PromptDetails messages={prompt} label="Показать prompt" /></div></article>
+}
+
+function PromptDetails({ messages, label }: { messages: PromptMessage[]; label: string }) {
+  return <details className="generated-prompt"><summary>{label}</summary><div className="prompt-messages">{messages.map((message, index) => <div className="prompt-message" key={`${message.role}-${index}`}><span className="prompt-message-label">{message.role === 'system' ? 'system prompt' : 'user prompt'}</span><pre><code>{message.content}</code></pre></div>)}</div></details>
 }
 
 function ResponseCard({ title, subtitle, variant, side }: { title: string; subtitle: string; variant: 'free' | 'controlled'; side: ComparisonSide }) {
