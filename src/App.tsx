@@ -1,9 +1,11 @@
 import { FormEvent, KeyboardEvent, useEffect, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
+import rehypeKatex from 'rehype-katex'
 import remarkGfm from 'remark-gfm'
+import remarkMath from 'remark-math'
 
 type MessageRole = 'user' | 'assistant'
-type Page = 'chat' | 'compare' | 'reasoning' | 'temperature'
+type Page = 'chat' | 'compare' | 'reasoning' | 'temperature' | 'models'
 
 type ChatMessage = {
   id: string
@@ -42,6 +44,23 @@ type ReasoningResult = {
 }
 type TemperatureSide = { temperature: number; content: string; tokens?: number }
 type TemperatureResult = { prompt: string; results: TemperatureSide[] }
+type ModelSide = {
+  id: string
+  tier: string
+  name: string
+  model: string
+  provider: 'deepseek' | 'huggingface'
+  link: string
+  durationMs: number
+  content?: string
+  tokens?: number
+  promptTokens?: number
+  totalTokens?: number
+  costUsd?: number
+  costLabel: string
+  error?: string
+}
+type ModelsResult = { prompt: string; results: ModelSide[] }
 type ApiError = { error?: string }
 
 const initialMessage: ChatMessage = {
@@ -64,6 +83,11 @@ const exampleTemperaturePrompts = [
   'Объясни простыми словами третий закон Ньютона и приведи один пример из повседневной жизни.',
   'Объясни простыми словами, зачем приложению разделение на клиентскую и серверную части.',
   'Предложи идею небольшого проекта на React для разработчика, который знает Swift.',
+]
+const exampleModelPrompts = [
+  'Сара хотела перемножить двузначное число и трёхзначное число, но вместо знака умножения просто записала двузначное число слева от трёхзначного и получила пятизначное число. Получившееся число ровно в 9 раз больше произведения, которое Сара должна была получить. Чему равна сумма этих двух чисел?',
+  'Почему важно разделять клиентскую и серверную части приложения? Объясни на простом примере.',
+  'Я iOS-разработчик и хочу начать изучать React. С чего лучше начать и почему?',
 ]
 const defaultFormatInstruction = 'Первая строка начинается с "КРАТКО:", затем ровно 3 строки, начинающиеся с "- ". Каждый пункт — не более 8 слов.'
 const defaultJsonExample = '{\n  "summary": "Краткое резюме",\n  "items": ["Пункт 1", "Пункт 2"]\n}'
@@ -93,6 +117,9 @@ function App() {
           <button className={`page-nav-button ${activePage === 'temperature' ? 'active' : ''}`} onClick={() => setActivePage('temperature')}>
             <span>◌</span> Температура
           </button>
+          <button className={`page-nav-button ${activePage === 'models' ? 'active' : ''}`} onClick={() => setActivePage('models')}>
+            <span>◈</span> Модели
+          </button>
         </nav>
 
         <div className="sidebar-bottom">
@@ -102,7 +129,7 @@ function App() {
       </aside>
 
       <main className="day-main">
-        {activePage === 'chat' ? <ChatPage /> : activePage === 'compare' ? <ComparePage /> : activePage === 'reasoning' ? <ReasoningPage /> : <TemperaturePage />}
+        {activePage === 'chat' ? <ChatPage /> : activePage === 'compare' ? <ComparePage /> : activePage === 'reasoning' ? <ReasoningPage /> : activePage === 'temperature' ? <TemperaturePage /> : <ModelsPage />}
       </main>
     </div>
   )
@@ -330,6 +357,67 @@ function ReasoningPage() {
   )
 }
 
+function ModelsPage() {
+  const [prompt, setPrompt] = useState(exampleModelPrompts[0])
+  const [result, setResult] = useState<ModelsResult | null>(null)
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function compareModels(event: FormEvent) {
+    event.preventDefault()
+    const trimmedPrompt = prompt.trim()
+    if (!trimmedPrompt || isLoading) return
+
+    setIsLoading(true)
+    setError(null)
+    setResult(null)
+
+    try {
+      const response = await fetch('/api/models', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: trimmedPrompt }),
+      })
+      const data = (await response.json()) as ModelsResult & ApiError
+      if (!response.ok || !Array.isArray(data.results) || data.results.length !== 3) {
+        throw new Error(data.error || 'Не удалось получить ответы от моделей.')
+      }
+      setResult(data)
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : 'Произошла неизвестная ошибка.')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  return (
+    <div className="page-view models-page">
+      <header className="page-header">
+        <div><p className="eyebrow">Сравнение моделей</p><h1>Три модели. Один prompt.</h1><p className="header-description">Отправьте один и тот же запрос небольшой модели Hugging Face и двум моделям DeepSeek. Приложение покажет ответы, время, токены и стоимость.</p></div>
+        <div className="model-badge"><span className="pulse-dot" /> DeepSeek + Hugging Face</div>
+      </header>
+
+      <section className="prompt-panel models-prompt-panel"><div className="section-heading"><div><span className="step-number">01</span><div><p className="eyebrow">Одинаковый запрос</p><h2>Что отправим моделям?</h2></div></div><span className="request-label">3 API-запроса</span></div>
+        <form onSubmit={compareModels}><textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} placeholder="Введите запрос для сравнения моделей..." rows={4} aria-label="Запрос для сравнения моделей" /><div className="prompt-actions"><div className="example-prompts">{exampleModelPrompts.map((example) => <button type="button" key={example} onClick={() => setPrompt(example)}>{example}</button>)}</div><button className="compare-button" type="submit" disabled={isLoading || !prompt.trim()}>{isLoading ? 'Получаем ответы...' : 'Сравнить модели'} <span>→</span></button></div></form>
+      </section>
+
+      {error && <div className="error-message" role="alert">{error}</div>}
+      <section className="results-section models-results"><div className="results-heading"><div><span className="step-number">02</span><div><p className="eyebrow">Результат</p><h2>Ответы и метрики</h2></div></div>{result && <span className="same-prompt">Один prompt · 3 модели</span>}</div>
+        {!result && !isLoading && <div className="empty-result"><div className="empty-icon">◈</div><h3>Здесь появятся ответы моделей</h3><p>Введите один запрос и запустите сравнение, чтобы увидеть результаты рядом.</p></div>}
+        {isLoading && <div className="loading-result"><span className="loading-spinner" /> Модели готовят ответы...</div>}
+        {result && <div className="models-results-grid">{result.results.map((side) => <ModelCard key={side.id} side={side} />)}</div>}
+      </section>
+    </div>
+  )
+}
+
+function ModelCard({ side }: { side: ModelSide }) {
+  const tokenValue = side.totalTokens ?? side.tokens
+  const costValue = side.costUsd === undefined ? side.costLabel : `$${side.costUsd.toFixed(6)}`
+
+  return <article className={`model-card ${side.provider} ${side.error ? 'has-error' : ''}`}><div className="model-card-header"><div><span className={`model-tier ${side.provider}`}>{side.tier}</span><div><h3>{side.name}</h3><a href={side.link} target="_blank" rel="noreferrer">{side.model}</a></div></div></div><div className="model-metrics"><div><small>Время</small><strong>{side.durationMs} мс</strong></div><div><small>Токены</small><strong>{tokenValue === undefined ? '—' : tokenValue}</strong></div><div><small>Стоимость</small><strong>{costValue}</strong></div></div><div className="response-content">{side.error ? <div className="model-error" role="alert">{side.error}</div> : <MarkdownContent content={side.content ?? ''} />}</div></article>
+}
+
 function TemperaturePage() {
   const [prompt, setPrompt] = useState(exampleTemperaturePrompts[0])
   const [result, setResult] = useState<TemperatureResult | null>(null)
@@ -427,7 +515,13 @@ function formatJson(content: string) {
 }
 
 function MarkdownContent({ content }: { content: string }) {
-  return <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
+  return <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>{normalizeMathDelimiters(content)}</ReactMarkdown>
+}
+
+function normalizeMathDelimiters(content: string) {
+  return content
+    .replace(/\\\[([\s\S]*?)\\\]/g, (_, formula: string) => `$$${formula}$$`)
+    .replace(/\\\(([\s\S]*?)\\\)/g, (_, formula: string) => `$${formula}$`)
 }
 
 export default App

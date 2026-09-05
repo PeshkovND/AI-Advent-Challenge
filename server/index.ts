@@ -11,6 +11,9 @@ type ChatMessage = {
 type CompletionResult = {
   content: string
   tokens?: number
+  promptTokens?: number
+  totalTokens?: number
+  costUsd?: number
 }
 
 type DeepSeekResponse = {
@@ -19,6 +22,8 @@ type DeepSeekResponse = {
     prompt_tokens?: number
     completion_tokens?: number
     total_tokens?: number
+    prompt_cache_hit_tokens?: number
+    prompt_cache_miss_tokens?: number
   }
   choices?: Array<{
     message?: {
@@ -60,10 +65,77 @@ type TemperatureResult = {
   tokens?: number
 }
 
+type ModelPricing = {
+  cacheHitInput: number
+  cacheMissInput: number
+  output: number
+}
+
+type ModelDefinition = {
+  id: string
+  tier: string
+  name: string
+  model: string
+  provider: 'deepseek' | 'huggingface'
+  link: string
+  costLabel: string
+  pricing?: ModelPricing
+}
+
+type ModelComparisonResult = {
+  id: string
+  tier: string
+  name: string
+  model: string
+  provider: ModelDefinition['provider']
+  link: string
+  durationMs: number
+  content?: string
+  tokens?: number
+  promptTokens?: number
+  totalTokens?: number
+  costUsd?: number
+  costLabel: string
+  error?: string
+}
+
 const app = express()
 const port = Number(process.env.PORT ?? 8787)
 const apiKey = process.env.DEEPSEEK_API_KEY?.trim()
+const huggingFaceApiKey = process.env.HUGGINGFACE_API_KEY?.trim()
 const model = process.env.DEEPSEEK_MODEL?.trim() || 'deepseek-v4-flash'
+
+const modelDefinitions: ModelDefinition[] = [
+  {
+    id: 'gemma-small',
+    tier: 'Небольшая',
+    name: 'Gemma 3 4B',
+    model: 'google/gemma-3-4b-it:deepinfra',
+    provider: 'huggingface',
+    link: 'https://huggingface.co/google/gemma-3-4b-it',
+    costLabel: 'По тарифу DeepInfra',
+  },
+  {
+    id: 'deepseek-flash',
+    tier: 'Средняя',
+    name: 'DeepSeek V4 Flash',
+    model: 'deepseek-v4-flash',
+    provider: 'deepseek',
+    link: 'https://api-docs.deepseek.com/quick_start/pricing',
+    costLabel: 'Рассчитывается по тарифу',
+    pricing: { cacheHitInput: 0.0028, cacheMissInput: 0.14, output: 0.28 },
+  },
+  {
+    id: 'deepseek-pro',
+    tier: 'Сильная',
+    name: 'DeepSeek V4 Pro',
+    model: 'deepseek-v4-pro',
+    provider: 'deepseek',
+    link: 'https://api-docs.deepseek.com/quick_start/pricing',
+    costLabel: 'Рассчитывается по тарифу',
+    pricing: { cacheHitInput: 0.003625, cacheMissInput: 0.435, output: 0.87 },
+  },
+]
 
 app.use(express.json({ limit: '1mb' }))
 
@@ -147,6 +219,59 @@ app.post('/api/temperature', async (request, response) => {
     const message = error instanceof Error ? error.message : 'Не удалось получить ответы для разных температур.'
     response.status(502).json({ error: message })
   }
+})
+
+app.post('/api/models', async (request, response) => {
+  const prompt = request.body?.prompt as unknown
+
+  if (typeof prompt !== 'string' || prompt.trim().length === 0) {
+    response.status(400).json({ error: 'Поле prompt должно быть непустой строкой.' })
+    return
+  }
+
+  const trimmedPrompt = prompt.trim()
+  const messages: ChatMessage[] = [{ role: 'user', content: trimmedPrompt }]
+  const commonOptions = { temperature: 0.7 }
+
+  const results = await Promise.all(modelDefinitions.map(async (definition): Promise<ModelComparisonResult> => {
+    const startedAt = Date.now()
+
+    try {
+      const completion = definition.provider === 'deepseek'
+        ? await requestCompletion(messages, { ...commonOptions, model: definition.model })
+        : await requestHuggingFaceCompletion(messages, definition.model, commonOptions)
+
+      return {
+        id: definition.id,
+        tier: definition.tier,
+        name: definition.name,
+        model: definition.model,
+        provider: definition.provider,
+        link: definition.link,
+        durationMs: Date.now() - startedAt,
+        content: completion.content,
+        tokens: completion.tokens,
+        promptTokens: completion.promptTokens,
+        totalTokens: completion.totalTokens,
+        costUsd: completion.costUsd,
+        costLabel: definition.costLabel,
+      }
+    } catch (error) {
+      return {
+        id: definition.id,
+        tier: definition.tier,
+        name: definition.name,
+        model: definition.model,
+        provider: definition.provider,
+        link: definition.link,
+        durationMs: Date.now() - startedAt,
+        costLabel: definition.costLabel,
+        error: error instanceof Error ? error.message : 'Модель не вернула ответ.',
+      }
+    }
+  }))
+
+  response.json({ prompt: trimmedPrompt, results })
 })
 
 app.post('/api/reasoning', async (request, response) => {
@@ -355,9 +480,11 @@ app.post('/api/chat', async (request, response) => {
 
 async function requestCompletion(
   messages: ChatMessage[],
-  options: { max_tokens?: number; stop?: string[]; response_format?: { type: 'json_object' }; temperature?: number } = {},
+  options: { model?: string; max_tokens?: number; stop?: string[]; response_format?: { type: 'json_object' }; temperature?: number } = {},
 ): Promise<CompletionResult> {
   if (!apiKey) throw new Error('Добавьте DEEPSEEK_API_KEY в файл .env и перезапустите сервер.')
+
+  const { model: requestModel, ...requestOptions } = options
 
   const deepSeekResponse = await fetch('https://api.deepseek.com/chat/completions', {
     method: 'POST',
@@ -366,11 +493,11 @@ async function requestCompletion(
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      model,
+      model: requestModel ?? model,
       messages,
       stream: false,
       thinking: { type: 'disabled' },
-      ...options,
+      ...requestOptions,
     }),
   })
 
@@ -383,7 +510,66 @@ async function requestCompletion(
   const content = data.choices?.[0]?.message?.content
   if (!content) throw new Error('DeepSeek API не вернул текст ответа.')
 
-  return { content, tokens: data.usage?.completion_tokens }
+  const usage = data.usage
+  const pricing = deepSeekPricing[requestModel ?? model]
+  const promptTokens = usage?.prompt_tokens
+  const completionTokens = usage?.completion_tokens
+  const cacheHitTokens = usage?.prompt_cache_hit_tokens ?? 0
+  const cacheMissTokens = usage?.prompt_cache_miss_tokens ?? Math.max((promptTokens ?? 0) - cacheHitTokens, 0)
+  const costUsd = pricing && promptTokens !== undefined && completionTokens !== undefined
+    ? (cacheHitTokens * pricing.cacheHitInput + cacheMissTokens * pricing.cacheMissInput + completionTokens * pricing.output) / 1_000_000
+    : undefined
+
+  return {
+    content,
+    tokens: completionTokens,
+    promptTokens,
+    totalTokens: usage?.total_tokens,
+    costUsd,
+  }
+}
+
+async function requestHuggingFaceCompletion(
+  messages: ChatMessage[],
+  modelName: string,
+  options: { max_tokens?: number; temperature?: number } = {},
+): Promise<CompletionResult> {
+  if (!huggingFaceApiKey) throw new Error('Добавьте HUGGINGFACE_API_KEY в файл .env для запуска модели Hugging Face.')
+
+  const huggingFaceResponse = await fetch('https://router.huggingface.co/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${huggingFaceApiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: modelName,
+      messages,
+      stream: false,
+      ...options,
+    }),
+  })
+
+  const data = (await huggingFaceResponse.json()) as DeepSeekResponse
+
+  if (!huggingFaceResponse.ok) {
+    throw new Error(data.error?.message || 'Hugging Face API вернул ошибку.')
+  }
+
+  const content = data.choices?.[0]?.message?.content
+  if (!content) throw new Error('Hugging Face API не вернул текст ответа.')
+
+  return {
+    content,
+    tokens: data.usage?.completion_tokens,
+    promptTokens: data.usage?.prompt_tokens,
+    totalTokens: data.usage?.total_tokens,
+  }
+}
+
+const deepSeekPricing: Record<string, ModelPricing> = {
+  'deepseek-v4-flash': { cacheHitInput: 0.0028, cacheMissInput: 0.14, output: 0.28 },
+  'deepseek-v4-pro': { cacheHitInput: 0.003625, cacheMissInput: 0.435, output: 0.87 },
 }
 
 app.listen(port, () => {

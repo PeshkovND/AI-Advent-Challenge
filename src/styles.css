@@ -172,6 +172,25 @@ code { padding: 2px 4px; color: #5d60e6; background: #f0f0ff; border-radius: 4px
 .evaluation-heading > div { display: flex; align-items: center; gap: 13px; }
 .evaluation-heading h2 { margin: 5px 0 0; font-size: 17px; letter-spacing: -.04em; }
 .council-summary .reasoning-content { min-height: 0; }
+.models-results { margin-top: 27px; }
+.models-results-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 15px; margin-top: 17px; }
+.model-card { min-width: 0; overflow: hidden; background: #fff; border: 1px solid #e9ebf2; border-radius: 15px; box-shadow: 0 5px 17px #27304b05; }
+.model-card.huggingface { border-color: #e7d6ae; }
+.model-card.deepseek { border-color: #cfd0fa; box-shadow: 0 8px 22px #6668e914; }
+.model-card-header { padding: 16px 17px 13px; border-bottom: 1px solid #f0f1f5; }
+.model-card-header > div { display: flex; align-items: flex-start; gap: 10px; min-width: 0; }
+.model-tier { display: grid; flex: 0 0 auto; place-items: center; min-width: 34px; height: 34px; padding: 0 6px; color: #9a762c; background: #fff5dc; border-radius: 10px; font-size: 9px; font-weight: 800; text-align: center; }
+.model-tier.deepseek { color: #5d60e6; background: #f0f0ff; }
+.model-card h3 { margin: 0 0 4px; color: #454a5b; font-size: 13px; }
+.model-card-header a { display: block; overflow: hidden; color: #a0a5b5; font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+.model-card-header a:hover { color: #5d60e6; }
+.model-metrics { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; padding: 11px 17px; background: #fbfbfd; border-bottom: 1px solid #f0f1f5; }
+.model-metrics small, .model-metrics strong { display: block; }
+.model-metrics small { margin-bottom: 4px; color: #a0a5b5; font-size: 9px; }
+.model-metrics strong { overflow: hidden; color: #626777; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.model-card .response-content { min-height: 260px; }
+.model-error { padding: 11px 12px; color: #b15464; background: #fff0f2; border: 1px solid #ffdadd; border-radius: 9px; font-size: 11px; line-height: 1.6; }
+.model-card.has-error .model-metrics strong { color: #b15464; }
 .temperature-results { margin-top: 27px; }
 .temperature-results-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 15px; margin-top: 17px; }
 .temperature-card { min-width: 0; overflow: hidden; background: #fff; border: 1px solid #e9ebf2; border-radius: 15px; box-shadow: 0 5px 17px #27304b05; }
@@ -224,6 +243,8 @@ code { padding: 2px 4px; color: #5d60e6; background: #f0f0ff; border-radius: 4px
 .single-message.user .message-bubble code { color: #fff; background: #ffffff2b; }
 .message-bubble pre, .response-content pre { max-width: 100%; overflow-x: auto; margin: 10px 0; padding: 12px; color: #e8eaff; background: #252942; border-radius: 9px; font-size: 11px; line-height: 1.55; }
 .message-bubble pre code, .response-content pre code { padding: 0; color: inherit; background: transparent; border-radius: 0; font-size: inherit; }
+.message-bubble .katex-display, .response-content .katex-display { max-width: 100%; margin: 14px 0; overflow-x: auto; overflow-y: hidden; padding: 4px 0; }
+.message-bubble .katex, .response-content .katex { font-size: 1em; }
 .response-content .json-content { margin: 0; padding: 15px; color: #4f5870; background: #f8f8ff; border: 1px solid #e8e9fa; border-radius: 10px; font: 11px/1.65 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre; }
 .response-content .json-content code { color: inherit; }
 .message-bubble table, .response-content table { width: 100%; margin: 10px 0; border-collapse: collapse; font-size: 11px; }
@@ -269,7 +290,7 @@ code { padding: 2px 4px; color: #5d60e6; background: #f0f0ff; border-radius: 4px
   .composer-wrapper { width: 100%; }
   .prompt-panel, .controls-panel { padding: 18px; }
   .section-heading h2, .results-heading h2 { font-size: 15px; }
-  .controls-grid, .results-grid, .reasoning-methods-grid, .expert-grid, .temperature-results-grid { grid-template-columns: 1fr; }
+  .controls-grid, .results-grid, .reasoning-methods-grid, .expert-grid, .temperature-results-grid, .models-results-grid { grid-template-columns: 1fr; }
   .experts-method { grid-column: auto; }
   .settings-grid { grid-template-columns: 1fr; }
   .request-label, .same-prompt { display: none; }
