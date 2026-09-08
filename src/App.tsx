@@ -5,7 +5,7 @@ import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
 
 type MessageRole = 'user' | 'assistant'
-type Page = 'chat' | 'compare' | 'reasoning' | 'temperature' | 'models'
+type Page = 'chat' | 'compare' | 'reasoning' | 'temperature' | 'models' | 'agents'
 
 type ChatMessage = {
   id: string
@@ -62,6 +62,31 @@ type ModelSide = {
 }
 type ModelsResult = { prompt: string; results: ModelSide[] }
 type ApiError = { error?: string }
+type AgentProvider = 'deepseek' | 'huggingface'
+type AgentConfig = {
+  name?: string
+  provider: AgentProvider
+  model: string
+  systemPrompt?: string
+  temperature?: number
+  maxTokens?: number
+  inputPolicy?: { maxCharacters?: number }
+  outputPolicy?: { maxCharacters?: number; format?: 'text' | 'json'; stopSequences?: string[] }
+}
+type AgentSummary = { id: string; config: AgentConfig; createdAt?: string }
+type AgentsListResult = { agents: AgentSummary[]; count: number }
+type AgentStreamChunk = { content?: string; error?: string; done?: boolean; result?: { durationMs?: number; tokens?: number } }
+type AgentModelOption = { value: string; label: string }
+
+const agentModelOptions: Record<AgentProvider, AgentModelOption[]> = {
+  deepseek: [
+    { value: 'deepseek-v4-flash', label: 'DeepSeek V4 Flash' },
+    { value: 'deepseek-v4-pro', label: 'DeepSeek V4 Pro' },
+  ],
+  huggingface: [
+    { value: 'google/gemma-3-4b-it:deepinfra', label: 'Gemma 3 4B Instruct · DeepInfra' },
+  ],
+}
 
 const initialMessage: ChatMessage = {
   id: 'welcome',
@@ -120,6 +145,9 @@ function App() {
           <button className={`page-nav-button ${activePage === 'models' ? 'active' : ''}`} onClick={() => setActivePage('models')}>
             <span>◈</span> Модели
           </button>
+          <button className={`page-nav-button ${activePage === 'agents' ? 'active' : ''}`} onClick={() => setActivePage('agents')}>
+            <span>♙</span> Агенты
+          </button>
         </nav>
 
         <div className="sidebar-bottom">
@@ -129,7 +157,7 @@ function App() {
       </aside>
 
       <main className="day-main">
-        {activePage === 'chat' ? <ChatPage /> : activePage === 'compare' ? <ComparePage /> : activePage === 'reasoning' ? <ReasoningPage /> : activePage === 'temperature' ? <TemperaturePage /> : <ModelsPage />}
+        {activePage === 'chat' ? <ChatPage /> : activePage === 'compare' ? <ComparePage /> : activePage === 'reasoning' ? <ReasoningPage /> : activePage === 'temperature' ? <TemperaturePage /> : activePage === 'models' ? <ModelsPage /> : <AgentsPage />}
       </main>
     </div>
   )
@@ -206,8 +234,8 @@ function ChatPage() {
   return (
     <div className="page-view chat-page">
       <header className="chat-header">
-        <div><p className="eyebrow">Личный помощник</p><h1>Чат с DeepSeek</h1><p className="header-description">Общайтесь с моделью в обычном режиме с потоковой выдачей ответа.</p></div>
-        <div className="model-badge"><span className="pulse-dot" /> DeepSeek V4 Flash</div>
+        <div><p className="eyebrow">Личный помощник</p><h1>Чат с DeepSeek</h1><p className="header-description">Запрос принимает агент default и возвращает ответ с потоковой выдачей.</p></div>
+        <div className="model-badge"><span className="pulse-dot" /> Agent default · DeepSeek V4 Flash</div>
       </header>
       <section className="messages-area" aria-label="История сообщений">
         <div className="messages-list">
@@ -355,6 +383,202 @@ function ReasoningPage() {
       </section>
     </div>
   )
+}
+
+function AgentsPage() {
+  const [agents, setAgents] = useState<AgentSummary[]>([])
+  const [selectedAgentId, setSelectedAgentId] = useState('default')
+  const [agentId, setAgentId] = useState('')
+  const [agentName, setAgentName] = useState('')
+  const [provider, setProvider] = useState<AgentProvider>('deepseek')
+  const [model, setModel] = useState('deepseek-v4-flash')
+  const [systemPrompt, setSystemPrompt] = useState('')
+  const [temperature, setTemperature] = useState('0.7')
+  const [maxTokens, setMaxTokens] = useState('')
+  const [outputFormat, setOutputFormat] = useState<'text' | 'json'>('text')
+  const [stopSequenceFields, setStopSequenceFields] = useState<StopSequenceField[]>([])
+  const [input, setInput] = useState('')
+  const [answer, setAnswer] = useState('')
+  const [runMeta, setRunMeta] = useState<{ durationMs?: number; tokens?: number } | null>(null)
+  const [isLoadingAgents, setIsLoadingAgents] = useState(true)
+  const [isCreating, setIsCreating] = useState(false)
+  const [isRunning, setIsRunning] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    void loadAgents()
+  }, [])
+
+  async function loadAgents() {
+    setIsLoadingAgents(true)
+    try {
+      const response = await fetch('/api/agents')
+      const data = (await response.json()) as AgentsListResult & ApiError
+      if (!response.ok || !Array.isArray(data.agents)) throw new Error(data.error || 'Не удалось загрузить агентов.')
+      setAgents(data.agents)
+      if (data.agents.length > 0 && !data.agents.some((agent) => agent.id === selectedAgentId)) setSelectedAgentId(data.agents[0].id)
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : 'Не удалось загрузить агентов.')
+    } finally {
+      setIsLoadingAgents(false)
+    }
+  }
+
+  async function createAgent(event: FormEvent) {
+    event.preventDefault()
+    const trimmedId = agentId.trim().toLowerCase()
+    if (!trimmedId || isCreating) return
+
+    setIsCreating(true)
+    setError(null)
+    try {
+      const numericTemperature = Number(temperature)
+      const numericMaxTokens = Number(maxTokens)
+      const stopSequenceValues = stopSequenceFields.map(({ value }) => value.trim()).filter(Boolean)
+      const config: AgentConfig = {
+        name: agentName.trim() || undefined,
+        provider,
+        model: model.trim(),
+        systemPrompt: systemPrompt.trim() || undefined,
+        temperature: Number.isFinite(numericTemperature) ? Math.min(Math.max(numericTemperature, 0), 2) : undefined,
+        maxTokens: maxTokens.trim() && Number.isFinite(numericMaxTokens) ? Math.max(1, Math.floor(numericMaxTokens)) : undefined,
+        outputPolicy: outputFormat === 'json' || stopSequenceValues.length > 0 ? {
+          ...(outputFormat === 'json' ? { format: 'json' as const } : {}),
+          ...(stopSequenceValues.length > 0 ? { stopSequences: stopSequenceValues } : {}),
+        } : undefined,
+      }
+      const response = await fetch('/api/agents', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: trimmedId, config }),
+      })
+      const data = (await response.json()) as AgentSummary & ApiError
+      if (!response.ok || !data.id) throw new Error(data.error || 'Не удалось создать агента.')
+      setAgents((current) => [...current, data])
+      setSelectedAgentId(data.id)
+      setAgentId('')
+      setAgentName('')
+      setSystemPrompt('')
+      setError(null)
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : 'Не удалось создать агента.')
+    } finally {
+      setIsCreating(false)
+    }
+  }
+
+  async function runAgent(event: FormEvent) {
+    event.preventDefault()
+    const trimmedInput = input.trim()
+    if (!trimmedInput || isRunning || !selectedAgentId) return
+
+    setIsRunning(true)
+    setError(null)
+    setAnswer('')
+    setRunMeta(null)
+
+    try {
+      const response = await fetch(`/api/agents/${encodeURIComponent(selectedAgentId)}/stream`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ input: trimmedInput }),
+      })
+      if (!response.ok) {
+        const data = (await response.json()) as ApiError
+        throw new Error(data.error || 'Не удалось получить ответ агента.')
+      }
+      if (!response.body) throw new Error('Браузер не поддерживает потоковый ответ.')
+
+      const reader = response.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ''
+      let streamFinished = false
+      while (!streamFinished) {
+        const { done, value } = await reader.read()
+        buffer += decoder.decode(value, { stream: !done })
+        const lines = buffer.split('\n')
+        buffer = lines.pop() ?? ''
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue
+          const payload = line.slice(6).trim()
+          if (payload === '[DONE]') { streamFinished = true; break }
+          const chunk = JSON.parse(payload) as AgentStreamChunk
+          if (chunk.error) throw new Error(chunk.error)
+          if (chunk.content) setAnswer((current) => current + chunk.content)
+          if (chunk.done && chunk.result) setRunMeta(chunk.result)
+        }
+        if (done) break
+      }
+    } catch (requestError) {
+      setAnswer('')
+      setError(requestError instanceof Error ? requestError.message : 'Не удалось получить ответ агента.')
+    } finally {
+      setIsRunning(false)
+    }
+  }
+
+  const selectedAgent = agents.find((agent) => agent.id === selectedAgentId)
+
+  return (
+    <div className="page-view agents-page">
+      <header className="page-header">
+        <div><p className="eyebrow">Agent service</p><h1>Создайте агента и отправьте ему запрос</h1><p className="header-description">Каждый агент получает собственную конфигурацию, а все агенты работают внутри одного серверного приложения.</p></div>
+        <div className="model-badge"><span className="pulse-dot" /> {agents.length} {pluralizeAgents(agents.length)}</div>
+      </header>
+
+      {error && <div className="error-message" role="alert">{error}</div>}
+
+      <div className="agents-layout">
+        <section className="agent-create-panel">
+          <div className="section-heading"><div><span className="step-number">01</span><div><p className="eyebrow">Новая сущность</p><h2>Конфигурация агента</h2></div></div></div>
+          <form className="agent-form" onSubmit={createAgent}>
+            <label>Идентификатор<input value={agentId} onChange={(event) => setAgentId(event.target.value)} placeholder="например, react-helper" /></label>
+            <label>Название<input value={agentName} onChange={(event) => setAgentName(event.target.value)} placeholder="Помощник по React" /></label>
+            <div className="agent-form-row">
+              <label>Провайдер<select value={provider} onChange={(event) => { const nextProvider = event.target.value as AgentProvider; setProvider(nextProvider); setModel(agentModelOptions[nextProvider][0].value) }}><option value="deepseek">DeepSeek</option><option value="huggingface">Hugging Face</option></select></label>
+              <label>Модель<select value={model} onChange={(event) => setModel(event.target.value)}>{agentModelOptions[provider].map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}</select></label>
+            </div>
+            <label>Системный промпт<textarea value={systemPrompt} onChange={(event) => setSystemPrompt(event.target.value)} placeholder="Например: отвечай кратко и с примерами..." rows={3} /></label>
+            <div className="agent-form-row">
+              <label>Температура<input type="number" min="0" max="2" step="0.1" value={temperature} onChange={(event) => setTemperature(event.target.value)} /></label>
+              <label>Максимум токенов <span className="field-optional">необязательно</span><input type="number" min="1" value={maxTokens} onChange={(event) => setMaxTokens(event.target.value)} placeholder="без лимита" /></label>
+            </div>
+            <label>Формат ответа<select value={outputFormat} onChange={(event) => setOutputFormat(event.target.value as 'text' | 'json')}><option value="text">Обычный текст</option><option value="json">JSON</option></select></label>
+            <div className="agent-stop-section"><div className="agent-field-heading"><span>Stop sequence</span><small>Необязательно</small></div><div className="stop-list">{stopSequenceFields.map((sequence, index) => <div className="stop-row" key={sequence.id}><input className="stop-input" value={sequence.value} onChange={(event) => setStopSequenceFields((current) => current.map((item) => item.id === sequence.id ? { ...item, value: event.target.value } : item))} placeholder={index === 0 ? 'Например: <END>' : 'Следующая последовательность'} aria-label={`Stop sequence ${index + 1}`} /><button className="stop-remove" type="button" onClick={() => setStopSequenceFields((current) => current.filter((item) => item.id !== sequence.id))} aria-label={`Удалить stop sequence ${index + 1}`}>×</button></div>)}<button className="stop-add" type="button" onClick={() => setStopSequenceFields((current) => [...current, createStopSequenceField()])} aria-label="Добавить stop sequence" title="Добавить stop sequence">＋</button></div></div>
+            <button className="compare-button" type="submit" disabled={isCreating || !agentId.trim()}>{isCreating ? 'Создаём...' : 'Создать агента'} <span>→</span></button>
+          </form>
+        </section>
+
+        <section className="agent-run-panel">
+          <div className="section-heading"><div><span className="step-number">02</span><div><p className="eyebrow">Запуск</p><h2>Сообщение агенту</h2></div></div></div>
+          <div className="agent-picker">
+            <label>Выберите агента<select value={selectedAgentId} onChange={(event) => { setSelectedAgentId(event.target.value); setAnswer(''); setRunMeta(null) }} disabled={isLoadingAgents || agents.length === 0}>{agents.map((agent) => <option value={agent.id} key={agent.id}>{agent.config.name || agent.id} · {agent.id}</option>)}</select></label>
+            {selectedAgent && <div className="agent-config-summary"><strong>{selectedAgent.id}</strong><span>{selectedAgent.config.provider} · {selectedAgent.config.model}</span><span>temperature {selectedAgent.config.temperature ?? 'по умолчанию'}</span></div>}
+            {selectedAgent && <AgentConfigDetails config={selectedAgent.config} />}
+          </div>
+          <form className="agent-message-form" onSubmit={runAgent}>
+            <textarea value={input} onChange={(event) => setInput(event.target.value)} placeholder="Напишите сообщение выбранному агенту..." rows={5} disabled={isRunning || agents.length === 0} />
+            <button className="compare-button" type="submit" disabled={isRunning || !input.trim() || agents.length === 0}>{isRunning ? 'Агент отвечает...' : 'Отправить сообщение'} <span>→</span></button>
+          </form>
+          <div className="agent-answer"><div className="agent-answer-heading"><div><p className="eyebrow">Ответ агента</p><h3>{selectedAgent?.config.name || selectedAgent?.id || 'Агент не выбран'}</h3></div>{runMeta && <span className="response-status">{runMeta.durationMs ?? '—'} мс · {runMeta.tokens ?? '—'} tokens</span>}</div>{answer ? <div className="reasoning-content"><MarkdownContent content={answer} /></div> : <div className="agent-empty">{isRunning ? <><span className="loading-spinner" /> Получаем потоковый ответ...</> : 'Здесь появится ответ выбранного агента.'}</div>}</div>
+        </section>
+      </div>
+
+      <section className="results-section agent-list-section"><div className="results-heading"><div><span className="step-number">03</span><div><p className="eyebrow">Реестр</p><h2>Созданные агенты</h2></div></div><span className="same-prompt">{agents.length} {pluralizeAgents(agents.length)}</span></div><div className="agent-list">{agents.map((agent) => <button className={`agent-list-item ${agent.id === selectedAgentId ? 'active' : ''}`} type="button" key={agent.id} onClick={() => setSelectedAgentId(agent.id)}><span className="agent-list-icon">{agent.id === 'default' ? 'D' : 'A'}</span><span><strong>{agent.config.name || agent.id}</strong><small>{agent.id} · {agent.config.provider} · {agent.config.model}</small></span><span className="agent-list-arrow">→</span></button>)}</div></section>
+    </div>
+  )
+}
+
+function AgentConfigDetails({ config }: { config: AgentConfig }) {
+  const outputFormat = config.outputPolicy?.format === 'json' ? 'JSON' : 'Обычный текст'
+  const stopSequences = config.outputPolicy?.stopSequences?.length ? config.outputPolicy.stopSequences.join(' · ') : 'не заданы'
+  return <div className="agent-config-details"><div className="agent-config-details-heading"><span>Параметры выбранного агента</span><small>Текущая конфигурация</small></div><div className="agent-config-details-grid"><div><small>Название</small><strong>{config.name || 'не задано'}</strong></div><div><small>Temperature</small><strong>{config.temperature ?? 'по умолчанию'}</strong></div><div><small>Максимум токенов</small><strong>{config.maxTokens ?? 'без лимита'}</strong></div><div><small>Формат ответа</small><strong>{outputFormat}</strong></div><div><small>Лимит входа</small><strong>{config.inputPolicy?.maxCharacters ? `${config.inputPolicy.maxCharacters} символов` : 'без лимита'}</strong></div><div><small>Stop-последовательности</small><strong>{stopSequences}</strong></div><div className="agent-config-details-wide"><small>Системный промпт</small><strong>{config.systemPrompt || 'не задан'}</strong></div></div></div>
+}
+
+function pluralizeAgents(count: number) {
+  if (count % 10 === 1 && count % 100 !== 11) return 'агент'
+  if ([2, 3, 4].includes(count % 10) && ![12, 13, 14].includes(count % 100)) return 'агента'
+  return 'агентов'
 }
 
 function ModelsPage() {

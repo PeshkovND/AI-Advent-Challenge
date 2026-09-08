@@ -262,12 +262,59 @@ code { padding: 2px 4px; color: #5d60e6; background: #f0f0ff; border-radius: 4px
 .reset-chat-button { align-self: flex-start; margin-top: 12px; padding: 8px 10px; color: #858a9c; background: transparent; border: 1px solid #e5e7ef; border-radius: 8px; font-size: 10px; }
 .reset-chat-button:hover { color: #5d60e6; border-color: #cfd0fa; }
 
+.agents-layout { display: grid; grid-template-columns: minmax(280px, .85fr) minmax(0, 1.15fr); gap: 15px; margin-top: 30px; }
+.agent-create-panel, .agent-run-panel { min-width: 0; padding: 23px 25px; background: #fff; border: 1px solid #e9ebf2; border-radius: 17px; box-shadow: 0 5px 17px #27304b05; }
+.agent-form, .agent-message-form { display: grid; gap: 12px; margin-top: 20px; }
+.agent-form label, .agent-picker label { display: grid; gap: 6px; color: #73788a; font-size: 10px; font-weight: 700; }
+.agent-form input, .agent-form select, .agent-form textarea, .agent-picker select, .agent-message-form textarea { width: 100%; padding: 10px 11px; color: #555a6b; background: #fbfbfd; border: 1px solid #e4e6ee; border-radius: 8px; outline: 0; font-size: 11px; font-weight: 500; }
+.agent-form input, .agent-form select, .agent-picker select { height: 38px; }
+.agent-form textarea, .agent-message-form textarea { resize: vertical; line-height: 1.6; }
+.agent-form input:focus, .agent-form select:focus, .agent-form textarea:focus, .agent-picker select:focus, .agent-message-form textarea:focus { border-color: #a7a8f6; box-shadow: 0 0 0 3px #6668e914; }
+.agent-form-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.field-optional { color: #a0a5b5; font-size: 9px; font-weight: 500; }
+.agent-stop-section { padding-top: 2px; }
+.agent-field-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: #73788a; font-size: 10px; font-weight: 700; }
+.agent-field-heading small { color: #a0a5b5; font-size: 9px; font-weight: 500; }
+.agent-stop-section .stop-list { margin-top: 7px; }
+.agent-form .compare-button, .agent-message-form .compare-button { justify-content: center; margin-top: 3px; }
+.agent-picker { margin-top: 20px; }
+.agent-config-summary { display: flex; flex-wrap: wrap; gap: 6px 12px; margin-top: 11px; padding: 10px 11px; color: #8a8fa2; background: #f8f8ff; border: 1px solid #e9e9fa; border-radius: 8px; font-size: 10px; }
+.agent-config-summary strong { color: #5d60e6; }
+.agent-config-details { margin-top: 12px; padding: 12px; background: #fff; border: 1px solid #eceef4; border-radius: 10px; }
+.agent-config-details-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; padding-bottom: 9px; border-bottom: 1px solid #f0f1f5; }
+.agent-config-details-heading span { color: #5e6375; font-size: 10px; font-weight: 800; }
+.agent-config-details-heading small { color: #a0a5b5; font-size: 9px; }
+.agent-config-details-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; padding-top: 11px; }
+.agent-config-details-grid > div { min-width: 0; }
+.agent-config-details-grid small, .agent-config-details-grid strong { display: block; }
+.agent-config-details-grid small { margin-bottom: 3px; color: #a0a5b5; font-size: 9px; }
+.agent-config-details-grid strong { overflow: hidden; color: #626777; font-size: 10px; font-weight: 600; line-height: 1.45; overflow-wrap: anywhere; }
+.agent-config-details-wide { grid-column: 1 / -1; }
+.agent-message-form { margin-top: 15px; }
+.agent-message-form textarea { min-height: 105px; background: #fbfbfd; }
+.agent-answer { min-height: 235px; margin-top: 17px; overflow: hidden; background: #fbfbfd; border: 1px solid #e9ebf2; border-radius: 12px; }
+.agent-answer-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 14px 15px 11px; border-bottom: 1px solid #eceef4; }
+.agent-answer-heading h3 { margin: 4px 0 0; color: #454a5b; font-size: 13px; }
+.agent-answer .reasoning-content { min-height: 0; padding: 15px; font-size: 12px; }
+.agent-empty { display: flex; min-height: 175px; align-items: center; justify-content: center; gap: 9px; padding: 20px; color: #a0a5b5; font-size: 11px; text-align: center; }
+.agent-list-section { margin-top: 27px; }
+.agent-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 17px; }
+.agent-list-item { display: flex; align-items: center; gap: 10px; min-width: 0; padding: 12px; color: #626777; background: #fff; border: 1px solid #e9ebf2; border-radius: 11px; text-align: left; transition: .2s; }
+.agent-list-item:hover, .agent-list-item.active { border-color: #cfd0fa; background: #fcfcff; box-shadow: 0 6px 18px #6668e90e; }
+.agent-list-icon { display: grid; flex: 0 0 29px; place-items: center; width: 29px; height: 29px; color: #686ae9; background: #f0f0ff; border-radius: 9px; font-size: 10px; font-weight: 800; }
+.agent-list-item > span:nth-child(2) { display: grid; min-width: 0; gap: 3px; }
+.agent-list-item strong, .agent-list-item small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.agent-list-item strong { color: #555a6b; font-size: 11px; }
+.agent-list-item small { color: #a0a5b5; font-size: 9px; }
+.agent-list-arrow { margin-left: auto; color: #8a8fa2; font-size: 15px; }
+
 @media (max-width: 840px) {
   .day-main { padding: 30px 24px 40px; }
   .chat-header, .day-header, .page-header { flex-direction: column; }
   .day-header .model-badge, .page-header .model-badge, .chat-header .model-badge { align-self: flex-start; }
   .prompt-actions { align-items: stretch; flex-direction: column; }
   .compare-button { justify-content: center; }
+  .agents-layout { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 680px) {
@@ -290,8 +337,11 @@ code { padding: 2px 4px; color: #5d60e6; background: #f0f0ff; border-radius: 4px
   .composer-wrapper { width: 100%; }
   .prompt-panel, .controls-panel { padding: 18px; }
   .section-heading h2, .results-heading h2 { font-size: 15px; }
-  .controls-grid, .results-grid, .reasoning-methods-grid, .expert-grid, .temperature-results-grid, .models-results-grid { grid-template-columns: 1fr; }
+  .controls-grid, .results-grid, .reasoning-methods-grid, .expert-grid, .temperature-results-grid, .models-results-grid, .agent-list { grid-template-columns: 1fr; }
   .experts-method { grid-column: auto; }
   .settings-grid { grid-template-columns: 1fr; }
+  .agent-form-row { grid-template-columns: 1fr; }
+  .agent-config-details-grid { grid-template-columns: 1fr; }
+  .agent-config-details-wide { grid-column: auto; }
   .request-label, .same-prompt { display: none; }
 }

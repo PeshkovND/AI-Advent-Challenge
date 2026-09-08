@@ -1,0 +1,17 @@
+{
+  "id": "react-helper",
+  "config": {
+    "name": "React-помощник",
+    "provider": "deepseek",
+    "model": "deepseek-v4-flash",
+    "systemPrompt": "Ты — практичный помощник iOS-разработчика, который изучает React. Объясняй решения простыми словами и показывай короткие примеры.",
+    "temperature": 0.3,
+    "inputPolicy": {
+      "maxCharacters": 12000
+    },
+    "outputPolicy": {
+      "format": "text",
+      "stopSequences": ["<END>"]
+    }
+  }
+}

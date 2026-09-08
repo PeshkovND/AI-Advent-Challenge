@@ -30,6 +30,19 @@
 
 Экран «Модели» отправляет один и тот же prompt трём моделям: небольшая `google/gemma-3-4b-it` через Hugging Face/DeepInfra и `deepseek-v4-flash` и `deepseek-v4-pro` через DeepSeek. Для каждого результата отображаются время ответа, количество токенов и стоимость. Автоматических выводов в приложении нет. Дефолтная математическая задача взята из benchmark-набора MATH, содержащего сложные задачи математических соревнований ([описание набора](https://huggingface.co/datasets/jeggers/competition_math), [исходный репозиторий](https://github.com/hendrycks/math)). Серверный endpoint для режима — `POST /api/models`.
 
+## Агентный сервис
+
+`AgentService` инкапсулирует обработку запроса: input policy → вызов LLM → output policy. Все агенты живут в одном Node/Express-процессе, поэтому создание большого количества агентов не запускает отдельные приложения. REST API доступен по префиксу `/api/agents`, а существующий чат работает через агента `default`.
+
+Создание одного агента и массовое создание через CLI:
+
+```bash
+npm run agents:cli -- create --config agent-config.example.json
+npm run agents:cli -- bulk --config agents-config.example.json
+```
+
+Подробные требования, конфигурация и список endpoint-ов описаны в [`docs/day-6.md`](docs/day-6.md).
+
 ## Запуск
 
 ```bash
@@ -55,6 +68,8 @@ cp .env.example .env
 - `src/styles.css` — глобальные стили и адаптивная верстка.
 - `src/main.tsx` — точка входа React.
 - `server/index.ts` — серверный прокси и SSE-поток от DeepSeek API.
+- `server/agent-service.ts` — изолированный сервис, сущность агента, registry и REST API.
+- `server/agent-cli.ts` — неинтерактивная отправка конфигураций в сервис.
 - `vite.config.ts` — настройки Vite.
 - `tsconfig.json` — строгие настройки TypeScript.
 

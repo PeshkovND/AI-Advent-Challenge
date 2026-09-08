@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "concurrently -k \"vite\" \"npm run dev:server\"",
     "dev:server": "tsx watch server/index.ts",
+    "agents:cli": "tsx server/agent-cli.ts",
     "build": "vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit"
@@ -23,6 +24,7 @@
   },
   "devDependencies": {
     "@types/express": "^5.0.3",
+    "@types/node": "^26.5.0",
     "@types/react": "^19.1.10",
     "@types/react-dom": "^19.1.7",
     "@vitejs/plugin-react": "^5.0.4",

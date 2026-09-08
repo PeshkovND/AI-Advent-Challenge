@@ -1,5 +1,6 @@
 import 'dotenv/config'
 import express from 'express'
+import { AgentService, createAgentRouter } from './agent-service'
 
 type ChatRole = 'system' | 'user' | 'assistant'
 
@@ -104,6 +105,11 @@ const port = Number(process.env.PORT ?? 8787)
 const apiKey = process.env.DEEPSEEK_API_KEY?.trim()
 const huggingFaceApiKey = process.env.HUGGINGFACE_API_KEY?.trim()
 const model = process.env.DEEPSEEK_MODEL?.trim() || 'deepseek-v4-flash'
+const agentService = new AgentService({
+  deepSeekApiKey: apiKey,
+  huggingFaceApiKey,
+  defaultDeepSeekModel: model,
+})
 
 const modelDefinitions: ModelDefinition[] = [
   {
@@ -138,9 +144,10 @@ const modelDefinitions: ModelDefinition[] = [
 ]
 
 app.use(express.json({ limit: '1mb' }))
+app.use('/api/agents', createAgentRouter(agentService))
 
 app.get('/api/health', (_request, response) => {
-  response.json({ ok: true, configured: Boolean(apiKey), model })
+  response.json({ ok: true, configured: Boolean(apiKey), model, agents: agentService.count })
 })
 
 app.post('/api/compare', async (request, response) => {
@@ -385,13 +392,6 @@ function normalizeCompareControls(value: unknown): CompareControls {
 }
 
 app.post('/api/chat', async (request, response) => {
-  if (!apiKey) {
-    response.status(503).json({
-      error: 'Добавьте DEEPSEEK_API_KEY в файл .env и перезапустите сервер.',
-    })
-    return
-  }
-
   const messages = request.body?.messages as unknown
 
   if (!isChatMessageArray(messages)) {
@@ -401,79 +401,29 @@ app.post('/api/chat', async (request, response) => {
     return
   }
 
+  const latestMessage = messages[messages.length - 1]
+  if (latestMessage.role !== 'user') {
+    response.status(400).json({ error: 'Последнее сообщение должно быть сообщением пользователя.' })
+    return
+  }
+
   try {
-    const deepSeekResponse = await fetch('https://api.deepseek.com/chat/completions', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model,
-        messages,
-        stream: true,
-        thinking: { type: 'disabled' },
-      }),
-    })
-
-    if (!deepSeekResponse.ok) {
-      const data = (await deepSeekResponse.json()) as DeepSeekResponse
-      response.status(deepSeekResponse.status).json({
-        error: data.error?.message || 'DeepSeek API вернул ошибку.',
-      })
-      return
-    }
-
-    if (!deepSeekResponse.body) {
-      response.status(502).json({ error: 'DeepSeek API не вернул поток ответа.' })
-      return
-    }
-
     response.setHeader('Content-Type', 'text/event-stream; charset=utf-8')
     response.setHeader('Cache-Control', 'no-cache, no-transform')
     response.setHeader('Connection', 'keep-alive')
     response.flushHeaders()
 
-    const reader = deepSeekResponse.body.getReader()
-    const decoder = new TextDecoder()
-    let buffer = ''
-
-    while (true) {
-      const { done, value } = await reader.read()
-      buffer += decoder.decode(value, { stream: !done })
-
-      const lines = buffer.split('\n')
-      buffer = lines.pop() ?? ''
-
-      for (const line of lines) {
-        if (!line.startsWith('data: ')) continue
-
-        const payload = line.slice(6).trim()
-        if (payload === '[DONE]') {
-          response.end()
-          return
-        }
-
-        const chunk = JSON.parse(payload) as DeepSeekStreamChunk
-        const content = chunk.choices?.[0]?.delta?.content
-        if (content) {
-          response.write(`data: ${JSON.stringify({ content })}\n\n`)
-        }
-      }
-
-      if (done) break
-    }
-
+    await agentService.get('default').stream(latestMessage.content, messages.slice(0, -1), (content) => {
+      response.write(`data: ${JSON.stringify({ content })}\n\n`)
+    })
+    response.write('data: [DONE]\n\n')
     response.end()
   } catch (error) {
-    console.error('DeepSeek request failed:', error)
     if (response.headersSent) {
-      response.write(`data: ${JSON.stringify({ error: 'Поток ответа был прерван.' })}\n\n`)
+      response.write(`data: ${JSON.stringify({ error: error instanceof Error ? error.message : 'Поток агента был прерван.' })}\n\n`)
       response.end()
     } else {
-      response.status(502).json({
-        error: 'Не удалось связаться с DeepSeek API. Проверьте подключение и ключ.',
-      })
+      response.status(502).json({ error: error instanceof Error ? error.message : 'Не удалось запустить агента.' })
     }
   }
 })
