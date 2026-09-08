@@ -1,4 +1,6 @@
 import express, { Request, Response, Router } from 'express'
+import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
+import { dirname, resolve } from 'node:path'
 
 export type AgentProvider = 'deepseek' | 'huggingface'
 export type AgentMessageRole = 'system' | 'user' | 'assistant'
@@ -35,6 +37,7 @@ export type AgentRunResult = {
   tokens?: number
   promptTokens?: number
   totalTokens?: number
+  contextMessages?: number
 }
 
 type CompletionResult = {
@@ -59,10 +62,105 @@ type AgentServiceOptions = {
   defaultDeepSeekModel: string
 }
 
+// История ограничивается консервативно, потому что у разных моделей и провайдеров
+// могут быть разные размеры контекстного окна. Токены оцениваются без отдельного
+// токенизатора конкретной модели.
+const MAX_CONTEXT_TOKENS = 12_000
+const MAX_STORED_HISTORY_TOKENS = 10_000
+const RESERVED_RESPONSE_TOKENS = 2_000
+
 type AgentRecord = {
   id: string
   config: Required<Pick<AgentConfig, 'provider' | 'model'>> & AgentConfig
   createdAt: string
+}
+
+type AgentState = {
+  agents: AgentRecord[]
+  histories: Record<string, AgentMessage[]>
+}
+
+class AgentStateStore {
+  private state: AgentState = { agents: [], histories: {} }
+  private writeQueue: Promise<void> = Promise.resolve()
+  readonly ready: Promise<void>
+
+  constructor(private readonly filePath = resolve(process.cwd(), 'data', 'agent-state.json')) {
+    this.ready = this.load()
+  }
+
+  async getAgents() {
+    await this.ready
+    return this.state.agents.map((agent) => ({ ...agent, config: { ...agent.config } }))
+  }
+
+  async getHistory(agentId: string) {
+    await this.ready
+    return [...(this.state.histories[agentId] ?? [])]
+  }
+
+  async replaceHistory(agentId: string, messages: AgentMessage[]) {
+    await this.ready
+    this.state.histories[agentId] = [...messages]
+    await this.persist()
+  }
+
+  async appendHistory(agentId: string, messages: AgentMessage[], maxTokens = MAX_STORED_HISTORY_TOKENS) {
+    await this.ready
+    this.state.histories[agentId] = trimMessagesToTokenBudget(
+      [...(this.state.histories[agentId] ?? []), ...messages],
+      maxTokens,
+    )
+    await this.persist()
+    return this.state.histories[agentId].length
+  }
+
+  async replaceAgents(agents: AgentRecord[]) {
+    await this.ready
+    this.state.agents = agents.map((agent) => ({ ...agent, config: { ...agent.config } }))
+    await this.persist()
+  }
+
+  async removeAgent(agentId: string) {
+    await this.ready
+    this.state.agents = this.state.agents.filter((agent) => agent.id !== agentId)
+    delete this.state.histories[agentId]
+    await this.persist()
+  }
+
+  async clearHistory(agentId: string) {
+    await this.ready
+    delete this.state.histories[agentId]
+    await this.persist()
+  }
+
+  private async load() {
+    await mkdir(dirname(this.filePath), { recursive: true })
+    try {
+      const raw = await readFile(this.filePath, 'utf8')
+      const parsed: unknown = JSON.parse(raw)
+      if (isRecord(parsed)) {
+        this.state = {
+          agents: Array.isArray(parsed.agents) ? parsed.agents.filter(isAgentRecord) : [],
+          histories: isRecord(parsed.histories) ? Object.fromEntries(Object.entries(parsed.histories).map(([id, messages]) => [id, parseStoredMessages(messages)])) : {},
+        }
+      }
+    } catch (error) {
+      if (isNodeError(error) && error.code === 'ENOENT') return
+      console.warn('Не удалось загрузить сохранённый контекст агентов. Начинаем с пустого состояния.')
+    }
+  }
+
+  private persist() {
+    const snapshot = JSON.stringify(this.state, null, 2)
+    const temporaryPath = `${this.filePath}.tmp`
+    const operation = this.writeQueue.then(async () => {
+      await writeFile(temporaryPath, snapshot, 'utf8')
+      await rename(temporaryPath, this.filePath)
+    })
+    this.writeQueue = operation.catch(() => {})
+    return operation
+  }
 }
 
 type RunRequest = {
@@ -236,37 +334,42 @@ export class Agent {
 
 export class AgentService {
   private readonly agents = new Map<string, Agent>()
+  private readonly createdAt = new Map<string, string>()
   private readonly client: LlmClient
   private readonly defaultDeepSeekModel: string
+  private readonly stateStore: AgentStateStore
+  readonly ready: Promise<void>
 
   constructor(options: AgentServiceOptions) {
     this.client = new LlmClient(options)
     this.defaultDeepSeekModel = options.defaultDeepSeekModel
-    this.create({
-      id: 'default',
-      config: {
-        name: 'Основной агент',
-        provider: 'deepseek',
-        model: options.defaultDeepSeekModel,
-        systemPrompt: 'Ты — самостоятельный AI-агент. Отвечай понятно, по существу и на языке пользователя.',
-      },
-    })
+    this.stateStore = new AgentStateStore()
+    const defaultConfig = normalizeAgentConfig({
+      name: 'Основной агент',
+      provider: 'deepseek',
+      model: options.defaultDeepSeekModel,
+      systemPrompt: 'Ты — самостоятельный AI-агент. Отвечай понятно, по существу и на языке пользователя.',
+    }, options.defaultDeepSeekModel)
+    this.register('default', defaultConfig, new Date().toISOString())
+    this.ready = this.restore()
   }
 
   get count() {
     return this.agents.size
   }
 
-  create(input: { id?: unknown; config: unknown }) {
+  async create(input: { id?: unknown; config: unknown }) {
+    await this.ready
     const id = normalizeAgentId(input.id)
     if (this.agents.has(id)) throw new AgentError(`Агент с id "${id}" уже существует.`, 409)
     const config = normalizeAgentConfig(input.config, this.defaultDeepSeekModel)
-    const agent = new Agent(id, config, this.client)
-    this.agents.set(id, agent)
-    return this.describe(agent)
+    this.register(id, config, new Date().toISOString())
+    await this.persistAgents()
+    return this.describe(this.agents.get(id)!)
   }
 
-  createMany(inputs: Array<{ id?: unknown; config: unknown }>) {
+  async createMany(inputs: Array<{ id?: unknown; config: unknown }>) {
+    await this.ready
     const ids = new Set<string>()
     const prepared = inputs.map((input) => {
       const id = normalizeAgentId(input.id)
@@ -275,7 +378,8 @@ export class AgentService {
       return { id, config: normalizeAgentConfig(input.config, this.defaultDeepSeekModel) }
     })
 
-    for (const item of prepared) this.agents.set(item.id, new Agent(item.id, item.config, this.client))
+    for (const item of prepared) this.register(item.id, item.config, new Date().toISOString())
+    await this.persistAgents()
     return prepared.map(({ id }) => this.describe(this.agents.get(id)!))
   }
 
@@ -289,41 +393,114 @@ export class AgentService {
     return agent
   }
 
-  remove(id: string) {
+  async remove(id: string) {
+    await this.ready
+    if (id === 'default') throw new AgentError('Встроенного агента default удалить нельзя.', 400)
     if (!this.agents.delete(id)) throw new AgentError(`Агент "${id}" не найден.`, 404)
+    this.createdAt.delete(id)
+    await this.stateStore.removeAgent(id)
+  }
+
+  async getHistory(id: string) {
+    await this.ready
+    this.get(id)
+    return this.stateStore.getHistory(id)
+  }
+
+  async clearHistory(id: string) {
+    await this.ready
+    this.get(id)
+    await this.stateStore.clearHistory(id)
+  }
+
+  async run(id: string, input: string, providedHistory: AgentMessage[] = []) {
+    await this.ready
+    const agent = this.get(id)
+    const storedHistory = await this.stateStore.getHistory(id)
+    const sourceHistory = storedHistory.length > 0 ? storedHistory : providedHistory
+    const history = trimMessagesToTokenBudget(sourceHistory, getHistoryTokenBudget(agent.config, input))
+    if (history.length !== storedHistory.length) await this.stateStore.replaceHistory(id, history)
+    const result = await agent.run(input, history)
+    const contextMessages = await this.stateStore.appendHistory(id, [
+      { role: 'user', content: result.input },
+      { role: 'assistant', content: result.output },
+    ])
+    return { ...result, contextMessages }
+  }
+
+  async stream(id: string, input: string, providedHistory: AgentMessage[], onChunk: (content: string) => void) {
+    await this.ready
+    const agent = this.get(id)
+    const storedHistory = await this.stateStore.getHistory(id)
+    const sourceHistory = storedHistory.length > 0 ? storedHistory : providedHistory
+    const history = trimMessagesToTokenBudget(sourceHistory, getHistoryTokenBudget(agent.config, input))
+    if (history.length !== storedHistory.length) await this.stateStore.replaceHistory(id, history)
+    const result = await agent.stream(input, history, onChunk)
+    const contextMessages = await this.stateStore.appendHistory(id, [
+      { role: 'user', content: result.input },
+      { role: 'assistant', content: result.output },
+    ])
+    return { ...result, contextMessages }
+  }
+
+  private register(id: string, config: Required<Pick<AgentConfig, 'provider' | 'model'>> & AgentConfig, createdAt: string) {
+    this.agents.set(id, new Agent(id, config, this.client))
+    this.createdAt.set(id, createdAt)
+  }
+
+  private async persistAgents() {
+    await this.stateStore.replaceAgents([...this.agents.values()].map((agent) => ({
+      id: agent.id,
+      config: agent.config,
+      createdAt: this.createdAt.get(agent.id) ?? new Date().toISOString(),
+    })))
+  }
+
+  private async restore() {
+    const savedAgents = await this.stateStore.getAgents()
+    if (savedAgents.length === 0) {
+      await this.persistAgents()
+      return
+    }
+
+    for (const savedAgent of savedAgents) {
+      this.register(savedAgent.id, normalizeAgentConfig(savedAgent.config, this.defaultDeepSeekModel), savedAgent.createdAt)
+    }
   }
 
   private describe(agent: Agent) {
-    return { id: agent.id, config: agent.config }
+    return { id: agent.id, config: agent.config, createdAt: this.createdAt.get(agent.id) }
   }
 }
 
 export function createAgentRouter(service: AgentService): Router {
   const router = express.Router()
 
-  router.get('/', (_request, response) => {
+  router.get('/', async (_request, response) => {
+    await service.ready
     response.json({ agents: service.list(), count: service.count })
   })
 
-  router.get('/:agentId', (request, response) => {
+  router.get('/:agentId', async (request, response) => {
     try {
+      await service.ready
       response.json(service.list().find((agent) => agent.id === request.params.agentId) ?? throwNotFound(request.params.agentId))
     } catch (error) {
       sendAgentError(response, error)
     }
   })
 
-  router.post('/', (request, response) => {
+  router.post('/', async (request, response) => {
     try {
       const body = isRecord(request.body) ? request.body : {}
-      const created = service.create({ id: body.id, config: body.config ?? body })
+      const created = await service.create({ id: body.id, config: body.config ?? body })
       response.status(201).json(created)
     } catch (error) {
       sendAgentError(response, error)
     }
   })
 
-  router.post('/bulk', (request, response) => {
+  router.post('/bulk', async (request, response) => {
     try {
       const rawAgents = Array.isArray(request.body) ? request.body : isRecord(request.body) ? request.body.agents : undefined
       if (!Array.isArray(rawAgents) || rawAgents.length === 0) throw new AgentError('Передайте непустой массив agents.')
@@ -331,15 +508,33 @@ export function createAgentRouter(service: AgentService): Router {
         const body = isRecord(item) ? item : {}
         return { id: body.id, config: body.config ?? body }
       })
-      response.status(201).json({ agents: service.createMany(entries) })
+      response.status(201).json({ agents: await service.createMany(entries) })
     } catch (error) {
       sendAgentError(response, error)
     }
   })
 
-  router.delete('/:agentId', (request, response) => {
+  router.get('/:agentId/history', async (request, response) => {
     try {
-      service.remove(request.params.agentId)
+      const messages = await service.getHistory(request.params.agentId)
+      response.json({ agentId: request.params.agentId, messages, count: messages.length })
+    } catch (error) {
+      sendAgentError(response, error)
+    }
+  })
+
+  router.delete('/:agentId/history', async (request, response) => {
+    try {
+      await service.clearHistory(request.params.agentId)
+      response.status(204).send()
+    } catch (error) {
+      sendAgentError(response, error)
+    }
+  })
+
+  router.delete('/:agentId', async (request, response) => {
+    try {
+      await service.remove(request.params.agentId)
       response.status(204).send()
     } catch (error) {
       sendAgentError(response, error)
@@ -349,7 +544,7 @@ export function createAgentRouter(service: AgentService): Router {
   router.post('/:agentId/run', async (request, response) => {
     try {
       const runRequest = parseRunRequest(request)
-      const result = await service.get(request.params.agentId).run(runRequest.input, runRequest.history)
+      const result = await service.run(request.params.agentId, runRequest.input, runRequest.history)
       response.json(result)
     } catch (error) {
       sendAgentError(response, error)
@@ -359,13 +554,12 @@ export function createAgentRouter(service: AgentService): Router {
   router.post('/:agentId/stream', async (request, response) => {
     try {
       const runRequest = parseRunRequest(request)
-      const agent = service.get(request.params.agentId)
       response.setHeader('Content-Type', 'text/event-stream; charset=utf-8')
       response.setHeader('Cache-Control', 'no-cache, no-transform')
       response.setHeader('Connection', 'keep-alive')
       response.flushHeaders()
 
-      const result = await agent.stream(runRequest.input, runRequest.history, (content) => {
+      const result = await service.stream(request.params.agentId, runRequest.input, runRequest.history, (content) => {
         response.write(`data: ${JSON.stringify({ content })}\n\n`)
       })
       response.write(`data: ${JSON.stringify({ done: true, result })}\n\n`)
@@ -402,6 +596,36 @@ function parseHistory(value: unknown): AgentMessage[] {
     }
     return { role: item.role as AgentMessageRole, content: item.content }
   })
+}
+
+function getHistoryTokenBudget(config: AgentConfig, input: string) {
+  const promptTokens = estimateTokens(config.systemPrompt ?? '') + estimateTokens(input) + 8
+  const responseTokens = config.maxTokens ?? RESERVED_RESPONSE_TOKENS
+  return Math.max(0, Math.min(MAX_STORED_HISTORY_TOKENS, MAX_CONTEXT_TOKENS - promptTokens - responseTokens))
+}
+
+function trimMessagesToTokenBudget(messages: AgentMessage[], maxTokens: number) {
+  if (maxTokens <= 0) return []
+
+  const kept: AgentMessage[] = []
+  let totalTokens = 0
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index]
+    const messageTokens = estimateTokens(message.content) + 4
+    if (totalTokens + messageTokens > maxTokens) break
+    kept.push(message)
+    totalTokens += messageTokens
+  }
+
+  kept.reverse()
+  // Не оставляем в начале истории ответ без соответствующего запроса пользователя.
+  if (kept[0]?.role === 'assistant') kept.shift()
+  return kept
+}
+
+function estimateTokens(value: string) {
+  const normalized = value.trim()
+  return normalized ? Math.max(1, Math.ceil(normalized.length / 3)) : 0
 }
 
 function buildMessages(config: AgentConfig, history: AgentMessage[], input: string): AgentMessage[] {
@@ -519,6 +743,25 @@ function removeUndefined<T extends Record<string, unknown>>(value: T): T {
 
 function isRecord(value: unknown): value is Record<string, any> {
   return typeof value === 'object' && value !== null
+}
+
+function isAgentRecord(value: unknown): value is AgentRecord {
+  return isRecord(value)
+    && typeof value.id === 'string'
+    && isRecord(value.config)
+    && typeof value.createdAt === 'string'
+}
+
+function parseStoredMessages(value: unknown): AgentMessage[] {
+  if (!Array.isArray(value)) return []
+  return value.filter((item): item is AgentMessage => isRecord(item)
+    && ['system', 'user', 'assistant'].includes(String(item.role))
+    && typeof item.content === 'string')
+    .map((item) => ({ role: item.role, content: item.content }))
+}
+
+function isNodeError(error: unknown): error is NodeJS.ErrnoException {
+  return isRecord(error) && typeof error.code === 'string'
 }
 
 async function readJson(response: globalThis.Response): Promise<Record<string, any>> {

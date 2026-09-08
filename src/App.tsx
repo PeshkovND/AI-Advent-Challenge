@@ -75,7 +75,8 @@ type AgentConfig = {
 }
 type AgentSummary = { id: string; config: AgentConfig; createdAt?: string }
 type AgentsListResult = { agents: AgentSummary[]; count: number }
-type AgentStreamChunk = { content?: string; error?: string; done?: boolean; result?: { durationMs?: number; tokens?: number } }
+type AgentStreamChunk = { content?: string; error?: string; done?: boolean; result?: { durationMs?: number; tokens?: number; contextMessages?: number } }
+type AgentHistoryResult = { messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>; count: number }
 type AgentModelOption = { value: string; label: string }
 
 const agentModelOptions: Record<AgentProvider, AgentModelOption[]> = {
@@ -172,6 +173,24 @@ function ChatPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages, isLoading])
+
+  useEffect(() => {
+    void loadSavedChatHistory()
+  }, [])
+
+  async function loadSavedChatHistory() {
+    try {
+      const response = await fetch('/api/agents/default/history')
+      if (!response.ok) return
+      const data = (await response.json()) as AgentHistoryResult
+      const savedMessages = data.messages.filter((message): message is { role: 'user' | 'assistant'; content: string } => message.role === 'user' || message.role === 'assistant')
+      if (savedMessages.length > 0) {
+        setMessages([{ ...initialMessage }, ...savedMessages.map((message, index) => ({ ...message, id: `saved-${index}` }))])
+      }
+    } catch {
+      // История — дополнительная возможность, поэтому не блокируем обычный чат при ошибке загрузки.
+    }
+  }
 
   async function sendMessage(event?: FormEvent) {
     event?.preventDefault()
@@ -400,6 +419,7 @@ function AgentsPage() {
   const [input, setInput] = useState('')
   const [answer, setAnswer] = useState('')
   const [runMeta, setRunMeta] = useState<{ durationMs?: number; tokens?: number } | null>(null)
+  const [historyCount, setHistoryCount] = useState(0)
   const [isLoadingAgents, setIsLoadingAgents] = useState(true)
   const [isCreating, setIsCreating] = useState(false)
   const [isRunning, setIsRunning] = useState(false)
@@ -408,6 +428,10 @@ function AgentsPage() {
   useEffect(() => {
     void loadAgents()
   }, [])
+
+  useEffect(() => {
+    if (selectedAgentId) void loadAgentHistory(selectedAgentId)
+  }, [selectedAgentId])
 
   async function loadAgents() {
     setIsLoadingAgents(true)
@@ -421,6 +445,54 @@ function AgentsPage() {
       setError(requestError instanceof Error ? requestError.message : 'Не удалось загрузить агентов.')
     } finally {
       setIsLoadingAgents(false)
+    }
+  }
+
+  async function loadAgentHistory(id: string) {
+    try {
+      const response = await fetch(`/api/agents/${encodeURIComponent(id)}/history`)
+      if (!response.ok) return
+      const data = (await response.json()) as AgentHistoryResult
+      setHistoryCount(data.count)
+    } catch {
+      setHistoryCount(0)
+    }
+  }
+
+  async function clearAgentHistory() {
+    if (!selectedAgentId || isRunning) return
+    try {
+      const response = await fetch(`/api/agents/${encodeURIComponent(selectedAgentId)}/history`, { method: 'DELETE' })
+      if (!response.ok) throw new Error('Не удалось очистить контекст агента.')
+      setHistoryCount(0)
+      setAnswer('')
+      setRunMeta(null)
+      setError(null)
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : 'Не удалось очистить контекст агента.')
+    }
+  }
+
+  async function deleteAgent(id: string) {
+    if (id === 'default' || isRunning || !window.confirm(`Удалить агента «${id}» вместе с его историей?`)) return
+
+    try {
+      const response = await fetch(`/api/agents/${encodeURIComponent(id)}`, { method: 'DELETE' })
+      if (!response.ok) {
+        const data = (await response.json()) as ApiError
+        throw new Error(data.error || 'Не удалось удалить агента.')
+      }
+      const remainingAgents = agents.filter((agent) => agent.id !== id)
+      setAgents(remainingAgents)
+      if (selectedAgentId === id) {
+        setSelectedAgentId(remainingAgents[0]?.id ?? '')
+        setAnswer('')
+        setRunMeta(null)
+        setHistoryCount(0)
+      }
+      setError(null)
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : 'Не удалось удалить агента.')
     }
   }
 
@@ -456,6 +528,7 @@ function AgentsPage() {
       if (!response.ok || !data.id) throw new Error(data.error || 'Не удалось создать агента.')
       setAgents((current) => [...current, data])
       setSelectedAgentId(data.id)
+      setHistoryCount(0)
       setAgentId('')
       setAgentName('')
       setSystemPrompt('')
@@ -505,7 +578,10 @@ function AgentsPage() {
           const chunk = JSON.parse(payload) as AgentStreamChunk
           if (chunk.error) throw new Error(chunk.error)
           if (chunk.content) setAnswer((current) => current + chunk.content)
-          if (chunk.done && chunk.result) setRunMeta(chunk.result)
+          if (chunk.done && chunk.result) {
+            setRunMeta(chunk.result)
+            if (chunk.result.contextMessages !== undefined) setHistoryCount(chunk.result.contextMessages)
+          }
         }
         if (done) break
       }
@@ -553,18 +629,18 @@ function AgentsPage() {
           <div className="section-heading"><div><span className="step-number">02</span><div><p className="eyebrow">Запуск</p><h2>Сообщение агенту</h2></div></div></div>
           <div className="agent-picker">
             <label>Выберите агента<select value={selectedAgentId} onChange={(event) => { setSelectedAgentId(event.target.value); setAnswer(''); setRunMeta(null) }} disabled={isLoadingAgents || agents.length === 0}>{agents.map((agent) => <option value={agent.id} key={agent.id}>{agent.config.name || agent.id} · {agent.id}</option>)}</select></label>
-            {selectedAgent && <div className="agent-config-summary"><strong>{selectedAgent.id}</strong><span>{selectedAgent.config.provider} · {selectedAgent.config.model}</span><span>temperature {selectedAgent.config.temperature ?? 'по умолчанию'}</span></div>}
+            {selectedAgent && <div className="agent-config-summary"><strong>{selectedAgent.id}</strong><span>{selectedAgent.config.provider} · {selectedAgent.config.model}</span><span>temperature {selectedAgent.config.temperature ?? 'по умолчанию'}</span><span>контекст: {historyCount} сообщений</span></div>}
             {selectedAgent && <AgentConfigDetails config={selectedAgent.config} />}
           </div>
           <form className="agent-message-form" onSubmit={runAgent}>
             <textarea value={input} onChange={(event) => setInput(event.target.value)} placeholder="Напишите сообщение выбранному агенту..." rows={5} disabled={isRunning || agents.length === 0} />
             <button className="compare-button" type="submit" disabled={isRunning || !input.trim() || agents.length === 0}>{isRunning ? 'Агент отвечает...' : 'Отправить сообщение'} <span>→</span></button>
           </form>
-          <div className="agent-answer"><div className="agent-answer-heading"><div><p className="eyebrow">Ответ агента</p><h3>{selectedAgent?.config.name || selectedAgent?.id || 'Агент не выбран'}</h3></div>{runMeta && <span className="response-status">{runMeta.durationMs ?? '—'} мс · {runMeta.tokens ?? '—'} tokens</span>}</div>{answer ? <div className="reasoning-content"><MarkdownContent content={answer} /></div> : <div className="agent-empty">{isRunning ? <><span className="loading-spinner" /> Получаем потоковый ответ...</> : 'Здесь появится ответ выбранного агента.'}</div>}</div>
+          <div className="agent-answer"><div className="agent-answer-heading"><div><p className="eyebrow">Ответ агента</p><h3>{selectedAgent?.config.name || selectedAgent?.id || 'Агент не выбран'}</h3></div><div className="agent-answer-actions">{runMeta && <span className="response-status">{runMeta.durationMs ?? '—'} мс · {runMeta.tokens ?? '—'} tokens</span>}<button className="clear-context-button" type="button" onClick={() => void clearAgentHistory()} disabled={isRunning || historyCount === 0}>Очистить контекст</button></div></div>{answer ? <div className="reasoning-content"><MarkdownContent content={answer} /></div> : <div className="agent-empty">{isRunning ? <><span className="loading-spinner" /> Получаем потоковый ответ...</> : 'Здесь появится ответ выбранного агента.'}</div>}</div>
         </section>
       </div>
 
-      <section className="results-section agent-list-section"><div className="results-heading"><div><span className="step-number">03</span><div><p className="eyebrow">Реестр</p><h2>Созданные агенты</h2></div></div><span className="same-prompt">{agents.length} {pluralizeAgents(agents.length)}</span></div><div className="agent-list">{agents.map((agent) => <button className={`agent-list-item ${agent.id === selectedAgentId ? 'active' : ''}`} type="button" key={agent.id} onClick={() => setSelectedAgentId(agent.id)}><span className="agent-list-icon">{agent.id === 'default' ? 'D' : 'A'}</span><span><strong>{agent.config.name || agent.id}</strong><small>{agent.id} · {agent.config.provider} · {agent.config.model}</small></span><span className="agent-list-arrow">→</span></button>)}</div></section>
+      <section className="results-section agent-list-section"><div className="results-heading"><div><span className="step-number">03</span><div><p className="eyebrow">Реестр</p><h2>Созданные агенты</h2></div></div><span className="same-prompt">{agents.length} {pluralizeAgents(agents.length)}</span></div><div className="agent-list">{agents.map((agent) => <div className={`agent-list-item ${agent.id === selectedAgentId ? 'active' : ''}`} key={agent.id}><button className="agent-list-select" type="button" onClick={() => { setSelectedAgentId(agent.id); setAnswer(''); setRunMeta(null) }}><span className="agent-list-icon">{agent.id === 'default' ? 'D' : 'A'}</span><span><strong>{agent.config.name || agent.id}</strong><small>{agent.id} · {agent.config.provider} · {agent.config.model}</small></span><span className="agent-list-arrow">→</span></button>{agent.id === 'default' ? <span className="agent-built-in">Встроенный</span> : <button className="agent-delete-button" type="button" onClick={() => void deleteAgent(agent.id)} aria-label={`Удалить агента ${agent.id}`} title="Удалить агента">×</button>}</div>)}</div></section>
     </div>
   )
 }

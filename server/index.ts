@@ -413,7 +413,7 @@ app.post('/api/chat', async (request, response) => {
     response.setHeader('Connection', 'keep-alive')
     response.flushHeaders()
 
-    await agentService.get('default').stream(latestMessage.content, messages.slice(0, -1), (content) => {
+    await agentService.stream('default', latestMessage.content, messages.slice(0, -1), (content) => {
       response.write(`data: ${JSON.stringify({ content })}\n\n`)
     })
     response.write('data: [DONE]\n\n')
