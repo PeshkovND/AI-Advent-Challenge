@@ -42,6 +42,7 @@ npm run agents:cli -- bulk --config agents-config.example.json
 ```
 
 Подробные требования, конфигурация и список endpoint-ов описаны в [`docs/day-6.md`](docs/day-6.md).
+Подсчёт токенов, метрики контекста и эксперимент с переполнением описаны в [`docs/day-8.md`](docs/day-8.md).
 
 ## Запуск
 

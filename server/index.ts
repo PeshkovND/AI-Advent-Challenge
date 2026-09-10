@@ -1,6 +1,7 @@
 import 'dotenv/config'
-import express from 'express'
-import { AgentService, createAgentRouter } from './agent-service'
+import express, { Response } from 'express'
+import { AgentError, AgentService, createAgentRouter } from './agent-service'
+import { isContextDemoScenario, prepareContextDemo, resetContextDemo } from './context-demo'
 
 type ChatRole = 'system' | 'user' | 'assistant'
 
@@ -104,12 +105,53 @@ const app = express()
 const port = Number(process.env.PORT ?? 8787)
 const apiKey = process.env.DEEPSEEK_API_KEY?.trim()
 const huggingFaceApiKey = process.env.HUGGINGFACE_API_KEY?.trim()
+const openRouterApiKey = process.env.OPENROUTER_API_KEY?.trim()
 const model = process.env.DEEPSEEK_MODEL?.trim() || 'deepseek-v4-flash'
 const agentService = new AgentService({
   deepSeekApiKey: apiKey,
   huggingFaceApiKey,
+  openRouterApiKey,
   defaultDeepSeekModel: model,
 })
+
+const CONTEXT_DEMO_AGENT_ID = 'context-demo'
+const CONTEXT_DEMO_MODEL = 'liquid/lfm-2.5-2.6b:free'
+const CONTEXT_DEMO_CONFIG = {
+  name: 'Демонстрация токенов',
+  provider: 'openrouter' as const,
+  model: CONTEXT_DEMO_MODEL,
+  systemPrompt: 'Отвечай по существу и учитывай историю диалога.',
+}
+
+async function ensureContextDemoAgent() {
+  await agentService.ready
+  const existing = agentService.list().find((agent) => agent.id === CONTEXT_DEMO_AGENT_ID)
+  if (!existing) {
+    await agentService.create({ id: CONTEXT_DEMO_AGENT_ID, config: CONTEXT_DEMO_CONFIG })
+  } else if (existing.config.maxTokens !== undefined) {
+    const { maxTokens: _oldMaxTokens, ...configWithoutLimit } = existing.config
+    await agentService.update(CONTEXT_DEMO_AGENT_ID, { ...configWithoutLimit, ...CONTEXT_DEMO_CONFIG })
+  }
+}
+
+async function getContextDemoState() {
+  await ensureContextDemoAgent()
+  const [messages, conversationTokens, tokenHistory] = await Promise.all([
+    agentService.getHistory(CONTEXT_DEMO_AGENT_ID),
+    agentService.getConversationTokens(CONTEXT_DEMO_AGENT_ID),
+    agentService.getTokenHistory(CONTEXT_DEMO_AGENT_ID),
+  ])
+  return {
+    id: CONTEXT_DEMO_AGENT_ID,
+    title: 'Диалог с агентом',
+    description: 'Обычный зарегистрированный агент с сохранённой историей.',
+    model: CONTEXT_DEMO_MODEL,
+    historyMessages: messages.length,
+    conversationTokens,
+    tokenHistory,
+    messages,
+  }
+}
 
 const modelDefinitions: ModelDefinition[] = [
   {
@@ -145,6 +187,99 @@ const modelDefinitions: ModelDefinition[] = [
 
 app.use(express.json({ limit: '1mb' }))
 app.use('/api/agents', createAgentRouter(agentService))
+
+app.get('/api/context-demo', async (_request, response) => {
+  try {
+    response.json(await getContextDemoState())
+  } catch (error) {
+    sendContextDemoError(response, error)
+  }
+})
+
+app.post('/api/context-demo/reset', async (_request, response) => {
+  try {
+    await ensureContextDemoAgent()
+    await agentService.clearHistory(CONTEXT_DEMO_AGENT_ID)
+    response.json(await getContextDemoState())
+  } catch (error) {
+    sendContextDemoError(response, error)
+  }
+})
+
+app.delete('/api/context-demo/agent', async (_request, response) => {
+  try {
+    await ensureContextDemoAgent()
+    await agentService.remove(CONTEXT_DEMO_AGENT_ID)
+    response.json(await getContextDemoState())
+  } catch (error) {
+    sendContextDemoError(response, error)
+  }
+})
+
+app.post('/api/context-demo/reset/:scenario', (request, response) => {
+  if (!isContextDemoScenario(request.params.scenario)) {
+    response.status(404).json({ error: 'Неизвестный сценарий демонстрации контекста.' })
+    return
+  }
+  response.json(resetContextDemo(request.params.scenario))
+})
+
+app.post('/api/context-demo/message', async (request, response) => {
+  const input = request.body?.input as unknown
+  if (typeof input !== 'string' || input.trim().length === 0) {
+    response.status(400).json({ error: 'Поле input должно быть непустой строкой.' })
+    return
+  }
+
+  try {
+    await ensureContextDemoAgent()
+    const result = await agentService.run(CONTEXT_DEMO_AGENT_ID, input.trim())
+    response.json({ ...(await getContextDemoState()), input: result.input, result })
+  } catch (error) {
+    sendContextDemoError(response, error)
+  }
+})
+
+app.post('/api/context-demo/:scenario', async (request, response) => {
+  if (!isContextDemoScenario(request.params.scenario)) {
+    response.status(404).json({ error: 'Неизвестный сценарий демонстрации контекста.' })
+    return
+  }
+
+  const preparation = prepareContextDemo(request.params.scenario)
+  const input = typeof request.body?.input === 'string' && request.body.input.trim()
+    ? request.body.input.trim()
+    : preparation.input
+
+  try {
+    const result = await agentService.runEphemeral(input, {
+      provider: 'openrouter',
+      model: preparation.model,
+      systemPrompt: 'Отвечай по существу и учитывай историю диалога.',
+    }, preparation.history)
+
+    response.json({
+      id: preparation.id,
+      title: preparation.title,
+      description: preparation.description,
+      model: preparation.model,
+      input,
+      historyMessages: preparation.historyMessages,
+      result,
+    })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Не удалось выполнить сценарий демонстрации контекста.'
+    response.status(502).json({
+      id: preparation.id,
+      title: preparation.title,
+      description: preparation.description,
+      model: preparation.model,
+      input,
+      historyMessages: preparation.historyMessages,
+      error: message,
+    })
+  }
+})
 
 app.get('/api/health', (_request, response) => {
   response.json({ ok: true, configured: Boolean(apiKey), model, agents: agentService.count })
@@ -520,6 +655,13 @@ async function requestHuggingFaceCompletion(
 const deepSeekPricing: Record<string, ModelPricing> = {
   'deepseek-v4-flash': { cacheHitInput: 0.0028, cacheMissInput: 0.14, output: 0.28 },
   'deepseek-v4-pro': { cacheHitInput: 0.003625, cacheMissInput: 0.435, output: 0.87 },
+}
+
+function sendContextDemoError(response: Response, error: unknown) {
+  const status = error instanceof AgentError ? error.statusCode : 502
+  response.status(status).json({
+    error: error instanceof Error ? error.message : 'Не удалось выполнить операцию с агентом.',
+  })
 }
 
 app.listen(port, () => {

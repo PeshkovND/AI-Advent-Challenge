@@ -2,12 +2,24 @@ import express, { Request, Response, Router } from 'express'
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 
-export type AgentProvider = 'deepseek' | 'huggingface'
+export type AgentProvider = 'deepseek' | 'huggingface' | 'openrouter'
 export type AgentMessageRole = 'system' | 'user' | 'assistant'
 
 export type AgentMessage = {
   role: AgentMessageRole
   content: string
+}
+
+export type AgentTokenMetrics = {
+  inputTokens: number
+  promptTokens: number
+  completionTokens: number
+  totalTokens: number
+}
+
+export type AgentTokenUsagePoint = AgentTokenMetrics & {
+  turn: number
+  conversationTokens: number
 }
 
 export type AgentConfig = {
@@ -37,7 +49,10 @@ export type AgentRunResult = {
   tokens?: number
   promptTokens?: number
   totalTokens?: number
+  conversationTokens?: number
   contextMessages?: number
+  tokenMetrics: AgentTokenMetrics
+  tokenHistory?: AgentTokenUsagePoint[]
 }
 
 type CompletionResult = {
@@ -59,15 +74,9 @@ type LlmOptions = {
 type AgentServiceOptions = {
   deepSeekApiKey?: string
   huggingFaceApiKey?: string
+  openRouterApiKey?: string
   defaultDeepSeekModel: string
 }
-
-// История ограничивается консервативно, потому что у разных моделей и провайдеров
-// могут быть разные размеры контекстного окна. Токены оцениваются без отдельного
-// токенизатора конкретной модели.
-const MAX_CONTEXT_TOKENS = 12_000
-const MAX_STORED_HISTORY_TOKENS = 10_000
-const RESERVED_RESPONSE_TOKENS = 2_000
 
 type AgentRecord = {
   id: string
@@ -78,10 +87,12 @@ type AgentRecord = {
 type AgentState = {
   agents: AgentRecord[]
   histories: Record<string, AgentMessage[]>
+  conversationTokens: Record<string, number>
+  tokenHistory: Record<string, AgentTokenUsagePoint[]>
 }
 
 class AgentStateStore {
-  private state: AgentState = { agents: [], histories: {} }
+  private state: AgentState = { agents: [], histories: {}, conversationTokens: {}, tokenHistory: {} }
   private writeQueue: Promise<void> = Promise.resolve()
   readonly ready: Promise<void>
 
@@ -105,14 +116,32 @@ class AgentStateStore {
     await this.persist()
   }
 
-  async appendHistory(agentId: string, messages: AgentMessage[], maxTokens = MAX_STORED_HISTORY_TOKENS) {
+  async appendHistory(agentId: string, messages: AgentMessage[]) {
     await this.ready
-    this.state.histories[agentId] = trimMessagesToTokenBudget(
-      [...(this.state.histories[agentId] ?? []), ...messages],
-      maxTokens,
-    )
+    const nextHistory = [...(this.state.histories[agentId] ?? []), ...messages]
+    this.state.histories[agentId] = nextHistory
     await this.persist()
     return this.state.histories[agentId].length
+  }
+
+  async addConversationTokens(agentId: string, metrics: AgentTokenMetrics) {
+    await this.ready
+    const conversationTokens = (this.state.conversationTokens[agentId] ?? 0) + metrics.totalTokens
+    this.state.conversationTokens[agentId] = conversationTokens
+    const history = this.state.tokenHistory[agentId] ?? []
+    this.state.tokenHistory[agentId] = [...history, { ...metrics, turn: history.length + 1, conversationTokens }]
+    await this.persist()
+    return conversationTokens
+  }
+
+  async getConversationTokens(agentId: string) {
+    await this.ready
+    return this.state.conversationTokens[agentId] ?? 0
+  }
+
+  async getTokenHistory(agentId: string) {
+    await this.ready
+    return [...(this.state.tokenHistory[agentId] ?? [])]
   }
 
   async replaceAgents(agents: AgentRecord[]) {
@@ -125,12 +154,16 @@ class AgentStateStore {
     await this.ready
     this.state.agents = this.state.agents.filter((agent) => agent.id !== agentId)
     delete this.state.histories[agentId]
+    delete this.state.conversationTokens[agentId]
+    delete this.state.tokenHistory[agentId]
     await this.persist()
   }
 
   async clearHistory(agentId: string) {
     await this.ready
     delete this.state.histories[agentId]
+    delete this.state.conversationTokens[agentId]
+    delete this.state.tokenHistory[agentId]
     await this.persist()
   }
 
@@ -143,6 +176,12 @@ class AgentStateStore {
         this.state = {
           agents: Array.isArray(parsed.agents) ? parsed.agents.filter(isAgentRecord) : [],
           histories: isRecord(parsed.histories) ? Object.fromEntries(Object.entries(parsed.histories).map(([id, messages]) => [id, parseStoredMessages(messages)])) : {},
+          conversationTokens: isRecord(parsed.conversationTokens)
+            ? Object.fromEntries(Object.entries(parsed.conversationTokens).flatMap(([id, tokens]) => typeof tokens === 'number' && Number.isFinite(tokens) && tokens >= 0 ? [[id, Math.floor(tokens)]] : []))
+            : {},
+          tokenHistory: isRecord(parsed.tokenHistory)
+            ? Object.fromEntries(Object.entries(parsed.tokenHistory).map(([id, points]) => [id, parseStoredTokenHistory(points)]))
+            : {},
         }
       }
     } catch (error) {
@@ -200,7 +239,7 @@ class LlmClient {
     }
   }
 
-  async stream(messages: AgentMessage[], options: LlmOptions, onChunk: (content: string) => void): Promise<void> {
+  async stream(messages: AgentMessage[], options: LlmOptions, onChunk: (content: string) => void): Promise<Partial<CompletionResult>> {
     const apiResponse = await this.request(messages, options, true)
     if (!apiResponse.ok) throw this.toError(await readJson(apiResponse), apiResponse.status)
     if (!apiResponse.body) throw new AgentError('LLM не вернула поток ответа.', 502)
@@ -209,6 +248,7 @@ class LlmClient {
     const decoder = new TextDecoder()
     let buffer = ''
     let finished = false
+    let usage: Record<string, unknown> | undefined
 
     while (!finished) {
       const { done, value } = await reader.read()
@@ -225,19 +265,27 @@ class LlmClient {
         }
 
         const chunk = parseJson(payload)
+        if (isRecord(chunk.usage)) usage = chunk.usage
         const content = chunk.choices?.[0]?.delta?.content
         if (typeof content === 'string' && content.length > 0) onChunk(content)
       }
 
       if (done) break
     }
+
+    return {
+      tokens: readUsageInteger(usage, 'completion_tokens'),
+      promptTokens: readUsageInteger(usage, 'prompt_tokens'),
+      totalTokens: readUsageInteger(usage, 'total_tokens'),
+    }
   }
 
   private async request(messages: AgentMessage[], options: LlmOptions, stream: boolean) {
     const isHuggingFace = options.provider === 'huggingface'
-    const apiKey = isHuggingFace ? this.options.huggingFaceApiKey : this.options.deepSeekApiKey
+    const isOpenRouter = options.provider === 'openrouter'
+    const apiKey = isHuggingFace ? this.options.huggingFaceApiKey : isOpenRouter ? this.options.openRouterApiKey : this.options.deepSeekApiKey
     if (!apiKey) {
-      const variable = isHuggingFace ? 'HUGGINGFACE_API_KEY' : 'DEEPSEEK_API_KEY'
+      const variable = isHuggingFace ? 'HUGGINGFACE_API_KEY' : isOpenRouter ? 'OPENROUTER_API_KEY' : 'DEEPSEEK_API_KEY'
       throw new AgentError(`Добавьте ${variable} в файл .env и перезапустите сервер.`, 503)
     }
 
@@ -251,10 +299,10 @@ class LlmClient {
     if (options.maxTokens !== undefined) body.max_tokens = options.maxTokens
     if (options.stopSequences?.length) body.stop = options.stopSequences
     if (options.format === 'json') body.response_format = { type: 'json_object' }
-    if (!isHuggingFace) body.thinking = { type: 'disabled' }
+    if (options.provider === 'deepseek') body.thinking = { type: 'disabled' }
 
     return fetch(
-      isHuggingFace ? 'https://router.huggingface.co/v1/chat/completions' : 'https://api.deepseek.com/chat/completions',
+      isHuggingFace ? 'https://router.huggingface.co/v1/chat/completions' : isOpenRouter ? 'https://openrouter.ai/api/v1/chat/completions' : 'https://api.deepseek.com/chat/completions',
       {
         method: 'POST',
         headers: {
@@ -290,6 +338,7 @@ export class Agent {
     const startedAt = Date.now()
     const completion = await this.client.complete(messages, toLlmOptions(this.config))
     const output = applyOutputPolicy(completion.content, this.config.outputPolicy)
+    const tokenMetrics = createTokenMetrics(this.config, validatedInput, completion)
 
     return {
       agentId: this.id,
@@ -301,6 +350,7 @@ export class Agent {
       tokens: completion.tokens,
       promptTokens: completion.promptTokens,
       totalTokens: completion.totalTokens,
+      tokenMetrics,
     }
   }
 
@@ -311,7 +361,7 @@ export class Agent {
     let streamedOutput = ''
     let emittedOutput = ''
 
-    await this.client.stream(messages, toLlmOptions(this.config), (content) => {
+    const completion = await this.client.stream(messages, toLlmOptions(this.config), (content) => {
       streamedOutput += content
       const visibleOutput = applyOutputCharacterLimit(streamedOutput, this.config.outputPolicy?.maxCharacters)
       const delta = visibleOutput.slice(emittedOutput.length)
@@ -320,6 +370,7 @@ export class Agent {
     })
 
     const output = applyOutputPolicy(streamedOutput, this.config.outputPolicy)
+    const tokenMetrics = createTokenMetrics(this.config, validatedInput, completion)
 
     return {
       agentId: this.id,
@@ -328,6 +379,7 @@ export class Agent {
       provider: this.config.provider,
       model: this.config.model,
       durationMs: Date.now() - startedAt,
+      tokenMetrics,
     }
   }
 }
@@ -383,6 +435,14 @@ export class AgentService {
     return prepared.map(({ id }) => this.describe(this.agents.get(id)!))
   }
 
+  async update(id: string, config: AgentConfig) {
+    await this.ready
+    this.get(id)
+    this.register(id, normalizeAgentConfig(config, this.defaultDeepSeekModel), this.createdAt.get(id) ?? new Date().toISOString())
+    await this.persistAgents()
+    return this.describe(this.agents.get(id)!)
+  }
+
   list() {
     return [...this.agents.values()].map((agent) => this.describe(agent))
   }
@@ -407,6 +467,18 @@ export class AgentService {
     return this.stateStore.getHistory(id)
   }
 
+  async getConversationTokens(id: string) {
+    await this.ready
+    this.get(id)
+    return this.stateStore.getConversationTokens(id)
+  }
+
+  async getTokenHistory(id: string) {
+    await this.ready
+    this.get(id)
+    return this.stateStore.getTokenHistory(id)
+  }
+
   async clearHistory(id: string) {
     await this.ready
     this.get(id)
@@ -418,14 +490,14 @@ export class AgentService {
     const agent = this.get(id)
     const storedHistory = await this.stateStore.getHistory(id)
     const sourceHistory = storedHistory.length > 0 ? storedHistory : providedHistory
-    const history = trimMessagesToTokenBudget(sourceHistory, getHistoryTokenBudget(agent.config, input))
-    if (history.length !== storedHistory.length) await this.stateStore.replaceHistory(id, history)
-    const result = await agent.run(input, history)
+    const result = await agent.run(input, sourceHistory)
     const contextMessages = await this.stateStore.appendHistory(id, [
       { role: 'user', content: result.input },
       { role: 'assistant', content: result.output },
     ])
-    return { ...result, contextMessages }
+    const conversationTokens = await this.stateStore.addConversationTokens(id, result.tokenMetrics)
+    const tokenHistory = await this.stateStore.getTokenHistory(id)
+    return { ...result, contextMessages, conversationTokens, tokenHistory }
   }
 
   async stream(id: string, input: string, providedHistory: AgentMessage[], onChunk: (content: string) => void) {
@@ -433,14 +505,21 @@ export class AgentService {
     const agent = this.get(id)
     const storedHistory = await this.stateStore.getHistory(id)
     const sourceHistory = storedHistory.length > 0 ? storedHistory : providedHistory
-    const history = trimMessagesToTokenBudget(sourceHistory, getHistoryTokenBudget(agent.config, input))
-    if (history.length !== storedHistory.length) await this.stateStore.replaceHistory(id, history)
-    const result = await agent.stream(input, history, onChunk)
+    const result = await agent.stream(input, sourceHistory, onChunk)
     const contextMessages = await this.stateStore.appendHistory(id, [
       { role: 'user', content: result.input },
       { role: 'assistant', content: result.output },
     ])
-    return { ...result, contextMessages }
+    const conversationTokens = await this.stateStore.addConversationTokens(id, result.tokenMetrics)
+    const tokenHistory = await this.stateStore.getTokenHistory(id)
+    return { ...result, contextMessages, conversationTokens, tokenHistory }
+  }
+
+  async runEphemeral(input: string, config: AgentConfig, history: AgentMessage[]) {
+    await this.ready
+    const normalizedConfig = normalizeAgentConfig(config, this.defaultDeepSeekModel)
+    const agent = new Agent('context-demo', normalizedConfig, this.client)
+    return agent.run(input, history)
   }
 
   private register(id: string, config: Required<Pick<AgentConfig, 'provider' | 'model'>> & AgentConfig, createdAt: string) {
@@ -517,7 +596,9 @@ export function createAgentRouter(service: AgentService): Router {
   router.get('/:agentId/history', async (request, response) => {
     try {
       const messages = await service.getHistory(request.params.agentId)
-      response.json({ agentId: request.params.agentId, messages, count: messages.length })
+      const conversationTokens = await service.getConversationTokens(request.params.agentId)
+      const tokenHistory = await service.getTokenHistory(request.params.agentId)
+      response.json({ agentId: request.params.agentId, messages, count: messages.length, conversationTokens, tokenHistory })
     } catch (error) {
       sendAgentError(response, error)
     }
@@ -598,31 +679,21 @@ function parseHistory(value: unknown): AgentMessage[] {
   })
 }
 
-function getHistoryTokenBudget(config: AgentConfig, input: string) {
-  const promptTokens = estimateTokens(config.systemPrompt ?? '') + estimateTokens(input) + 8
-  const responseTokens = config.maxTokens ?? RESERVED_RESPONSE_TOKENS
-  return Math.max(0, Math.min(MAX_STORED_HISTORY_TOKENS, MAX_CONTEXT_TOKENS - promptTokens - responseTokens))
-}
-
-function trimMessagesToTokenBudget(messages: AgentMessage[], maxTokens: number) {
-  if (maxTokens <= 0) return []
-
-  const kept: AgentMessage[] = []
-  let totalTokens = 0
-  for (let index = messages.length - 1; index >= 0; index -= 1) {
-    const message = messages[index]
-    const messageTokens = estimateTokens(message.content) + 4
-    if (totalTokens + messageTokens > maxTokens) break
-    kept.push(message)
-    totalTokens += messageTokens
+function createTokenMetrics(
+  config: AgentConfig,
+  input: string,
+  completion: Pick<CompletionResult, 'tokens' | 'promptTokens' | 'totalTokens'>,
+) {
+  const promptTokens = completion.promptTokens
+  const completionTokens = completion.tokens
+  const totalTokens = completion.totalTokens
+  if (promptTokens === undefined || completionTokens === undefined || totalTokens === undefined) {
+    throw new AgentError(config.provider + ' не вернул точные usage-токены для запроса.', 502)
   }
-
-  kept.reverse()
-  // Не оставляем в начале истории ответ без соответствующего запроса пользователя.
-  if (kept[0]?.role === 'assistant') kept.shift()
-  return kept
+  return { inputTokens: estimateTokens(input), promptTokens, completionTokens, totalTokens }
 }
 
+/** Приближённая оценка для учебных метрик: точный токенизатор зависит от модели. */
 function estimateTokens(value: string) {
   const normalized = value.trim()
   return normalized ? Math.max(1, Math.ceil(normalized.length / 3)) : 0
@@ -675,8 +746,8 @@ function toLlmOptions(config: Required<Pick<AgentConfig, 'provider' | 'model'>> 
 
 function normalizeAgentConfig(value: unknown, defaultDeepSeekModel: string) {
   const input = isRecord(value) ? value : {}
-  const provider: AgentProvider = input.provider === 'huggingface' ? 'huggingface' : 'deepseek'
-  const fallbackModel = provider === 'huggingface' ? 'google/gemma-3-4b-it:deepinfra' : defaultDeepSeekModel
+  const provider: AgentProvider = input.provider === 'huggingface' ? 'huggingface' : input.provider === 'openrouter' ? 'openrouter' : 'deepseek'
+  const fallbackModel = provider === 'huggingface' ? 'google/gemma-3-4b-it:deepinfra' : provider === 'openrouter' ? 'liquid/lfm-2.5-2.6b:free' : defaultDeepSeekModel
   const model = readString(input.model, 200) || fallbackModel
 
   const config: AgentConfig & { provider: AgentProvider; model: string } = {
@@ -729,6 +800,11 @@ function readInteger(value: unknown, min: number, max: number) {
   return typeof value === 'number' && Number.isFinite(value) ? Math.min(Math.max(Math.floor(value), min), max) : undefined
 }
 
+function readUsageInteger(value: Record<string, unknown> | undefined, key: string) {
+  const number = value?.[key]
+  return typeof number === 'number' && Number.isFinite(number) ? Math.floor(number) : undefined
+}
+
 function readStringArray(value: unknown, maxItems: number, maxItemLength: number) {
   if (!Array.isArray(value)) return []
   return value
@@ -758,6 +834,27 @@ function parseStoredMessages(value: unknown): AgentMessage[] {
     && ['system', 'user', 'assistant'].includes(String(item.role))
     && typeof item.content === 'string')
     .map((item) => ({ role: item.role, content: item.content }))
+}
+
+function parseStoredTokenHistory(value: unknown): AgentTokenUsagePoint[] {
+  if (!Array.isArray(value)) return []
+  return value.flatMap((item, index) => {
+    if (!isRecord(item)) return []
+    const promptTokens = readUsageInteger(item, 'promptTokens')
+    const inputTokens = readUsageInteger(item, 'inputTokens') ?? 0
+    const completionTokens = readUsageInteger(item, 'completionTokens')
+    const totalTokens = readUsageInteger(item, 'totalTokens')
+    const conversationTokens = readUsageInteger(item, 'conversationTokens')
+    if (promptTokens === undefined || completionTokens === undefined || totalTokens === undefined || conversationTokens === undefined) return []
+    return [{
+      turn: readUsageInteger(item, 'turn') ?? index + 1,
+      inputTokens,
+      promptTokens,
+      completionTokens,
+      totalTokens,
+      conversationTokens,
+    }]
+  })
 }
 
 function isNodeError(error: unknown): error is NodeJS.ErrnoException {

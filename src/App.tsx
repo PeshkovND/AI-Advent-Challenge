@@ -5,7 +5,7 @@ import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
 
 type MessageRole = 'user' | 'assistant'
-type Page = 'chat' | 'compare' | 'reasoning' | 'temperature' | 'models' | 'agents'
+type Page = 'chat' | 'compare' | 'reasoning' | 'temperature' | 'models' | 'agents' | 'context-demo'
 
 type ChatMessage = {
   id: string
@@ -62,7 +62,7 @@ type ModelSide = {
 }
 type ModelsResult = { prompt: string; results: ModelSide[] }
 type ApiError = { error?: string }
-type AgentProvider = 'deepseek' | 'huggingface'
+type AgentProvider = 'deepseek' | 'huggingface' | 'openrouter'
 type AgentConfig = {
   name?: string
   provider: AgentProvider
@@ -75,9 +75,26 @@ type AgentConfig = {
 }
 type AgentSummary = { id: string; config: AgentConfig; createdAt?: string }
 type AgentsListResult = { agents: AgentSummary[]; count: number }
-type AgentStreamChunk = { content?: string; error?: string; done?: boolean; result?: { durationMs?: number; tokens?: number; contextMessages?: number } }
-type AgentHistoryResult = { messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>; count: number }
+type AgentTokenMetrics = { inputTokens: number; promptTokens: number; completionTokens: number; totalTokens: number }
+type AgentTokenUsagePoint = AgentTokenMetrics & { turn: number; conversationTokens: number }
+type AgentStreamChunk = { content?: string; error?: string; done?: boolean; result?: { durationMs?: number; tokens?: number; conversationTokens?: number; contextMessages?: number; tokenMetrics?: AgentTokenMetrics } }
+type AgentHistoryResult = { messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>; count: number; conversationTokens?: number }
 type AgentModelOption = { value: string; label: string }
+type ContextDemoScenario = 'short' | 'long' | 'overflow'
+type ContextDemoResponse = {
+  id: string
+  title: string
+  description: string
+  model: string
+  input?: string
+  historyMessages: number
+  conversationTokens: number
+  tokenHistory?: AgentTokenUsagePoint[]
+  messages?: ContextDemoMessage[]
+  result?: { output: string; durationMs?: number; tokenMetrics?: AgentTokenMetrics }
+  error?: string
+}
+type ContextDemoMessage = { role: 'user' | 'assistant'; content: string }
 
 const agentModelOptions: Record<AgentProvider, AgentModelOption[]> = {
   deepseek: [
@@ -86,6 +103,9 @@ const agentModelOptions: Record<AgentProvider, AgentModelOption[]> = {
   ],
   huggingface: [
     { value: 'google/gemma-3-4b-it:deepinfra', label: 'Gemma 3 4B Instruct · DeepInfra' },
+  ],
+  openrouter: [
+    { value: 'liquid/lfm-2.5-2.6b:free', label: 'LFM2.5 2.6B · бесплатно' },
   ],
 }
 
@@ -149,6 +169,9 @@ function App() {
           <button className={`page-nav-button ${activePage === 'agents' ? 'active' : ''}`} onClick={() => setActivePage('agents')}>
             <span>♙</span> Агенты
           </button>
+          <button className={`page-nav-button ${activePage === 'context-demo' ? 'active' : ''}`} onClick={() => setActivePage('context-demo')}>
+            <span>◫</span> Контекст
+          </button>
         </nav>
 
         <div className="sidebar-bottom">
@@ -158,7 +181,7 @@ function App() {
       </aside>
 
       <main className="day-main">
-        {activePage === 'chat' ? <ChatPage /> : activePage === 'compare' ? <ComparePage /> : activePage === 'reasoning' ? <ReasoningPage /> : activePage === 'temperature' ? <TemperaturePage /> : activePage === 'models' ? <ModelsPage /> : <AgentsPage />}
+        {activePage === 'chat' ? <ChatPage /> : activePage === 'compare' ? <ComparePage /> : activePage === 'reasoning' ? <ReasoningPage /> : activePage === 'temperature' ? <TemperaturePage /> : activePage === 'models' ? <ModelsPage /> : activePage === 'agents' ? <AgentsPage /> : <ContextDemoPage />}
       </main>
     </div>
   )
@@ -418,7 +441,7 @@ function AgentsPage() {
   const [stopSequenceFields, setStopSequenceFields] = useState<StopSequenceField[]>([])
   const [input, setInput] = useState('')
   const [answer, setAnswer] = useState('')
-  const [runMeta, setRunMeta] = useState<{ durationMs?: number; tokens?: number } | null>(null)
+  const [runMeta, setRunMeta] = useState<{ durationMs?: number; tokens?: number; conversationTokens?: number; tokenMetrics?: AgentTokenMetrics } | null>(null)
   const [historyCount, setHistoryCount] = useState(0)
   const [isLoadingAgents, setIsLoadingAgents] = useState(true)
   const [isCreating, setIsCreating] = useState(false)
@@ -611,7 +634,7 @@ function AgentsPage() {
             <label>Идентификатор<input value={agentId} onChange={(event) => setAgentId(event.target.value)} placeholder="например, react-helper" /></label>
             <label>Название<input value={agentName} onChange={(event) => setAgentName(event.target.value)} placeholder="Помощник по React" /></label>
             <div className="agent-form-row">
-              <label>Провайдер<select value={provider} onChange={(event) => { const nextProvider = event.target.value as AgentProvider; setProvider(nextProvider); setModel(agentModelOptions[nextProvider][0].value) }}><option value="deepseek">DeepSeek</option><option value="huggingface">Hugging Face</option></select></label>
+              <label>Провайдер<select value={provider} onChange={(event) => { const nextProvider = event.target.value as AgentProvider; setProvider(nextProvider); setModel(agentModelOptions[nextProvider][0].value) }}><option value="deepseek">DeepSeek</option><option value="huggingface">Hugging Face</option><option value="openrouter">OpenRouter</option></select></label>
               <label>Модель<select value={model} onChange={(event) => setModel(event.target.value)}>{agentModelOptions[provider].map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}</select></label>
             </div>
             <label>Системный промпт<textarea value={systemPrompt} onChange={(event) => setSystemPrompt(event.target.value)} placeholder="Например: отвечай кратко и с примерами..." rows={3} /></label>
@@ -636,7 +659,7 @@ function AgentsPage() {
             <textarea value={input} onChange={(event) => setInput(event.target.value)} placeholder="Напишите сообщение выбранному агенту..." rows={5} disabled={isRunning || agents.length === 0} />
             <button className="compare-button" type="submit" disabled={isRunning || !input.trim() || agents.length === 0}>{isRunning ? 'Агент отвечает...' : 'Отправить сообщение'} <span>→</span></button>
           </form>
-          <div className="agent-answer"><div className="agent-answer-heading"><div><p className="eyebrow">Ответ агента</p><h3>{selectedAgent?.config.name || selectedAgent?.id || 'Агент не выбран'}</h3></div><div className="agent-answer-actions">{runMeta && <span className="response-status">{runMeta.durationMs ?? '—'} мс · {runMeta.tokens ?? '—'} tokens</span>}<button className="clear-context-button" type="button" onClick={() => void clearAgentHistory()} disabled={isRunning || historyCount === 0}>Очистить контекст</button></div></div>{answer ? <div className="reasoning-content"><MarkdownContent content={answer} /></div> : <div className="agent-empty">{isRunning ? <><span className="loading-spinner" /> Получаем потоковый ответ...</> : 'Здесь появится ответ выбранного агента.'}</div>}</div>
+          <div className="agent-answer"><div className="agent-answer-heading"><div><p className="eyebrow">Ответ агента</p><h3>{selectedAgent?.config.name || selectedAgent?.id || 'Агент не выбран'}</h3></div><div className="agent-answer-actions">{runMeta && <span className="response-status">{runMeta.durationMs ?? '—'} мс · {runMeta.tokens ?? '—'} tokens</span>}<button className="clear-context-button" type="button" onClick={() => void clearAgentHistory()} disabled={isRunning || historyCount === 0}>Очистить контекст</button></div></div>{runMeta?.tokenMetrics && <AgentTokenMetricsView metrics={runMeta.tokenMetrics} conversationTokens={runMeta.conversationTokens} />}{answer ? <div className="reasoning-content"><MarkdownContent content={answer} /></div> : <div className="agent-empty">{isRunning ? <><span className="loading-spinner" /> Получаем потоковый ответ...</> : 'Здесь появится ответ выбранного агента.'}</div>}</div>
         </section>
       </div>
 
@@ -648,13 +671,150 @@ function AgentsPage() {
 function AgentConfigDetails({ config }: { config: AgentConfig }) {
   const outputFormat = config.outputPolicy?.format === 'json' ? 'JSON' : 'Обычный текст'
   const stopSequences = config.outputPolicy?.stopSequences?.length ? config.outputPolicy.stopSequences.join(' · ') : 'не заданы'
-  return <div className="agent-config-details"><div className="agent-config-details-heading"><span>Параметры выбранного агента</span><small>Текущая конфигурация</small></div><div className="agent-config-details-grid"><div><small>Название</small><strong>{config.name || 'не задано'}</strong></div><div><small>Temperature</small><strong>{config.temperature ?? 'по умолчанию'}</strong></div><div><small>Максимум токенов</small><strong>{config.maxTokens ?? 'без лимита'}</strong></div><div><small>Формат ответа</small><strong>{outputFormat}</strong></div><div><small>Лимит входа</small><strong>{config.inputPolicy?.maxCharacters ? `${config.inputPolicy.maxCharacters} символов` : 'без лимита'}</strong></div><div><small>Stop-последовательности</small><strong>{stopSequences}</strong></div><div className="agent-config-details-wide"><small>Системный промпт</small><strong>{config.systemPrompt || 'не задан'}</strong></div></div></div>
+  return <div className="agent-config-details"><div className="agent-config-details-heading"><span>Параметры выбранного агента</span><small>Текущая конфигурация</small></div><div className="agent-config-details-grid"><div><small>Название</small><strong>{config.name || 'не задано'}</strong></div><div><small>Temperature</small><strong>{config.temperature ?? 'по умолчанию'}</strong></div><div><small>Максимум токенов ответа</small><strong>{config.maxTokens ?? 'без лимита'}</strong></div><div><small>История</small><strong>Сохраняется полностью</strong></div><div><small>Формат ответа</small><strong>{outputFormat}</strong></div><div><small>Лимит входа</small><strong>{config.inputPolicy?.maxCharacters ? `${config.inputPolicy.maxCharacters} символов` : 'без лимита'}</strong></div><div><small>Stop-последовательности</small><strong>{stopSequences}</strong></div><div className="agent-config-details-wide"><small>Системный промпт</small><strong>{config.systemPrompt || 'не задан'}</strong></div></div></div>
+}
+
+function AgentTokenMetricsView({ metrics, conversationTokens }: { metrics: AgentTokenMetrics; conversationTokens?: number }) {
+  const accumulatedTokens = conversationTokens ?? metrics.totalTokens
+  return <><div className="agent-token-metrics"><div><small>Текущий запрос</small><strong>~{metrics.inputTokens}</strong></div><div><small>Весь промпт</small><strong>{metrics.promptTokens}</strong></div><div><small>Всего за диалог</small><strong>{accumulatedTokens}</strong></div><div><small>Ответ модели</small><strong>{metrics.completionTokens}</strong></div></div><p className="agent-token-note">«Текущий запрос» — приблизительное число токенов только нового сообщения пользователя. «Весь промпт» — точный prompt_tokens: системный промпт, история и новый вопрос. «Всего за диалог» — накопленная сумма total_tokens успешных API-вызовов.</p></>
+}
+
+function TokenUsageChart({ points }: { points: AgentTokenUsagePoint[] }) {
+  if (points.length === 0) return <div className="context-demo-chart-empty">После первого успешного ответа здесь появится график.</div>
+
+  const width = 720
+  const height = 280
+  const padding = { top: 18, right: 18, bottom: 34, left: 48 }
+  const chartWidth = width - padding.left - padding.right
+  const chartHeight = height - padding.top - padding.bottom
+  const values = points.flatMap((point) => [point.inputTokens, point.promptTokens, point.conversationTokens, point.completionTokens])
+  const maxValue = Math.max(...values, 1)
+  const x = (index: number) => padding.left + (points.length === 1 ? chartWidth / 2 : (index / (points.length - 1)) * chartWidth)
+  const y = (value: number) => padding.top + chartHeight - (value / maxValue) * chartHeight
+  const series = [
+    { key: 'inputTokens' as const, label: 'Текущий запрос', color: '#5d60e6' },
+    { key: 'promptTokens' as const, label: 'Весь промпт', color: '#9664d9' },
+    { key: 'conversationTokens' as const, label: 'Всего за диалог', color: '#2fa878' },
+    { key: 'completionTokens' as const, label: 'Ответ модели', color: '#c77932' },
+  ]
+
+  return <div className="token-usage-chart"><div className="token-usage-legend">{series.map((item) => <span key={item.key}><i style={{ backgroundColor: item.color }} />{item.label}</span>)}</div><svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label="График расхода токенов по запросам">{[0, 0.25, 0.5, 0.75, 1].map((ratio) => <g key={ratio}><line x1={padding.left} x2={width - padding.right} y1={y(maxValue * ratio)} y2={y(maxValue * ratio)} className="token-chart-grid-line" /><text x={padding.left - 8} y={y(maxValue * ratio) + 3} className="token-chart-axis-label" textAnchor="end">{Math.round(maxValue * ratio)}</text></g>)}{series.map((item) => <polyline key={item.key} fill="none" stroke={item.color} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" points={points.map((point, index) => `${x(index)},${y(point[item.key])}`).join(' ')} />)}{series.flatMap((item) => points.map((point, index) => <circle key={`${item.key}-${point.turn}`} cx={x(index)} cy={y(point[item.key])} r="4" fill="#fff" stroke={item.color} strokeWidth="2"><title>{`${item.label}, запрос ${point.turn}: ${point[item.key]} токенов`}</title></circle>))}{points.map((point, index) => <text key={`turn-${point.turn}`} x={x(index)} y={height - 10} className="token-chart-axis-label" textAnchor="middle">{point.turn}</text>)}</svg><p className="token-chart-caption">Номер запроса →</p></div>
 }
 
 function pluralizeAgents(count: number) {
   if (count % 10 === 1 && count % 100 !== 11) return 'агент'
   if ([2, 3, 4].includes(count % 10) && ![12, 13, 14].includes(count % 100)) return 'агента'
   return 'агентов'
+}
+
+function ContextDemoPage() {
+  const [session, setSession] = useState<ContextDemoResponse | null>(null)
+  const [messages, setMessages] = useState<ContextDemoMessage[]>([])
+  const [input, setInput] = useState('')
+  const [lastMetrics, setLastMetrics] = useState<AgentTokenMetrics | null>(null)
+  const [lastDuration, setLastDuration] = useState<number | null>(null)
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    void loadDemo()
+  }, [])
+
+  function applySession(data: ContextDemoResponse) {
+    setSession(data)
+    setMessages(data.messages ?? [])
+    setLastMetrics(null)
+    setLastDuration(null)
+    setInput('')
+  }
+
+  async function loadDemo() {
+    setIsLoading(true)
+    setError(null)
+    try {
+      const response = await fetch('/api/context-demo')
+      const data = (await response.json()) as ContextDemoResponse & ApiError
+      if (!response.ok) throw new Error(data.error || 'Не удалось загрузить агента.')
+      applySession(data)
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : 'Не удалось загрузить агента.')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  async function resetDemo() {
+    if (isLoading) return
+    setIsLoading(true)
+    setError(null)
+    try {
+      const response = await fetch('/api/context-demo/reset', { method: 'POST' })
+      const data = (await response.json()) as ContextDemoResponse & ApiError
+      if (!response.ok) throw new Error(data.error || 'Не удалось подготовить диалог.')
+      applySession(data)
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : 'Не удалось подготовить диалог.')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  async function deleteDemoAgent() {
+    if (isLoading || !window.confirm('Удалить текущего агента вместе с историей и начать новый диалог?')) return
+    setIsLoading(true)
+    setError(null)
+    try {
+      const response = await fetch('/api/context-demo/agent', { method: 'DELETE' })
+      const data = (await response.json()) as ContextDemoResponse & ApiError
+      if (!response.ok) throw new Error(data.error || 'Не удалось удалить агента.')
+      applySession(data)
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : 'Не удалось удалить агента.')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  async function sendMessage(event: FormEvent) {
+    event.preventDefault()
+    const trimmedInput = input.trim()
+    if (!trimmedInput || isLoading) return
+    setIsLoading(true)
+    setError(null)
+    try {
+      const response = await fetch('/api/context-demo/message', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ input: trimmedInput }),
+      })
+      const data = (await response.json()) as ContextDemoResponse & ApiError
+      if (!response.ok || !data.result) throw new Error(data.error || 'Не удалось получить ответ модели.')
+      setSession(data)
+      setMessages((current) => data.messages ?? [...current, { role: 'user', content: data.input || trimmedInput }, { role: 'assistant', content: data.result!.output }])
+      setLastMetrics(data.result.tokenMetrics ?? null)
+      setLastDuration(data.result.durationMs ?? null)
+      setInput('')
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : 'Не удалось получить ответ модели.')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  return <div className="page-view context-demo-page">
+    <header className="page-header"><div><p className="eyebrow">Демонстрация токенов</p><h1>Один агент, один диалог</h1><p className="header-description">Ведите разговор с LFM2.5 2.6B и смотрите, как меняется расход токенов на каждом запросе.</p></div><div className="model-badge"><span className="pulse-dot" /> LFM2.5 2.6B</div></header>
+    <div className="context-demo-note">«Текущий запрос» — приблизительная оценка токенов только нового сообщения пользователя. «Весь промпт» — точный <code>prompt_tokens</code> системного промпта, истории и нового вопроса. <code>completion_tokens</code> — токены ответа модели. «Всего за диалог» — сумма <code>total_tokens</code> всех успешных запросов.</div>
+    {error && <div className="error-message" role="alert">{error}</div>}
+    <div className="context-demo-layout">
+      <section className="context-demo-chat">
+        <div className="context-demo-chat-heading"><div><p className="eyebrow">Чат</p><h2>Диалог с LFM2.5 2.6B</h2><p>История отправляется в модель заново при каждом сообщении.</p></div><button className="clear-context-button" type="button" onClick={() => void resetDemo()} disabled={isLoading}>Начать заново</button></div>
+        <div className="context-demo-messages" aria-live="polite">{messages.length === 0 ? <div className="context-demo-empty">Напишите первое сообщение агенту.</div> : messages.map((message, index) => <div className={`context-demo-message ${message.role}`} key={`${message.role}-${index}`}><small>{message.role === 'user' ? 'Вы' : 'LFM2.5 2.6B'}</small><div className="reasoning-content"><MarkdownContent content={message.content} /></div></div>)}</div>
+        <form className="context-demo-composer" onSubmit={sendMessage}><textarea value={input} onChange={(event) => setInput(event.target.value)} placeholder="Напишите следующее сообщение агенту..." rows={3} disabled={isLoading} /><button className="compare-button" type="submit" disabled={isLoading || !input.trim()}>{isLoading ? 'Получаем ответ...' : 'Отправить'} <span>→</span></button></form>
+      </section>
+      <aside className="context-demo-sidebar"><div className="context-demo-sidebar-heading"><p className="eyebrow">Метрики последнего запроса</p><h2>Токены</h2>{lastDuration !== null && <span>Ответ за {lastDuration} мс</span>}</div>{lastMetrics ? <AgentTokenMetricsView metrics={lastMetrics} conversationTokens={session?.conversationTokens} /> : <div className="context-demo-metrics-empty">После первого ответа здесь появятся четыре значения.</div>}<div className="context-demo-sidebar-info"><strong>Метрики</strong><span>«Текущий запрос» — приблизительная оценка нового сообщения.</span><span>«Весь промпт» — prompt_tokens системного промпта, истории и нового вопроса.</span><span>«Ответ модели» — completion_tokens этого вызова.</span><span>«Всего за диалог» — сумма total_tokens всех успешных вызовов.</span><span>Лимит модели — 65 536 токенов.</span></div><button className="context-demo-delete-button" type="button" onClick={() => void deleteDemoAgent()} disabled={isLoading}>Удалить агента и начать заново</button></aside>
+      <section className="context-demo-chart-section"><div className="context-demo-chart-heading"><div><p className="eyebrow">Динамика</p><h2>Расход токенов по запросам</h2></div><span>{session?.tokenHistory?.length ?? 0} запросов</span></div><TokenUsageChart points={session?.tokenHistory ?? []} /></section>
+    </div>
+  </div>
 }
 
 function ModelsPage() {
