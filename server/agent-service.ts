@@ -23,6 +23,7 @@ export type AgentTokenUsagePoint = AgentTokenMetrics & {
   conversationTokens: number
   summaryTokens?: number
   strategyTokens?: number
+  strategyTokenMetrics?: AgentTokenMetrics
 }
 
 export type AgentContextCompression = {
@@ -194,12 +195,19 @@ class AgentStateStore {
     await this.persist()
   }
 
-  async addConversationTokens(agentId: string, metrics: AgentTokenMetrics, summaryTokens = 0, strategyTokens = 0) {
+  async addConversationTokens(agentId: string, metrics: AgentTokenMetrics, summaryTokens = 0, strategyTokenMetrics?: AgentTokenMetrics) {
     await this.ready
+    const strategyTokens = strategyTokenMetrics?.totalTokens ?? 0
     const conversationTokens = (this.state.conversationTokens[agentId] ?? 0) + metrics.totalTokens + summaryTokens + strategyTokens
     this.state.conversationTokens[agentId] = conversationTokens
     const history = this.state.tokenHistory[agentId] ?? []
-    this.state.tokenHistory[agentId] = [...history, { ...metrics, turn: history.length + 1, conversationTokens, ...(summaryTokens ? { summaryTokens } : {}), ...(strategyTokens ? { strategyTokens } : {}) }]
+    this.state.tokenHistory[agentId] = [...history, {
+      ...metrics,
+      turn: history.length + 1,
+      conversationTokens,
+      ...(summaryTokens ? { summaryTokens } : {}),
+      ...(strategyTokens ? { strategyTokens, strategyTokenMetrics } : {}),
+    }]
     await this.persist()
     return conversationTokens
   }
@@ -774,7 +782,7 @@ export class AgentService {
       { role: 'user', content: result.input },
       { role: 'assistant', content: result.output },
     ])
-    const conversationTokens = await this.stateStore.addConversationTokens(id, result.tokenMetrics, preparedContext.summaryTokens, result.strategyTokenMetrics?.totalTokens ?? 0)
+    const conversationTokens = await this.stateStore.addConversationTokens(id, result.tokenMetrics, preparedContext.summaryTokens, result.strategyTokenMetrics)
     const tokenHistory = await this.stateStore.getTokenHistory(id)
     return { ...result, contextMessages, conversationTokens, tokenHistory, context: preparedContext.info }
   }
@@ -795,7 +803,7 @@ export class AgentService {
       { role: 'user', content: result.input },
       { role: 'assistant', content: result.output },
     ])
-    const conversationTokens = await this.stateStore.addConversationTokens(id, result.tokenMetrics, preparedContext.summaryTokens, result.strategyTokenMetrics?.totalTokens ?? 0)
+    const conversationTokens = await this.stateStore.addConversationTokens(id, result.tokenMetrics, preparedContext.summaryTokens, result.strategyTokenMetrics)
     const tokenHistory = await this.stateStore.getTokenHistory(id)
     return { ...result, contextMessages, conversationTokens, tokenHistory, context: preparedContext.info }
   }
@@ -1290,6 +1298,10 @@ function parseStoredTokenHistory(value: unknown): AgentTokenUsagePoint[] {
     const totalTokens = readUsageInteger(item, 'totalTokens')
     const conversationTokens = readUsageInteger(item, 'conversationTokens')
     const summaryTokens = readUsageInteger(item, 'summaryTokens')
+    const strategyTokens = readUsageInteger(item, 'strategyTokens')
+    const strategyMetrics = isRecord(item.strategyTokenMetrics)
+      ? parseTokenMetrics(item.strategyTokenMetrics)
+      : undefined
     if (promptTokens === undefined || completionTokens === undefined || totalTokens === undefined || conversationTokens === undefined) return []
     return [{
       turn: readUsageInteger(item, 'turn') ?? index + 1,
@@ -1299,8 +1311,19 @@ function parseStoredTokenHistory(value: unknown): AgentTokenUsagePoint[] {
       totalTokens,
       conversationTokens,
       ...(summaryTokens === undefined ? {} : { summaryTokens }),
+      ...((strategyTokens ?? strategyMetrics?.totalTokens) === undefined ? {} : { strategyTokens: strategyTokens ?? strategyMetrics!.totalTokens }),
+      ...(strategyMetrics ? { strategyTokenMetrics: strategyMetrics } : {}),
     }]
   })
+}
+
+function parseTokenMetrics(value: Record<string, unknown>): AgentTokenMetrics | undefined {
+  const promptTokens = readUsageInteger(value, 'promptTokens')
+  const inputTokens = readUsageInteger(value, 'inputTokens') ?? 0
+  const completionTokens = readUsageInteger(value, 'completionTokens')
+  const totalTokens = readUsageInteger(value, 'totalTokens')
+  if (promptTokens === undefined || completionTokens === undefined || totalTokens === undefined) return undefined
+  return { inputTokens, promptTokens, completionTokens, totalTokens }
 }
 
 function parseStoredSummary(value: unknown): StoredSummary | undefined {

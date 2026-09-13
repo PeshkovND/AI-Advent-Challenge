@@ -78,7 +78,7 @@ type AgentConfig = {
 type AgentSummary = { id: string; config: AgentConfig; createdAt?: string }
 type AgentsListResult = { agents: AgentSummary[]; count: number }
 type AgentTokenMetrics = { inputTokens: number; promptTokens: number; completionTokens: number; totalTokens: number }
-type AgentTokenUsagePoint = AgentTokenMetrics & { turn: number; conversationTokens: number; summaryTokens?: number }
+type AgentTokenUsagePoint = AgentTokenMetrics & { turn: number; conversationTokens: number; summaryTokens?: number; strategyTokens?: number; strategyTokenMetrics?: AgentTokenMetrics }
 type AgentContextInfo = { enabled: boolean; summary?: string; summarizedMessages: number; retainedMessages: number; estimatedFullPromptTokens: number; estimatedSentPromptTokens: number; estimatedSavedTokens: number; summaryTokens?: number }
 type AgentContextCompression = { enabled?: boolean; summarizeAfterMessages?: number }
 type AgentStreamChunk = { content?: string; error?: string; done?: boolean; result?: { durationMs?: number; tokens?: number; conversationTokens?: number; contextMessages?: number; tokenMetrics?: AgentTokenMetrics; context?: AgentContextInfo } }
@@ -1043,6 +1043,58 @@ function asStrategyMessages(messages: AgentStrategyHistory['messages']): Context
   return messages.filter((message) => message.role !== 'system').map((message, index) => ({ id: `${message.role}-${index}-${message.content.slice(0, 12)}`, role: message.role as 'user' | 'assistant', content: message.content, createdAt: '' }))
 }
 
+function restoreComparisonTurns(histories: Record<ContextStrategyName, AgentStrategyHistory>): ContextStrategyTurn[] {
+  const pairsByStrategy = Object.fromEntries((Object.keys(contextStrategyAgents) as ContextStrategyName[]).map((name) => {
+    const messages = asStrategyMessages(histories[name].messages)
+    const pairs = Array.from({ length: Math.floor(messages.length / 2) }, (_, index) => ({
+      input: messages[index * 2],
+      output: messages[index * 2 + 1],
+      usage: histories[name].tokenHistory?.[index],
+    })).filter((pair) => pair.input?.role === 'user' && pair.output?.role === 'assistant')
+    return [name, pairs]
+  })) as Record<ContextStrategyName, Array<{ input: ContextStrategyMessage; output: ContextStrategyMessage; usage?: AgentTokenUsagePoint }>>
+  const restored: ContextStrategyTurn[] = []
+  const cursors: Record<ContextStrategyName, number> = { sliding: 0, facts: 0, branching: 0 }
+
+  while (cursors.sliding < pairsByStrategy.sliding.length) {
+    const candidate = pairsByStrategy.sliding[cursors.sliding]
+    const positions = {
+      facts: pairsByStrategy.facts.findIndex((pair, index) => index >= cursors.facts && pair.input.content === candidate.input.content),
+      branching: pairsByStrategy.branching.findIndex((pair, index) => index >= cursors.branching && pair.input.content === candidate.input.content),
+    }
+    if (positions.facts === -1 || positions.branching === -1) {
+      cursors.sliding += 1
+      continue
+    }
+    const pairs = {
+      sliding: candidate,
+      facts: pairsByStrategy.facts[positions.facts],
+      branching: pairsByStrategy.branching[positions.branching],
+    }
+    const input = candidate.input
+
+    const results = Object.fromEntries((Object.keys(contextStrategyAgents) as ContextStrategyName[]).map((name) => {
+      const usage = pairs[name].usage
+      const tokenMetrics: AgentTokenMetrics = usage
+        ? { inputTokens: usage.inputTokens, promptTokens: usage.promptTokens, completionTokens: usage.completionTokens, totalTokens: usage.totalTokens }
+        : { inputTokens: 0, promptTokens: 0, completionTokens: 0, totalTokens: 0 }
+      const legacyStrategyMetrics = usage?.strategyTokens === undefined
+        ? undefined
+        : { inputTokens: 0, promptTokens: 0, completionTokens: 0, totalTokens: usage.strategyTokens }
+      return [name, {
+        output: pairs[name].output.content,
+        tokenMetrics,
+        ...(name === 'facts' && (usage?.strategyTokenMetrics || legacyStrategyMetrics) ? { factsUpdate: usage?.strategyTokenMetrics ?? legacyStrategyMetrics } : {}),
+      }]
+    })) as Partial<Record<ContextStrategyName, ContextStrategyResult>>
+    restored.push({ id: `restored-${restored.length}`, input: input.content, createdAt: '', results })
+    cursors.sliding += 1
+    cursors.facts = positions.facts + 1
+    cursors.branching = positions.branching + 1
+  }
+  return restored
+}
+
 function strategyStats(turns: ContextStrategyTurn[], name: ContextStrategyName): ContextStrategyStats {
   const results = turns.map((turn) => turn.results[name]).filter((result): result is ContextStrategyResult => Boolean(result))
   const sum = (items: AgentTokenMetrics[]) => items.reduce<ContextStrategyUsage>((total, item) => ({ promptTokens: total.promptTokens + item.promptTokens, completionTokens: total.completionTokens + item.completionTokens, totalTokens: total.totalTokens + item.totalTokens }), { promptTokens: 0, completionTokens: 0, totalTokens: 0 })
@@ -1078,10 +1130,11 @@ function ContextStrategiesPage() {
         const context = await contextResponse.json() as AgentStrategyContext & ApiError
         const history = await historyResponse.json() as AgentStrategyHistory & ApiError
         if (!contextResponse.ok || !historyResponse.ok) throw new Error(context.error || history.error || 'Не удалось загрузить состояние агента.')
-        return [name, context, asStrategyMessages(history.messages)] as const
+        return [name, context, asStrategyMessages(history.messages), history] as const
       }))
       setContexts(Object.fromEntries(entries.map(([name, context]) => [name, context])))
       setHistories(Object.fromEntries(entries.map(([name, , history]) => [name, history])))
+      setTurns(restoreComparisonTurns(Object.fromEntries(entries.map(([name, , , history]) => [name, history])) as Record<ContextStrategyName, AgentStrategyHistory>))
       setError(null)
     } catch (requestError) { setError(requestError instanceof Error ? requestError.message : 'Не удалось загрузить стратегии.') } finally { setIsLoading(false) }
   }
