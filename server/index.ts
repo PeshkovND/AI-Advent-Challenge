@@ -2,6 +2,7 @@ import 'dotenv/config'
 import express, { Response } from 'express'
 import { AgentError, AgentService, createAgentRouter } from './agent-service'
 import { isContextDemoScenario, prepareContextDemo, resetContextDemo } from './context-demo'
+import { CONTEXT_COMPARISON_SUMMARIZE_AFTER_MESSAGES, contextComparisonDefaultInput, contextComparisonHistory } from './context-comparison'
 
 type ChatRole = 'system' | 'user' | 'assistant'
 
@@ -117,10 +118,14 @@ const agentService = new AgentService({
 const CONTEXT_DEMO_AGENT_ID = 'context-demo'
 const CONTEXT_DEMO_MODEL = 'liquid/lfm-2.5-2.6b:free'
 const CONTEXT_DEMO_CONFIG = {
-  name: 'Демонстрация токенов',
+  name: 'Демонстрация управления контекстом',
   provider: 'openrouter' as const,
   model: CONTEXT_DEMO_MODEL,
   systemPrompt: 'Отвечай по существу и учитывай историю диалога.',
+  contextCompression: {
+    enabled: true,
+    summarizeAfterMessages: 10,
+  },
 }
 
 async function ensureContextDemoAgent() {
@@ -128,7 +133,7 @@ async function ensureContextDemoAgent() {
   const existing = agentService.list().find((agent) => agent.id === CONTEXT_DEMO_AGENT_ID)
   if (!existing) {
     await agentService.create({ id: CONTEXT_DEMO_AGENT_ID, config: CONTEXT_DEMO_CONFIG })
-  } else if (existing.config.maxTokens !== undefined) {
+  } else if (existing.config.maxTokens !== undefined || existing.config.contextCompression?.summarizeAfterMessages === undefined || existing.config.contextCompression.summarizeAfterMessages === 5) {
     const { maxTokens: _oldMaxTokens, ...configWithoutLimit } = existing.config
     await agentService.update(CONTEXT_DEMO_AGENT_ID, { ...configWithoutLimit, ...CONTEXT_DEMO_CONFIG })
   }
@@ -136,20 +141,24 @@ async function ensureContextDemoAgent() {
 
 async function getContextDemoState() {
   await ensureContextDemoAgent()
-  const [messages, conversationTokens, tokenHistory] = await Promise.all([
+  const agent = agentService.get(CONTEXT_DEMO_AGENT_ID)
+  const [messages, conversationTokens, tokenHistory, context] = await Promise.all([
     agentService.getHistory(CONTEXT_DEMO_AGENT_ID),
     agentService.getConversationTokens(CONTEXT_DEMO_AGENT_ID),
     agentService.getTokenHistory(CONTEXT_DEMO_AGENT_ID),
+    agentService.getContextInfo(CONTEXT_DEMO_AGENT_ID),
   ])
   return {
     id: CONTEXT_DEMO_AGENT_ID,
     title: 'Диалог с агентом',
-    description: 'Обычный зарегистрированный агент с сохранённой историей.',
+    description: 'Агент с сохранённой историей и управлением контекстом.',
     model: CONTEXT_DEMO_MODEL,
     historyMessages: messages.length,
     conversationTokens,
     tokenHistory,
     messages,
+    context,
+    compression: agent.config.contextCompression,
   }
 }
 
@@ -188,6 +197,32 @@ const modelDefinitions: ModelDefinition[] = [
 app.use(express.json({ limit: '1mb' }))
 app.use('/api/agents', createAgentRouter(agentService))
 
+app.get('/api/context-comparison', (_request, response) => {
+  response.json({
+    title: 'Сравнение сжатия контекста',
+    model,
+    history: contextComparisonHistory,
+    summarizeAfterMessages: CONTEXT_COMPARISON_SUMMARIZE_AFTER_MESSAGES,
+    input: contextComparisonDefaultInput,
+  })
+})
+
+app.post('/api/context-comparison', async (request, response) => {
+  const input = typeof request.body?.input === 'string' && request.body.input.trim()
+    ? request.body.input.trim()
+    : contextComparisonDefaultInput
+  try {
+    const result = await agentService.compareCompression(
+      input,
+      contextComparisonHistory,
+      CONTEXT_COMPARISON_SUMMARIZE_AFTER_MESSAGES,
+    )
+    response.json({ input, model, result })
+  } catch (error) {
+    sendContextDemoError(response, error)
+  }
+})
+
 app.get('/api/context-demo', async (_request, response) => {
   try {
     response.json(await getContextDemoState())
@@ -200,6 +235,34 @@ app.post('/api/context-demo/reset', async (_request, response) => {
   try {
     await ensureContextDemoAgent()
     await agentService.clearHistory(CONTEXT_DEMO_AGENT_ID)
+    response.json(await getContextDemoState())
+  } catch (error) {
+    sendContextDemoError(response, error)
+  }
+})
+
+app.post('/api/context-demo/compression', async (request, response) => {
+  const { enabled, summarizeAfterMessages } = request.body ?? {}
+  if (typeof enabled !== 'boolean') {
+    response.status(400).json({ error: 'Поле enabled должно быть true или false.' })
+    return
+  }
+  if (summarizeAfterMessages !== undefined && (!Number.isInteger(summarizeAfterMessages) || summarizeAfterMessages < 1 || summarizeAfterMessages > 100)) {
+    response.status(400).json({ error: 'summarizeAfterMessages должно быть целым числом от 1 до 100.' })
+    return
+  }
+
+  try {
+    await ensureContextDemoAgent()
+    const agent = agentService.get(CONTEXT_DEMO_AGENT_ID)
+    const nextSummarizeAfterMessages = summarizeAfterMessages ?? agent.config.contextCompression?.summarizeAfterMessages ?? 10
+    await agentService.update(CONTEXT_DEMO_AGENT_ID, {
+      ...agent.config,
+      contextCompression: {
+        enabled,
+        summarizeAfterMessages: nextSummarizeAfterMessages,
+      },
+    })
     response.json(await getContextDemoState())
   } catch (error) {
     sendContextDemoError(response, error)

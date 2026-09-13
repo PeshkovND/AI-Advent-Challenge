@@ -8,6 +8,7 @@ export type AgentMessageRole = 'system' | 'user' | 'assistant'
 export type AgentMessage = {
   role: AgentMessageRole
   content: string
+  archived?: boolean
 }
 
 export type AgentTokenMetrics = {
@@ -20,6 +21,23 @@ export type AgentTokenMetrics = {
 export type AgentTokenUsagePoint = AgentTokenMetrics & {
   turn: number
   conversationTokens: number
+  summaryTokens?: number
+}
+
+export type AgentContextCompression = {
+  enabled?: boolean
+  summarizeAfterMessages?: number
+}
+
+export type AgentContextInfo = {
+  enabled: boolean
+  summary?: string
+  summarizedMessages: number
+  retainedMessages: number
+  estimatedFullPromptTokens: number
+  estimatedSentPromptTokens: number
+  estimatedSavedTokens: number
+  summaryTokens?: number
 }
 
 export type AgentConfig = {
@@ -37,6 +55,7 @@ export type AgentConfig = {
     format?: 'text' | 'json'
     stopSequences?: string[]
   }
+  contextCompression?: AgentContextCompression
 }
 
 export type AgentRunResult = {
@@ -53,6 +72,7 @@ export type AgentRunResult = {
   contextMessages?: number
   tokenMetrics: AgentTokenMetrics
   tokenHistory?: AgentTokenUsagePoint[]
+  context?: AgentContextInfo
 }
 
 type CompletionResult = {
@@ -89,10 +109,19 @@ type AgentState = {
   histories: Record<string, AgentMessage[]>
   conversationTokens: Record<string, number>
   tokenHistory: Record<string, AgentTokenUsagePoint[]>
+  summaries: Record<string, StoredSummary>
+}
+
+type StoredSummary = {
+  content: string
+  summarizedMessages: number
+  estimatedReplacedTokens: number
+  historyCompacted: boolean
+  updatedAt: string
 }
 
 class AgentStateStore {
-  private state: AgentState = { agents: [], histories: {}, conversationTokens: {}, tokenHistory: {} }
+  private state: AgentState = { agents: [], histories: {}, conversationTokens: {}, tokenHistory: {}, summaries: {} }
   private writeQueue: Promise<void> = Promise.resolve()
   readonly ready: Promise<void>
 
@@ -107,13 +136,14 @@ class AgentStateStore {
 
   async getHistory(agentId: string) {
     await this.ready
-    return [...(this.state.histories[agentId] ?? [])]
+    return (this.state.histories[agentId] ?? []).map((message) => ({ ...message }))
   }
 
   async replaceHistory(agentId: string, messages: AgentMessage[]) {
     await this.ready
     this.state.histories[agentId] = [...messages]
     await this.persist()
+    return this.state.histories[agentId].length
   }
 
   async appendHistory(agentId: string, messages: AgentMessage[]) {
@@ -124,12 +154,18 @@ class AgentStateStore {
     return this.state.histories[agentId].length
   }
 
-  async addConversationTokens(agentId: string, metrics: AgentTokenMetrics) {
+  async archiveActiveHistory(agentId: string) {
     await this.ready
-    const conversationTokens = (this.state.conversationTokens[agentId] ?? 0) + metrics.totalTokens
+    this.state.histories[agentId] = (this.state.histories[agentId] ?? []).map((message) => message.archived ? message : { ...message, archived: true })
+    await this.persist()
+  }
+
+  async addConversationTokens(agentId: string, metrics: AgentTokenMetrics, summaryTokens = 0) {
+    await this.ready
+    const conversationTokens = (this.state.conversationTokens[agentId] ?? 0) + metrics.totalTokens + summaryTokens
     this.state.conversationTokens[agentId] = conversationTokens
     const history = this.state.tokenHistory[agentId] ?? []
-    this.state.tokenHistory[agentId] = [...history, { ...metrics, turn: history.length + 1, conversationTokens }]
+    this.state.tokenHistory[agentId] = [...history, { ...metrics, turn: history.length + 1, conversationTokens, ...(summaryTokens ? { summaryTokens } : {}) }]
     await this.persist()
     return conversationTokens
   }
@@ -144,6 +180,24 @@ class AgentStateStore {
     return [...(this.state.tokenHistory[agentId] ?? [])]
   }
 
+  async getSummary(agentId: string) {
+    await this.ready
+    const summary = this.state.summaries[agentId]
+    return summary ? { ...summary } : undefined
+  }
+
+  async setSummary(agentId: string, summary: StoredSummary) {
+    await this.ready
+    this.state.summaries[agentId] = { ...summary }
+    await this.persist()
+  }
+
+  async clearSummary(agentId: string) {
+    await this.ready
+    delete this.state.summaries[agentId]
+    await this.persist()
+  }
+
   async replaceAgents(agents: AgentRecord[]) {
     await this.ready
     this.state.agents = agents.map((agent) => ({ ...agent, config: { ...agent.config } }))
@@ -156,6 +210,7 @@ class AgentStateStore {
     delete this.state.histories[agentId]
     delete this.state.conversationTokens[agentId]
     delete this.state.tokenHistory[agentId]
+    delete this.state.summaries[agentId]
     await this.persist()
   }
 
@@ -164,6 +219,7 @@ class AgentStateStore {
     delete this.state.histories[agentId]
     delete this.state.conversationTokens[agentId]
     delete this.state.tokenHistory[agentId]
+    delete this.state.summaries[agentId]
     await this.persist()
   }
 
@@ -181,6 +237,12 @@ class AgentStateStore {
             : {},
           tokenHistory: isRecord(parsed.tokenHistory)
             ? Object.fromEntries(Object.entries(parsed.tokenHistory).map(([id, points]) => [id, parseStoredTokenHistory(points)]))
+            : {},
+          summaries: isRecord(parsed.summaries)
+            ? Object.fromEntries(Object.entries(parsed.summaries).flatMap(([id, summary]) => {
+              const parsedSummary = parseStoredSummary(summary)
+              return parsedSummary ? [[id, parsedSummary]] : []
+            }))
             : {},
         }
       }
@@ -332,9 +394,9 @@ export class Agent {
     private readonly client: LlmClient,
   ) {}
 
-  async run(input: string, history: AgentMessage[] = []): Promise<AgentRunResult> {
+  async run(input: string, history: AgentMessage[] = [], summary?: string): Promise<AgentRunResult> {
     const validatedInput = validateInput(input, this.config.inputPolicy)
-    const messages = buildMessages(this.config, history, validatedInput)
+    const messages = buildMessages(this.config, history, validatedInput, summary)
     const startedAt = Date.now()
     const completion = await this.client.complete(messages, toLlmOptions(this.config))
     const output = applyOutputPolicy(completion.content, this.config.outputPolicy)
@@ -354,9 +416,9 @@ export class Agent {
     }
   }
 
-  async stream(input: string, history: AgentMessage[], onChunk: (content: string) => void): Promise<AgentRunResult> {
+  async stream(input: string, history: AgentMessage[], onChunk: (content: string) => void, summary?: string): Promise<AgentRunResult> {
     const validatedInput = validateInput(input, this.config.inputPolicy)
-    const messages = buildMessages(this.config, history, validatedInput)
+    const messages = buildMessages(this.config, history, validatedInput, summary)
     const startedAt = Date.now()
     let streamedOutput = ''
     let emittedOutput = ''
@@ -380,6 +442,91 @@ export class Agent {
       model: this.config.model,
       durationMs: Date.now() - startedAt,
       tokenMetrics,
+    }
+  }
+
+  async summarize(previousSummary: string | undefined, messagesToSummarize: AgentMessage[]) {
+    const messages: AgentMessage[] = [
+      {
+        role: 'system',
+        content: `Ты обновляешь рабочую память агента для продолжения диалога.
+
+На входе могут быть предыдущее summary и новые сообщения. Создай новое компактное summary, которое заменяет предыдущее summary.
+
+Сохрани только информацию, которая может понадобиться в следующих ответах:
+- цель пользователя и текущий контекст задачи;
+- подтверждённые факты, имена, даты, числа и предпочтения;
+- принятые решения и их причины;
+- ограничения, требования и запреты;
+- созданные артефакты, результаты и их состояние;
+- открытые вопросы, незавершённые действия и следующие шаги.
+
+Правила:
+- новые сообщения имеют приоритет над противоречащими им старыми;
+- не добавляй фактов, интерпретаций или рекомендаций от себя;
+- не повторяй диалог дословно и не сохраняй приветствия, воду и промежуточные рассуждения;
+- если факт не подтверждён, явно пометь его как неопределённый;
+- сохрани точные числа, даты, имена, ссылки и формулировки ограничений;
+- отвечай только summary на русском, без вступления;
+- объём: не более 250 слов.
+
+Формат:
+## Цель и контекст
+...
+## Факты и решения
+...
+## Ограничения и предпочтения
+...
+## Открытые вопросы / следующие шаги
+...`,
+      },
+      ...(previousSummary ? [{ role: 'user' as const, content: `Предыдущее резюме:\n${previousSummary}` }] : []),
+      { role: 'user', content: `Новые сообщения для включения в резюме:\n${formatMessagesForSummary(messagesToSummarize)}` },
+    ]
+    const completion = await this.client.complete(messages, toLlmOptions({ ...this.config, maxTokens: Math.min(this.config.maxTokens ?? 800, 800) }))
+    const metrics = createTokenMetrics(this.config, messages.map((message) => message.content).join('\n'), completion)
+    return { content: completion.content.trim(), metrics }
+  }
+
+  getContextInfo(history: AgentMessage[], storedSummary?: StoredSummary, input = '') {
+    const compressionEnabled = Boolean(this.config.contextCompression?.enabled)
+    const summary = compressionEnabled ? storedSummary : undefined
+    return createContextInfo(
+      this.config,
+      history,
+      summary?.content,
+      summary?.summarizedMessages ?? 0,
+      summary?.estimatedReplacedTokens ?? 0,
+      input,
+    )
+  }
+
+  async prepareContext(fullHistory: AgentMessage[], input: string, storedSummary?: StoredSummary) {
+    const policy = this.config.contextCompression
+    if (!policy?.enabled || countDialogMessages(fullHistory) < (policy.summarizeAfterMessages ?? 10)) {
+      return {
+        history: fullHistory,
+        summary: policy?.enabled ? storedSummary?.content : undefined,
+        summaryTokens: 0,
+        summaryToPersist: undefined,
+        info: this.getContextInfo(fullHistory, storedSummary, input),
+      }
+    }
+
+    const summaryResult = await this.summarize(storedSummary?.content, fullHistory)
+    const summaryToPersist: StoredSummary = {
+      content: summaryResult.content,
+      summarizedMessages: (storedSummary?.summarizedMessages ?? 0) + fullHistory.length,
+      estimatedReplacedTokens: (storedSummary?.estimatedReplacedTokens ?? 0) + estimateMessagesTokens(fullHistory),
+      historyCompacted: true,
+      updatedAt: new Date().toISOString(),
+    }
+    return {
+      history: [] as AgentMessage[],
+      summary: summaryToPersist.content,
+      summaryTokens: summaryResult.metrics.totalTokens,
+      summaryToPersist,
+      info: this.getContextInfo([], summaryToPersist, input),
     }
   }
 }
@@ -479,40 +626,65 @@ export class AgentService {
     return this.stateStore.getTokenHistory(id)
   }
 
+  async getContextInfo(id: string) {
+    await this.ready
+    const agent = this.get(id)
+    const history = await this.stateStore.getHistory(id)
+    return agent.getContextInfo(history.filter((message) => !message.archived), await this.stateStore.getSummary(id))
+  }
+
   async clearHistory(id: string) {
     await this.ready
     this.get(id)
     await this.stateStore.clearHistory(id)
   }
 
+  async clearSummary(id: string) {
+    await this.ready
+    this.get(id)
+    await this.stateStore.clearSummary(id)
+  }
+
   async run(id: string, input: string, providedHistory: AgentMessage[] = []) {
     await this.ready
     const agent = this.get(id)
     const storedHistory = await this.stateStore.getHistory(id)
-    const sourceHistory = storedHistory.length > 0 ? storedHistory : providedHistory
-    const result = await agent.run(input, sourceHistory)
+    const activeHistory = storedHistory.filter((message) => !message.archived)
+    const sourceHistory = activeHistory.length > 0 ? activeHistory : providedHistory
+    const preparedContext = await agent.prepareContext(sourceHistory, input, await this.stateStore.getSummary(id))
+    const result = await agent.run(input, preparedContext.history, preparedContext.summary)
+    if (preparedContext.summaryToPersist) {
+      await this.stateStore.setSummary(id, preparedContext.summaryToPersist)
+      await this.stateStore.archiveActiveHistory(id)
+    }
     const contextMessages = await this.stateStore.appendHistory(id, [
       { role: 'user', content: result.input },
       { role: 'assistant', content: result.output },
     ])
-    const conversationTokens = await this.stateStore.addConversationTokens(id, result.tokenMetrics)
+    const conversationTokens = await this.stateStore.addConversationTokens(id, result.tokenMetrics, preparedContext.summaryTokens)
     const tokenHistory = await this.stateStore.getTokenHistory(id)
-    return { ...result, contextMessages, conversationTokens, tokenHistory }
+    return { ...result, contextMessages, conversationTokens, tokenHistory, context: preparedContext.info }
   }
 
   async stream(id: string, input: string, providedHistory: AgentMessage[], onChunk: (content: string) => void) {
     await this.ready
     const agent = this.get(id)
     const storedHistory = await this.stateStore.getHistory(id)
-    const sourceHistory = storedHistory.length > 0 ? storedHistory : providedHistory
-    const result = await agent.stream(input, sourceHistory, onChunk)
+    const activeHistory = storedHistory.filter((message) => !message.archived)
+    const sourceHistory = activeHistory.length > 0 ? activeHistory : providedHistory
+    const preparedContext = await agent.prepareContext(sourceHistory, input, await this.stateStore.getSummary(id))
+    const result = await agent.stream(input, preparedContext.history, onChunk, preparedContext.summary)
+    if (preparedContext.summaryToPersist) {
+      await this.stateStore.setSummary(id, preparedContext.summaryToPersist)
+      await this.stateStore.archiveActiveHistory(id)
+    }
     const contextMessages = await this.stateStore.appendHistory(id, [
       { role: 'user', content: result.input },
       { role: 'assistant', content: result.output },
     ])
-    const conversationTokens = await this.stateStore.addConversationTokens(id, result.tokenMetrics)
+    const conversationTokens = await this.stateStore.addConversationTokens(id, result.tokenMetrics, preparedContext.summaryTokens)
     const tokenHistory = await this.stateStore.getTokenHistory(id)
-    return { ...result, contextMessages, conversationTokens, tokenHistory }
+    return { ...result, contextMessages, conversationTokens, tokenHistory, context: preparedContext.info }
   }
 
   async runEphemeral(input: string, config: AgentConfig, history: AgentMessage[]) {
@@ -520,6 +692,42 @@ export class AgentService {
     const normalizedConfig = normalizeAgentConfig(config, this.defaultDeepSeekModel)
     const agent = new Agent('context-demo', normalizedConfig, this.client)
     return agent.run(input, history)
+  }
+
+  async compareCompression(input: string, history: AgentMessage[], summarizeAfterMessages = 10) {
+    await this.ready
+    const baseConfig: AgentConfig = {
+      name: 'Сравнение сжатия',
+      provider: 'deepseek',
+      model: this.defaultDeepSeekModel,
+      systemPrompt: 'Отвечай по существу, учитывай все факты из контекста и не упоминай техническое устройство истории.',
+    }
+    const withoutCompression = new Agent('without-compression', normalizeAgentConfig(baseConfig, this.defaultDeepSeekModel), this.client)
+    const withCompression = new Agent('with-compression', normalizeAgentConfig({
+      ...baseConfig,
+      contextCompression: { enabled: true, summarizeAfterMessages },
+    }, this.defaultDeepSeekModel), this.client)
+
+    const [withoutResult, preparedContext] = await Promise.all([
+      withoutCompression.run(input, history),
+      withCompression.prepareContext(history, input),
+    ])
+    const summary = preparedContext.summaryToPersist
+    if (!summary) throw new AgentError('Подготовленный сценарий не достиг порога сжатия.', 500)
+
+    const withResult = await withCompression.run(input, preparedContext.history, preparedContext.summary)
+    const compressedTotalTokens = preparedContext.summaryTokens + withResult.tokenMetrics.totalTokens
+
+    return {
+      withoutCompression: { ...withoutResult, totalTokensWithSummary: withoutResult.tokenMetrics.totalTokens },
+      withCompression: {
+        ...withResult,
+        totalTokensWithSummary: compressedTotalTokens,
+        summaryTokens: preparedContext.summaryTokens,
+        summary: summary.content,
+        summarizedMessages: summary.summarizedMessages,
+      },
+    }
   }
 
   private register(id: string, config: Required<Pick<AgentConfig, 'provider' | 'model'>> & AgentConfig, createdAt: string) {
@@ -699,12 +907,49 @@ function estimateTokens(value: string) {
   return normalized ? Math.max(1, Math.ceil(normalized.length / 3)) : 0
 }
 
-function buildMessages(config: AgentConfig, history: AgentMessage[], input: string): AgentMessage[] {
+function buildMessages(config: AgentConfig, history: AgentMessage[], input: string, summary?: string): AgentMessage[] {
   return [
     ...(config.systemPrompt ? [{ role: 'system' as const, content: config.systemPrompt }] : []),
+    ...(summary ? [{
+      role: 'system' as const,
+      content: `Сжатое резюме ранней части диалога. Используй его как контекст, но не упоминай сжатие без необходимости.\n\n${summary}`,
+    }] : []),
     ...history,
     { role: 'user' as const, content: input },
   ]
+}
+
+function formatMessagesForSummary(messages: AgentMessage[]) {
+  return messages.map((message) => `${message.role === 'assistant' ? 'Агент' : message.role === 'user' ? 'Пользователь' : 'Система'}: ${message.content}`).join('\n\n')
+}
+
+function countDialogMessages(messages: AgentMessage[]) {
+  return messages.filter((message) => message.role === 'user' || message.role === 'assistant').length
+}
+
+function createContextInfo(
+  config: AgentConfig,
+  retainedHistory: AgentMessage[],
+  summary: string | undefined,
+  summarizedMessages: number,
+  estimatedReplacedTokens: number,
+  input = '',
+): AgentContextInfo {
+  const estimatedFullPromptTokens = estimateMessagesTokens(buildMessages(config, retainedHistory, input)) + estimatedReplacedTokens
+  const estimatedSentPromptTokens = estimateMessagesTokens(buildMessages(config, retainedHistory, input, summary))
+  return {
+    enabled: Boolean(config.contextCompression?.enabled),
+    summary,
+    summarizedMessages,
+    retainedMessages: retainedHistory.length,
+    estimatedFullPromptTokens,
+    estimatedSentPromptTokens,
+    estimatedSavedTokens: Math.max(0, estimatedFullPromptTokens - estimatedSentPromptTokens),
+  }
+}
+
+function estimateMessagesTokens(messages: AgentMessage[]) {
+  return messages.reduce((total, message) => total + estimateTokens(message.content) + 4, 0)
 }
 
 function validateInput(input: string, policy: AgentConfig['inputPolicy']) {
@@ -759,6 +1004,7 @@ function normalizeAgentConfig(value: unknown, defaultDeepSeekModel: string) {
     maxTokens: readInteger(input.maxTokens, 1, 100000),
     inputPolicy: normalizeInputPolicy(input.inputPolicy),
     outputPolicy: normalizeOutputPolicy(input.outputPolicy),
+    contextCompression: normalizeContextCompression(input.contextCompression),
   }
 
   return removeUndefined(config)
@@ -779,6 +1025,14 @@ function normalizeOutputPolicy(value: unknown) {
     maxCharacters: readInteger(value.maxCharacters, 1, 1000000),
     format,
     stopSequences: stopSequences.length ? stopSequences : undefined,
+  })
+}
+
+function normalizeContextCompression(value: unknown) {
+  if (!isRecord(value)) return undefined
+  return removeUndefined({
+    enabled: typeof value.enabled === 'boolean' ? value.enabled : undefined,
+    summarizeAfterMessages: readInteger(value.summarizeAfterMessages, 1, 100) ?? readInteger(value.summarizeAfterUserMessages, 1, 100),
   })
 }
 
@@ -833,7 +1087,7 @@ function parseStoredMessages(value: unknown): AgentMessage[] {
   return value.filter((item): item is AgentMessage => isRecord(item)
     && ['system', 'user', 'assistant'].includes(String(item.role))
     && typeof item.content === 'string')
-    .map((item) => ({ role: item.role, content: item.content }))
+    .map((item) => ({ role: item.role, content: item.content, ...(item.archived === true ? { archived: true } : {}) }))
 }
 
 function parseStoredTokenHistory(value: unknown): AgentTokenUsagePoint[] {
@@ -845,6 +1099,7 @@ function parseStoredTokenHistory(value: unknown): AgentTokenUsagePoint[] {
     const completionTokens = readUsageInteger(item, 'completionTokens')
     const totalTokens = readUsageInteger(item, 'totalTokens')
     const conversationTokens = readUsageInteger(item, 'conversationTokens')
+    const summaryTokens = readUsageInteger(item, 'summaryTokens')
     if (promptTokens === undefined || completionTokens === undefined || totalTokens === undefined || conversationTokens === undefined) return []
     return [{
       turn: readUsageInteger(item, 'turn') ?? index + 1,
@@ -853,8 +1108,22 @@ function parseStoredTokenHistory(value: unknown): AgentTokenUsagePoint[] {
       completionTokens,
       totalTokens,
       conversationTokens,
+      ...(summaryTokens === undefined ? {} : { summaryTokens }),
     }]
   })
+}
+
+function parseStoredSummary(value: unknown): StoredSummary | undefined {
+  if (!isRecord(value) || typeof value.content !== 'string' || !value.content.trim() || typeof value.updatedAt !== 'string') return undefined
+  const summarizedMessages = readInteger(value.summarizedMessages, 0, 1_000_000)
+  if (summarizedMessages === undefined) return undefined
+  return {
+    content: value.content,
+    summarizedMessages,
+    estimatedReplacedTokens: readInteger(value.estimatedReplacedTokens, 0, 10_000_000) ?? estimateTokens(value.content),
+    historyCompacted: value.historyCompacted === true,
+    updatedAt: value.updatedAt,
+  }
 }
 
 function isNodeError(error: unknown): error is NodeJS.ErrnoException {

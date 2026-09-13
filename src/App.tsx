@@ -5,7 +5,7 @@ import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
 
 type MessageRole = 'user' | 'assistant'
-type Page = 'chat' | 'compare' | 'reasoning' | 'temperature' | 'models' | 'agents' | 'context-demo'
+type Page = 'chat' | 'compare' | 'reasoning' | 'temperature' | 'models' | 'agents' | 'context-demo' | 'context-comparison'
 
 type ChatMessage = {
   id: string
@@ -72,13 +72,16 @@ type AgentConfig = {
   maxTokens?: number
   inputPolicy?: { maxCharacters?: number }
   outputPolicy?: { maxCharacters?: number; format?: 'text' | 'json'; stopSequences?: string[] }
+  contextCompression?: { enabled?: boolean; summarizeAfterMessages?: number }
 }
 type AgentSummary = { id: string; config: AgentConfig; createdAt?: string }
 type AgentsListResult = { agents: AgentSummary[]; count: number }
 type AgentTokenMetrics = { inputTokens: number; promptTokens: number; completionTokens: number; totalTokens: number }
-type AgentTokenUsagePoint = AgentTokenMetrics & { turn: number; conversationTokens: number }
-type AgentStreamChunk = { content?: string; error?: string; done?: boolean; result?: { durationMs?: number; tokens?: number; conversationTokens?: number; contextMessages?: number; tokenMetrics?: AgentTokenMetrics } }
-type AgentHistoryResult = { messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>; count: number; conversationTokens?: number }
+type AgentTokenUsagePoint = AgentTokenMetrics & { turn: number; conversationTokens: number; summaryTokens?: number }
+type AgentContextInfo = { enabled: boolean; summary?: string; summarizedMessages: number; retainedMessages: number; estimatedFullPromptTokens: number; estimatedSentPromptTokens: number; estimatedSavedTokens: number; summaryTokens?: number }
+type AgentContextCompression = { enabled?: boolean; summarizeAfterMessages?: number }
+type AgentStreamChunk = { content?: string; error?: string; done?: boolean; result?: { durationMs?: number; tokens?: number; conversationTokens?: number; contextMessages?: number; tokenMetrics?: AgentTokenMetrics; context?: AgentContextInfo } }
+type AgentHistoryResult = { messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string; archived?: boolean }>; count: number; conversationTokens?: number }
 type AgentModelOption = { value: string; label: string }
 type ContextDemoScenario = 'short' | 'long' | 'overflow'
 type ContextDemoResponse = {
@@ -91,10 +94,15 @@ type ContextDemoResponse = {
   conversationTokens: number
   tokenHistory?: AgentTokenUsagePoint[]
   messages?: ContextDemoMessage[]
-  result?: { output: string; durationMs?: number; tokenMetrics?: AgentTokenMetrics }
+  context?: AgentContextInfo
+  compression?: AgentContextCompression
+  result?: { output: string; durationMs?: number; tokenMetrics?: AgentTokenMetrics; context?: AgentContextInfo }
   error?: string
 }
-type ContextDemoMessage = { role: 'user' | 'assistant'; content: string }
+type ContextDemoMessage = { role: 'user' | 'assistant'; content: string; archived?: boolean }
+type ContextComparisonPreparation = { title: string; model: string; history: ContextDemoMessage[]; summarizeAfterMessages: number; input: string }
+type ContextCompressionComparisonSide = { output: string; tokenMetrics: AgentTokenMetrics; totalTokensWithSummary: number; summaryTokens?: number; summary?: string; summarizedMessages?: number }
+type ContextCompressionComparisonResult = { input: string; model: string; result: { withoutCompression: ContextCompressionComparisonSide; withCompression: ContextCompressionComparisonSide } }
 
 const agentModelOptions: Record<AgentProvider, AgentModelOption[]> = {
   deepseek: [
@@ -172,6 +180,9 @@ function App() {
           <button className={`page-nav-button ${activePage === 'context-demo' ? 'active' : ''}`} onClick={() => setActivePage('context-demo')}>
             <span>◫</span> Контекст
           </button>
+          <button className={`page-nav-button ${activePage === 'context-comparison' ? 'active' : ''}`} onClick={() => setActivePage('context-comparison')}>
+            <span>⇄</span> Сжатие
+          </button>
         </nav>
 
         <div className="sidebar-bottom">
@@ -181,7 +192,7 @@ function App() {
       </aside>
 
       <main className="day-main">
-        {activePage === 'chat' ? <ChatPage /> : activePage === 'compare' ? <ComparePage /> : activePage === 'reasoning' ? <ReasoningPage /> : activePage === 'temperature' ? <TemperaturePage /> : activePage === 'models' ? <ModelsPage /> : activePage === 'agents' ? <AgentsPage /> : <ContextDemoPage />}
+        {activePage === 'chat' ? <ChatPage /> : activePage === 'compare' ? <ComparePage /> : activePage === 'reasoning' ? <ReasoningPage /> : activePage === 'temperature' ? <TemperaturePage /> : activePage === 'models' ? <ModelsPage /> : activePage === 'agents' ? <AgentsPage /> : activePage === 'context-demo' ? <ContextDemoPage /> : <ContextCompressionComparisonPage />}
       </main>
     </div>
   )
@@ -713,6 +724,8 @@ function ContextDemoPage() {
   const [input, setInput] = useState('')
   const [lastMetrics, setLastMetrics] = useState<AgentTokenMetrics | null>(null)
   const [lastDuration, setLastDuration] = useState<number | null>(null)
+  const [lastContext, setLastContext] = useState<AgentContextInfo | null>(null)
+  const [compressionSettings, setCompressionSettings] = useState({ summarizeAfterMessages: 10 })
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -725,6 +738,8 @@ function ContextDemoPage() {
     setMessages(data.messages ?? [])
     setLastMetrics(null)
     setLastDuration(null)
+    setLastContext(null)
+    setCompressionSettings({ summarizeAfterMessages: data.compression?.summarizeAfterMessages ?? 10 })
     setInput('')
   }
 
@@ -775,6 +790,30 @@ function ContextDemoPage() {
     }
   }
 
+  async function saveCompression(enabled: boolean) {
+    if (isLoading) return
+    if (!Number.isInteger(compressionSettings.summarizeAfterMessages) || compressionSettings.summarizeAfterMessages < 1) {
+      setError('Число сообщений должно быть целым и не меньше 1.')
+      return
+    }
+    setIsLoading(true)
+    setError(null)
+    try {
+      const response = await fetch('/api/context-demo/compression', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled, ...compressionSettings }),
+      })
+      const data = (await response.json()) as ContextDemoResponse & ApiError
+      if (!response.ok) throw new Error(data.error || 'Не удалось изменить режим сжатия.')
+      applySession(data)
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : 'Не удалось изменить режим сжатия.')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
   async function sendMessage(event: FormEvent) {
     event.preventDefault()
     const trimmedInput = input.trim()
@@ -793,6 +832,7 @@ function ContextDemoPage() {
       setMessages((current) => data.messages ?? [...current, { role: 'user', content: data.input || trimmedInput }, { role: 'assistant', content: data.result!.output }])
       setLastMetrics(data.result.tokenMetrics ?? null)
       setLastDuration(data.result.durationMs ?? null)
+      setLastContext(data.context ?? data.result.context ?? null)
       setInput('')
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : 'Не удалось получить ответ модели.')
@@ -801,20 +841,94 @@ function ContextDemoPage() {
     }
   }
 
+  const context = lastContext ?? session?.context
+  const compressionEnabled = context?.enabled ?? true
+
   return <div className="page-view context-demo-page">
-    <header className="page-header"><div><p className="eyebrow">Демонстрация токенов</p><h1>Один агент, один диалог</h1><p className="header-description">Ведите разговор с LFM2.5 2.6B и смотрите, как меняется расход токенов на каждом запросе.</p></div><div className="model-badge"><span className="pulse-dot" /> LFM2.5 2.6B</div></header>
-    <div className="context-demo-note">«Текущий запрос» — приблизительная оценка токенов только нового сообщения пользователя. «Весь промпт» — точный <code>prompt_tokens</code> системного промпта, истории и нового вопроса. <code>completion_tokens</code> — токены ответа модели. «Всего за диалог» — сумма <code>total_tokens</code> всех успешных запросов.</div>
+    <header className="page-header"><div><p className="eyebrow">Управление контекстом</p><h1>Один агент, один диалог</h1><p className="header-description">Сжимайте раннюю историю в summary и сравнивайте размер промпта с полной историей.</p></div><div className="model-badge"><span className="pulse-dot" /> LFM2.5 2.6B</div></header>
+    <div className="context-demo-note">Когда в истории накопится N сообщений диалога, перед следующим вопросом они вместе с предыдущим summary будут сжаты в новую сводку. В этот запрос попадут только summary и новый вопрос.</div>
     {error && <div className="error-message" role="alert">{error}</div>}
     <div className="context-demo-layout">
       <section className="context-demo-chat">
-        <div className="context-demo-chat-heading"><div><p className="eyebrow">Чат</p><h2>Диалог с LFM2.5 2.6B</h2><p>История отправляется в модель заново при каждом сообщении.</p></div><button className="clear-context-button" type="button" onClick={() => void resetDemo()} disabled={isLoading}>Начать заново</button></div>
-        <div className="context-demo-messages" aria-live="polite">{messages.length === 0 ? <div className="context-demo-empty">Напишите первое сообщение агенту.</div> : messages.map((message, index) => <div className={`context-demo-message ${message.role}`} key={`${message.role}-${index}`}><small>{message.role === 'user' ? 'Вы' : 'LFM2.5 2.6B'}</small><div className="reasoning-content"><MarkdownContent content={message.content} /></div></div>)}</div>
+        <div className="context-demo-chat-heading"><div><p className="eyebrow">Чат</p><h2>Диалог с LFM2.5 2.6B</h2><p>{compressionEnabled ? 'При достижении порога агент заменит накопленную историю summary перед следующим ответом.' : 'В модель отправляется полная история диалога.'}</p></div><div className="context-demo-actions"><button className={`context-compression-button ${compressionEnabled ? 'enabled' : ''}`} type="button" onClick={() => void saveCompression(!compressionEnabled)} disabled={isLoading}>{compressionEnabled ? 'Сжатие: включено' : 'Сжатие: выключено'}</button><button className="clear-context-button" type="button" onClick={() => void resetDemo()} disabled={isLoading}>Начать заново</button></div></div>
+        <div className="context-demo-messages" aria-live="polite">{messages.length === 0 ? <div className="context-demo-empty">Напишите первое сообщение агенту.</div> : messages.map((message, index) => <div className={`context-demo-message ${message.role} ${message.archived ? 'archived' : ''}`} key={`${message.role}-${index}`}><small>{message.role === 'user' ? 'Вы' : 'LFM2.5 2.6B'}{message.archived ? ' · в summary' : ''}</small><div className="reasoning-content"><MarkdownContent content={message.content} /></div></div>)}</div>
         <form className="context-demo-composer" onSubmit={sendMessage}><textarea value={input} onChange={(event) => setInput(event.target.value)} placeholder="Напишите следующее сообщение агенту..." rows={3} disabled={isLoading} /><button className="compare-button" type="submit" disabled={isLoading || !input.trim()}>{isLoading ? 'Получаем ответ...' : 'Отправить'} <span>→</span></button></form>
       </section>
-      <aside className="context-demo-sidebar"><div className="context-demo-sidebar-heading"><p className="eyebrow">Метрики последнего запроса</p><h2>Токены</h2>{lastDuration !== null && <span>Ответ за {lastDuration} мс</span>}</div>{lastMetrics ? <AgentTokenMetricsView metrics={lastMetrics} conversationTokens={session?.conversationTokens} /> : <div className="context-demo-metrics-empty">После первого ответа здесь появятся четыре значения.</div>}<div className="context-demo-sidebar-info"><strong>Метрики</strong><span>«Текущий запрос» — приблизительная оценка нового сообщения.</span><span>«Весь промпт» — prompt_tokens системного промпта, истории и нового вопроса.</span><span>«Ответ модели» — completion_tokens этого вызова.</span><span>«Всего за диалог» — сумма total_tokens всех успешных вызовов.</span><span>Лимит модели — 65 536 токенов.</span></div><button className="context-demo-delete-button" type="button" onClick={() => void deleteDemoAgent()} disabled={isLoading}>Удалить агента и начать заново</button></aside>
+      <aside className="context-demo-sidebar"><div className="context-demo-sidebar-heading"><p className="eyebrow">Метрики последнего запроса</p><h2>Токены</h2>{lastDuration !== null && <span>Ответ за {lastDuration} мс</span>}</div>{lastMetrics ? <AgentTokenMetricsView metrics={lastMetrics} conversationTokens={session?.conversationTokens} /> : <div className="context-demo-metrics-empty">После первого ответа здесь появятся четыре значения.</div>}<div className="context-demo-sidebar-info"><strong>Метрики</strong><span>«Текущий запрос» — приблизительная оценка нового сообщения.</span><span>«Весь промпт» — точный <code>prompt_tokens</code> фактически отправленного контекста.</span><span>«Ответ модели» — <code>completion_tokens</code> этого вызова.</span><span>«Всего за диалог» — сумма <code>total_tokens</code> всех успешных вызовов, включая вызовы для summary.</span><span>Лимит модели — 65 536 токенов.</span></div><button className="context-demo-delete-button" type="button" onClick={() => void deleteDemoAgent()} disabled={isLoading}>Удалить агента и начать заново</button></aside>
+      <section className="context-compression-summary"><div className="context-demo-chart-heading"><div><p className="eyebrow">Сжатый контекст</p><h2>{compressionEnabled ? 'Режим сжатия включён' : 'Режим сжатия выключен'}</h2></div><span>{context?.summarizedMessages ?? 0} сообщений в summary</span></div><form className="context-compression-settings" onSubmit={(event) => { event.preventDefault(); void saveCompression(compressionEnabled) }}><label>Суммаризировать после N сообщений диалога<input type="number" min="1" max="100" value={compressionSettings.summarizeAfterMessages} onChange={(event) => setCompressionSettings({ summarizeAfterMessages: Number(event.target.value) })} disabled={isLoading} /></label><button className="context-compression-button" type="submit" disabled={isLoading}>Применить настройки</button></form><div className="context-compression-stats"><div><small>Следующий без сжатия</small><strong>~{context?.estimatedFullPromptTokens ?? 0}</strong></div><div><small>Следующий в модель</small><strong>~{context?.estimatedSentPromptTokens ?? 0}</strong></div><div><small>Оценочная экономия</small><strong>~{context?.estimatedSavedTokens ?? 0}</strong></div><div><small>Новых сообщений</small><strong>{context?.retainedMessages ?? 0}</strong></div></div>{compressionEnabled ? context?.summary ? <details className="context-summary-details" open><summary>Summary, подставляемый в следующий запрос</summary><div className="reasoning-content"><MarkdownContent content={context.summary} /></div></details> : <p className="context-summary-empty">Summary будет создан перед следующим вопросом, когда в истории накопится {compressionSettings.summarizeAfterMessages} сообщений диалога.</p> : <p className="context-summary-empty">Включите сжатие и продолжите диалог, чтобы заменить накопленную историю summary. Для сравнения переключайте режим перед следующим запросом.</p>}</section>
       <section className="context-demo-chart-section"><div className="context-demo-chart-heading"><div><p className="eyebrow">Динамика</p><h2>Расход токенов по запросам</h2></div><span>{session?.tokenHistory?.length ?? 0} запросов</span></div><TokenUsageChart points={session?.tokenHistory ?? []} /></section>
     </div>
   </div>
+}
+
+function ContextCompressionComparisonPage() {
+  const [preparation, setPreparation] = useState<ContextComparisonPreparation | null>(null)
+  const [input, setInput] = useState('')
+  const [result, setResult] = useState<ContextCompressionComparisonResult | null>(null)
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    void loadPreparation()
+  }, [])
+
+  async function loadPreparation() {
+    setIsLoading(true)
+    setError(null)
+    try {
+      const response = await fetch('/api/context-comparison')
+      const data = (await response.json()) as ContextComparisonPreparation & ApiError
+      if (!response.ok) throw new Error(data.error || 'Не удалось подготовить сравнение.')
+      setPreparation(data)
+      setInput(data.input)
+      setResult(null)
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : 'Не удалось подготовить сравнение.')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  async function compare(event: FormEvent) {
+    event.preventDefault()
+    if (!input.trim() || isLoading) return
+    setIsLoading(true)
+    setError(null)
+    setResult(null)
+    try {
+      const response = await fetch('/api/context-comparison', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ input: input.trim() }),
+      })
+      const data = (await response.json()) as ContextCompressionComparisonResult & ApiError
+      if (!response.ok || !data.result) throw new Error(data.error || 'Не удалось сравнить ответы.')
+      setResult(data)
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : 'Не удалось сравнить ответы.')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const withoutTokens = result?.result.withoutCompression.totalTokensWithSummary ?? 0
+  const withTokens = result?.result.withCompression.totalTokensWithSummary ?? 0
+  const withMainTokens = result?.result.withCompression.tokenMetrics.totalTokens ?? 0
+  const summaryTokens = result?.result.withCompression.summaryTokens ?? 0
+  const difference = withoutTokens - withTokens
+  const percentage = withoutTokens ? Math.round((difference / withoutTokens) * 100) : 0
+
+  return <div className="page-view compression-comparison-page">
+    <header className="page-header"><div><p className="eyebrow">День 9 · эксперимент</p><h1>Сжатие контекста: два ответа</h1><p className="header-description">Один и тот же подготовленный диалог и один вопрос отправляются в DeepSeek с полной историей и с summary.</p></div><div className="model-badge"><span className="pulse-dot" /> DeepSeek</div></header>
+    {error && <div className="error-message" role="alert">{error}</div>}
+    <section className="compression-comparison-chat" aria-label="Подготовленная история чата"><div className="compression-prepared-history">{preparation?.history.map((message, index) => <div key={`${message.role}-${index}`} className={message.role}><small>{message.role === 'user' ? 'Вы' : 'Агент'}</small><span>{message.content}</span></div>)}</div></section>
+    <form className="compression-comparison-form" onSubmit={compare}><label>Финальный вопрос для обоих режимов<textarea value={input} onChange={(event) => setInput(event.target.value)} rows={3} disabled={isLoading} /></label><div><button className="compare-button" type="submit" disabled={isLoading || !input.trim()}>{isLoading ? 'DeepSeek формирует два ответа...' : 'Отправить и сравнить'} <span>→</span></button><button className="clear-context-button" type="button" onClick={() => void loadPreparation()} disabled={isLoading}>Сбросить до 10 сообщений</button></div></form>
+    {result && <><section className="compression-result-grid"><CompressionComparisonCard title="Без сжатия" tone="full" side={result.result.withoutCompression} /><CompressionComparisonCard title="Со сжатием" tone="compressed" side={result.result.withCompression} /></section><div className="compression-comparison-total"><span>Без сжатия: <strong>{withoutTokens}</strong> ток.</span><span>Основной запрос с summary: <strong>{withMainTokens}</strong> ток.</span><span>Создание summary: <strong>{summaryTokens}</strong> ток.</span><span className={difference >= 0 ? 'saved' : 'increased'}>{difference >= 0 ? `Экономия с учётом обоих вызовов: ${difference} ток. (${percentage}%)` : `Разница с учётом обоих вызовов: +${Math.abs(difference)} ток. (${Math.abs(percentage)}%)`}</span></div><p className="compression-comparison-caption">Показатели «Основной запрос с summary» и «Создание summary» — отдельные точные <code>total_tokens</code> двух API-вызовов. Разница рассчитывается по их сумме.</p></>}
+  </div>
+}
+
+function CompressionComparisonCard({ title, tone, side }: { title: string; tone: 'full' | 'compressed'; side: ContextCompressionComparisonSide }) {
+  return <article className={`compression-result-card ${tone}`}><header><div><span className="compression-result-dot" /><strong>{title}</strong></div><div className="compression-result-totals">{tone === 'compressed' ? <><span>Основной: {side.tokenMetrics.totalTokens} ток.</span><span>Summary: {side.summaryTokens ?? 0} ток.</span></> : <span>Итого: {side.totalTokensWithSummary} ток.</span>}</div></header><div className="compression-result-answer"><MarkdownContent content={side.output} /></div><footer><span>Промпт: {side.tokenMetrics.promptTokens}</span><span>Ответ: {side.tokenMetrics.completionTokens}</span>{tone === 'compressed' && <span>В summary: {side.summarizedMessages ?? 0} сообщ.</span>}</footer>{tone === 'compressed' && side.summary && <details className="compression-result-summary"><summary>Показать summary</summary><MarkdownContent content={side.summary} /></details>}</article>
 }
 
 function ModelsPage() {
