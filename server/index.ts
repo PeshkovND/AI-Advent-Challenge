@@ -3,6 +3,7 @@ import express, { Response } from 'express'
 import { AgentError, AgentService, createAgentRouter } from './agent-service'
 import { isContextDemoScenario, prepareContextDemo, resetContextDemo } from './context-demo'
 import { CONTEXT_COMPARISON_SUMMARIZE_AFTER_MESSAGES, contextComparisonDefaultInput, contextComparisonHistory } from './context-comparison'
+import { ContextStrategiesService } from './context-strategies'
 
 type ChatRole = 'system' | 'user' | 'assistant'
 
@@ -114,6 +115,8 @@ const agentService = new AgentService({
   openRouterApiKey,
   defaultDeepSeekModel: model,
 })
+const contextStrategiesService = new ContextStrategiesService(agentService, model)
+agentService.setContextStrategiesService(contextStrategiesService)
 
 const CONTEXT_DEMO_AGENT_ID = 'context-demo'
 const CONTEXT_DEMO_MODEL = 'liquid/lfm-2.5-2.6b:free'

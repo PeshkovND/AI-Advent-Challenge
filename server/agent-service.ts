@@ -22,6 +22,7 @@ export type AgentTokenUsagePoint = AgentTokenMetrics & {
   turn: number
   conversationTokens: number
   summaryTokens?: number
+  strategyTokens?: number
 }
 
 export type AgentContextCompression = {
@@ -56,6 +57,37 @@ export type AgentConfig = {
     stopSequences?: string[]
   }
   contextCompression?: AgentContextCompression
+  /**
+   * Optional context policy used by the Day 10 strategy demo. The policy is
+   * part of the agent configuration so the Agent, rather than the storage
+   * service, decides which messages belong in the model prompt.
+   */
+  contextStrategy?: AgentContextStrategyConfig
+}
+
+export type AgentContextStrategy = 'sliding' | 'facts' | 'branching'
+
+export type AgentContextStrategyConfig = {
+  strategy: AgentContextStrategy
+  windowSize?: number
+  facts?: Record<string, string[]>
+}
+
+export type AgentContextPreparation = {
+  config: AgentConfig
+  history: AgentMessage[]
+  strategyTokenMetrics?: AgentTokenMetrics
+  strategyError?: string
+}
+
+export type ContextStrategiesServiceLike = {
+  prepareAgentContext(agentId: string, input: string, config: AgentConfig, history: AgentMessage[]): Promise<AgentContextPreparation>
+  recordAgentTurn(agentId: string, config: AgentConfig, input: string, output: string, tokenMetrics: AgentTokenMetrics): Promise<void>
+  getAgentContext?(agentId: string, config: AgentConfig): Promise<unknown>
+  resetAgentContext?(agentId: string): Promise<unknown>
+  setAgentWindowSize?(agentId: string, value: unknown, config: AgentConfig): Promise<unknown>
+  createAgentCheckpoint?(agentId: string): Promise<unknown>
+  activateAgentBranch?(agentId: string, branchId: unknown): Promise<unknown>
 }
 
 export type AgentRunResult = {
@@ -71,6 +103,8 @@ export type AgentRunResult = {
   conversationTokens?: number
   contextMessages?: number
   tokenMetrics: AgentTokenMetrics
+  strategyTokenMetrics?: AgentTokenMetrics
+  strategyError?: string
   tokenHistory?: AgentTokenUsagePoint[]
   context?: AgentContextInfo
 }
@@ -160,12 +194,12 @@ class AgentStateStore {
     await this.persist()
   }
 
-  async addConversationTokens(agentId: string, metrics: AgentTokenMetrics, summaryTokens = 0) {
+  async addConversationTokens(agentId: string, metrics: AgentTokenMetrics, summaryTokens = 0, strategyTokens = 0) {
     await this.ready
-    const conversationTokens = (this.state.conversationTokens[agentId] ?? 0) + metrics.totalTokens + summaryTokens
+    const conversationTokens = (this.state.conversationTokens[agentId] ?? 0) + metrics.totalTokens + summaryTokens + strategyTokens
     this.state.conversationTokens[agentId] = conversationTokens
     const history = this.state.tokenHistory[agentId] ?? []
-    this.state.tokenHistory[agentId] = [...history, { ...metrics, turn: history.length + 1, conversationTokens, ...(summaryTokens ? { summaryTokens } : {}) }]
+    this.state.tokenHistory[agentId] = [...history, { ...metrics, turn: history.length + 1, conversationTokens, ...(summaryTokens ? { summaryTokens } : {}), ...(strategyTokens ? { strategyTokens } : {}) }]
     await this.persist()
     return conversationTokens
   }
@@ -388,21 +422,33 @@ class LlmClient {
 }
 
 export class Agent {
+  private contextStrategies?: ContextStrategiesServiceLike
+
   constructor(
     readonly id: string,
     readonly config: Required<Pick<AgentConfig, 'provider' | 'model'>> & AgentConfig,
     private readonly client: LlmClient,
-  ) {}
+    contextStrategies?: ContextStrategiesServiceLike,
+  ) {
+    this.contextStrategies = contextStrategies
+  }
+
+  setContextStrategiesService(contextStrategies: ContextStrategiesServiceLike) {
+    this.contextStrategies = contextStrategies
+  }
 
   async run(input: string, history: AgentMessage[] = [], summary?: string): Promise<AgentRunResult> {
     const validatedInput = validateInput(input, this.config.inputPolicy)
-    const messages = buildMessages(this.config, history, validatedInput, summary)
+    const prepared = this.contextStrategies
+      ? await this.contextStrategies.prepareAgentContext(this.id, validatedInput, this.config, history)
+      : { config: this.config, history }
+    const messages = buildMessages(prepared.config, prepared.history, validatedInput, summary)
     const startedAt = Date.now()
     const completion = await this.client.complete(messages, toLlmOptions(this.config))
     const output = applyOutputPolicy(completion.content, this.config.outputPolicy)
     const tokenMetrics = createTokenMetrics(this.config, validatedInput, completion)
 
-    return {
+    const result = {
       agentId: this.id,
       input: validatedInput,
       output,
@@ -413,12 +459,21 @@ export class Agent {
       promptTokens: completion.promptTokens,
       totalTokens: completion.totalTokens,
       tokenMetrics,
+      ...(prepared.strategyTokenMetrics ? { strategyTokenMetrics: prepared.strategyTokenMetrics } : {}),
+      ...(prepared.strategyError ? { strategyError: prepared.strategyError } : {}),
     }
+    if (this.contextStrategies && this.config.contextStrategy) {
+      await this.contextStrategies.recordAgentTurn(this.id, this.config, validatedInput, output, tokenMetrics)
+    }
+    return result
   }
 
   async stream(input: string, history: AgentMessage[], onChunk: (content: string) => void, summary?: string): Promise<AgentRunResult> {
     const validatedInput = validateInput(input, this.config.inputPolicy)
-    const messages = buildMessages(this.config, history, validatedInput, summary)
+    const prepared = this.contextStrategies
+      ? await this.contextStrategies.prepareAgentContext(this.id, validatedInput, this.config, history)
+      : { config: this.config, history }
+    const messages = buildMessages(prepared.config, prepared.history, validatedInput, summary)
     const startedAt = Date.now()
     let streamedOutput = ''
     let emittedOutput = ''
@@ -434,7 +489,7 @@ export class Agent {
     const output = applyOutputPolicy(streamedOutput, this.config.outputPolicy)
     const tokenMetrics = createTokenMetrics(this.config, validatedInput, completion)
 
-    return {
+    const result = {
       agentId: this.id,
       input: validatedInput,
       output,
@@ -442,7 +497,13 @@ export class Agent {
       model: this.config.model,
       durationMs: Date.now() - startedAt,
       tokenMetrics,
+      ...(prepared.strategyTokenMetrics ? { strategyTokenMetrics: prepared.strategyTokenMetrics } : {}),
+      ...(prepared.strategyError ? { strategyError: prepared.strategyError } : {}),
     }
+    if (this.contextStrategies && this.config.contextStrategy) {
+      await this.contextStrategies.recordAgentTurn(this.id, this.config, validatedInput, output, tokenMetrics)
+    }
+    return result
   }
 
   async summarize(previousSummary: string | undefined, messagesToSummarize: AgentMessage[]) {
@@ -537,6 +598,7 @@ export class AgentService {
   private readonly client: LlmClient
   private readonly defaultDeepSeekModel: string
   private readonly stateStore: AgentStateStore
+  private contextStrategies?: ContextStrategiesServiceLike
   readonly ready: Promise<void>
 
   constructor(options: AgentServiceOptions) {
@@ -555,6 +617,11 @@ export class AgentService {
 
   get count() {
     return this.agents.size
+  }
+
+  setContextStrategiesService(contextStrategies: ContextStrategiesServiceLike) {
+    this.contextStrategies = contextStrategies
+    for (const agent of this.agents.values()) agent.setContextStrategiesService(contextStrategies)
   }
 
   async create(input: { id?: unknown; config: unknown }) {
@@ -606,6 +673,7 @@ export class AgentService {
     if (!this.agents.delete(id)) throw new AgentError(`Агент "${id}" не найден.`, 404)
     this.createdAt.delete(id)
     await this.stateStore.removeAgent(id)
+    if (this.contextStrategies?.resetAgentContext) await this.contextStrategies.resetAgentContext(id)
   }
 
   async getHistory(id: string) {
@@ -645,6 +713,51 @@ export class AgentService {
     await this.stateStore.clearSummary(id)
   }
 
+  async getContextStrategyState(id: string) {
+    await this.ready
+    const agent = this.get(id)
+    return this.contextStrategies?.getAgentContext
+      ? this.contextStrategies.getAgentContext(id, agent.config)
+      : { configured: false }
+  }
+
+  async resetContextStrategyState(id: string) {
+    await this.ready
+    this.get(id)
+    return this.contextStrategies?.resetAgentContext
+      ? this.contextStrategies.resetAgentContext(id)
+      : { configured: false }
+  }
+
+  async setContextStrategyWindow(id: string, value: unknown) {
+    await this.ready
+    const agent = this.get(id)
+    if (!agent.config.contextStrategy) throw new AgentError('У агента не настроена стратегия контекста.')
+    const nextWindow = this.contextStrategies?.setAgentWindowSize
+      ? await this.contextStrategies.setAgentWindowSize(id, value, agent.config)
+      : { configured: false }
+    const nextConfig = { ...agent.config, contextStrategy: { ...agent.config.contextStrategy, windowSize: (nextWindow as { windowSize?: number }).windowSize ?? agent.config.contextStrategy.windowSize } }
+    this.register(id, normalizeAgentConfig(nextConfig, this.defaultDeepSeekModel), this.createdAt.get(id) ?? new Date().toISOString())
+    await this.persistAgents()
+    return nextWindow
+  }
+
+  async createContextStrategyCheckpoint(id: string) {
+    await this.ready
+    this.get(id)
+    return this.contextStrategies?.createAgentCheckpoint
+      ? this.contextStrategies.createAgentCheckpoint(id)
+      : { configured: false }
+  }
+
+  async activateContextStrategyBranch(id: string, branchId: unknown) {
+    await this.ready
+    this.get(id)
+    return this.contextStrategies?.activateAgentBranch
+      ? this.contextStrategies.activateAgentBranch(id, branchId)
+      : { configured: false }
+  }
+
   async run(id: string, input: string, providedHistory: AgentMessage[] = []) {
     await this.ready
     const agent = this.get(id)
@@ -661,7 +774,7 @@ export class AgentService {
       { role: 'user', content: result.input },
       { role: 'assistant', content: result.output },
     ])
-    const conversationTokens = await this.stateStore.addConversationTokens(id, result.tokenMetrics, preparedContext.summaryTokens)
+    const conversationTokens = await this.stateStore.addConversationTokens(id, result.tokenMetrics, preparedContext.summaryTokens, result.strategyTokenMetrics?.totalTokens ?? 0)
     const tokenHistory = await this.stateStore.getTokenHistory(id)
     return { ...result, contextMessages, conversationTokens, tokenHistory, context: preparedContext.info }
   }
@@ -682,15 +795,15 @@ export class AgentService {
       { role: 'user', content: result.input },
       { role: 'assistant', content: result.output },
     ])
-    const conversationTokens = await this.stateStore.addConversationTokens(id, result.tokenMetrics, preparedContext.summaryTokens)
+    const conversationTokens = await this.stateStore.addConversationTokens(id, result.tokenMetrics, preparedContext.summaryTokens, result.strategyTokenMetrics?.totalTokens ?? 0)
     const tokenHistory = await this.stateStore.getTokenHistory(id)
     return { ...result, contextMessages, conversationTokens, tokenHistory, context: preparedContext.info }
   }
 
-  async runEphemeral(input: string, config: AgentConfig, history: AgentMessage[]) {
+  async runEphemeral(input: string, config: AgentConfig, history: AgentMessage[], useContextStrategies = true) {
     await this.ready
     const normalizedConfig = normalizeAgentConfig(config, this.defaultDeepSeekModel)
-    const agent = new Agent('context-demo', normalizedConfig, this.client)
+    const agent = new Agent('context-demo', normalizedConfig, this.client, useContextStrategies ? this.contextStrategies : undefined)
     return agent.run(input, history)
   }
 
@@ -702,11 +815,11 @@ export class AgentService {
       model: this.defaultDeepSeekModel,
       systemPrompt: 'Отвечай по существу, учитывай все факты из контекста и не упоминай техническое устройство истории.',
     }
-    const withoutCompression = new Agent('without-compression', normalizeAgentConfig(baseConfig, this.defaultDeepSeekModel), this.client)
+    const withoutCompression = new Agent('without-compression', normalizeAgentConfig(baseConfig, this.defaultDeepSeekModel), this.client, this.contextStrategies)
     const withCompression = new Agent('with-compression', normalizeAgentConfig({
       ...baseConfig,
       contextCompression: { enabled: true, summarizeAfterMessages },
-    }, this.defaultDeepSeekModel), this.client)
+    }, this.defaultDeepSeekModel), this.client, this.contextStrategies)
 
     const [withoutResult, preparedContext] = await Promise.all([
       withoutCompression.run(input, history),
@@ -731,7 +844,7 @@ export class AgentService {
   }
 
   private register(id: string, config: Required<Pick<AgentConfig, 'provider' | 'model'>> & AgentConfig, createdAt: string) {
-    this.agents.set(id, new Agent(id, config, this.client))
+    this.agents.set(id, new Agent(id, config, this.client, this.contextStrategies))
     this.createdAt.set(id, createdAt)
   }
 
@@ -787,6 +900,15 @@ export function createAgentRouter(service: AgentService): Router {
     }
   })
 
+  router.put('/:agentId', async (request, response) => {
+    try {
+      const body = isRecord(request.body) ? request.body : {}
+      response.json(await service.update(request.params.agentId, body.config ?? body))
+    } catch (error) {
+      sendAgentError(response, error)
+    }
+  })
+
   router.post('/bulk', async (request, response) => {
     try {
       const rawAgents = Array.isArray(request.body) ? request.body : isRecord(request.body) ? request.body.agents : undefined
@@ -796,6 +918,46 @@ export function createAgentRouter(service: AgentService): Router {
         return { id: body.id, config: body.config ?? body }
       })
       response.status(201).json({ agents: await service.createMany(entries) })
+    } catch (error) {
+      sendAgentError(response, error)
+    }
+  })
+
+  router.get('/:agentId/context', async (request, response) => {
+    try {
+      response.json(await service.getContextStrategyState(request.params.agentId))
+    } catch (error) {
+      sendAgentError(response, error)
+    }
+  })
+
+  router.post('/:agentId/context/reset', async (request, response) => {
+    try {
+      response.json(await service.resetContextStrategyState(request.params.agentId))
+    } catch (error) {
+      sendAgentError(response, error)
+    }
+  })
+
+  router.post('/:agentId/context/window', async (request, response) => {
+    try {
+      response.json(await service.setContextStrategyWindow(request.params.agentId, request.body?.windowSize))
+    } catch (error) {
+      sendAgentError(response, error)
+    }
+  })
+
+  router.post('/:agentId/context/checkpoint', async (request, response) => {
+    try {
+      response.json(await service.createContextStrategyCheckpoint(request.params.agentId))
+    } catch (error) {
+      sendAgentError(response, error)
+    }
+  })
+
+  router.post('/:agentId/context/active-branch', async (request, response) => {
+    try {
+      response.json(await service.activateContextStrategyBranch(request.params.agentId, request.body?.branchId))
     } catch (error) {
       sendAgentError(response, error)
     }
@@ -1005,6 +1167,7 @@ function normalizeAgentConfig(value: unknown, defaultDeepSeekModel: string) {
     inputPolicy: normalizeInputPolicy(input.inputPolicy),
     outputPolicy: normalizeOutputPolicy(input.outputPolicy),
     contextCompression: normalizeContextCompression(input.contextCompression),
+    contextStrategy: normalizeContextStrategy(input.contextStrategy),
   }
 
   return removeUndefined(config)
@@ -1033,6 +1196,33 @@ function normalizeContextCompression(value: unknown) {
   return removeUndefined({
     enabled: typeof value.enabled === 'boolean' ? value.enabled : undefined,
     summarizeAfterMessages: readInteger(value.summarizeAfterMessages, 1, 100) ?? readInteger(value.summarizeAfterUserMessages, 1, 100),
+  })
+}
+
+function normalizeContextStrategy(value: unknown): AgentContextStrategyConfig | undefined {
+  if (!isRecord(value)) return undefined
+  const strategy: AgentContextStrategy | undefined = value.strategy === 'sliding'
+    ? 'sliding'
+    : value.strategy === 'facts'
+      ? 'facts'
+      : value.strategy === 'branching'
+        ? 'branching'
+        : undefined
+  if (!strategy) return undefined
+
+  const facts = isRecord(value.facts)
+    ? Object.fromEntries(Object.entries(value.facts).map(([key, items]) => [
+      key,
+      Array.isArray(items)
+        ? items.filter((item): item is string => typeof item === 'string').map((item) => item.trim()).filter(Boolean)
+        : [],
+    ]))
+    : undefined
+
+  return removeUndefined({
+    strategy,
+    windowSize: readInteger(value.windowSize, 1, 1000000),
+    facts: facts && Object.keys(facts).length ? facts : undefined,
   })
 }
 

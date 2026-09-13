@@ -1,11 +1,11 @@
-import { FormEvent, KeyboardEvent, useEffect, useRef, useState } from 'react'
+import { FormEvent, KeyboardEvent, ReactNode, useEffect, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import rehypeKatex from 'rehype-katex'
 import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
 
 type MessageRole = 'user' | 'assistant'
-type Page = 'chat' | 'compare' | 'reasoning' | 'temperature' | 'models' | 'agents' | 'context-demo' | 'context-comparison'
+type Page = 'chat' | 'compare' | 'reasoning' | 'temperature' | 'models' | 'agents' | 'context-demo' | 'context-comparison' | 'context-strategies' | 'context-branching'
 
 type ChatMessage = {
   id: string
@@ -73,6 +73,7 @@ type AgentConfig = {
   inputPolicy?: { maxCharacters?: number }
   outputPolicy?: { maxCharacters?: number; format?: 'text' | 'json'; stopSequences?: string[] }
   contextCompression?: { enabled?: boolean; summarizeAfterMessages?: number }
+  contextStrategy?: { strategy: 'sliding' | 'facts' | 'branching'; windowSize?: number; facts?: Record<string, string[]> }
 }
 type AgentSummary = { id: string; config: AgentConfig; createdAt?: string }
 type AgentsListResult = { agents: AgentSummary[]; count: number }
@@ -103,6 +104,27 @@ type ContextDemoMessage = { role: 'user' | 'assistant'; content: string; archive
 type ContextComparisonPreparation = { title: string; model: string; history: ContextDemoMessage[]; summarizeAfterMessages: number; input: string }
 type ContextCompressionComparisonSide = { output: string; tokenMetrics: AgentTokenMetrics; totalTokensWithSummary: number; summaryTokens?: number; summary?: string; summarizedMessages?: number }
 type ContextCompressionComparisonResult = { input: string; model: string; result: { withoutCompression: ContextCompressionComparisonSide; withCompression: ContextCompressionComparisonSide } }
+type ContextStrategyName = 'sliding' | 'facts' | 'branching'
+type ContextStrategyMessage = { id: string; role: 'user' | 'assistant'; content: string; createdAt: string; tokenMetrics?: AgentTokenMetrics }
+type ContextStrategyFacts = { goal: string[]; constraints: string[]; preferences: string[]; decisions: string[]; agreements: string[]; open_questions: string[] }
+type ContextStrategyFactsSnapshot = { userMessageId: string; values: ContextStrategyFacts; tokenMetrics?: AgentTokenMetrics; error?: string; createdAt: string }
+type ContextStrategyBranch = { id: string; label: string; parentId?: string; checkpointMessageId?: string; messages: ContextStrategyMessage[] }
+type ContextStrategyCheckpoint = { id: string; branchId: string; messageId: string; createdAt: string }
+type ContextStrategyResult = { output: string; tokenMetrics: AgentTokenMetrics; factsUpdate?: AgentTokenMetrics; factsError?: string; branchId?: string }
+type ContextStrategyTurn = { id: string; input: string; createdAt: string; results: Partial<Record<ContextStrategyName, ContextStrategyResult>> }
+type ContextStrategyUsage = { promptTokens: number; completionTokens: number; totalTokens: number }
+type ContextStrategyStats = { answers: ContextStrategyUsage; facts: ContextStrategyUsage; overall: ContextStrategyUsage; latest?: AgentTokenMetrics }
+type AgentStrategyContext = {
+  agentId: string
+  configured: boolean
+  strategy?: ContextStrategyName
+  windowSize?: number
+  facts?: ContextStrategyFacts
+  factsSnapshots?: ContextStrategyFactsSnapshot[]
+  branching: { activeBranchId: string; checkpoints: ContextStrategyCheckpoint[]; branches: ContextStrategyBranch[]; activeMessages: ContextStrategyMessage[] }
+}
+type AgentStrategyRunResult = { output: string; tokenMetrics: AgentTokenMetrics; strategyTokenMetrics?: AgentTokenMetrics; strategyError?: string }
+type AgentStrategyHistory = { messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>; tokenHistory?: AgentTokenUsagePoint[] }
 
 const agentModelOptions: Record<AgentProvider, AgentModelOption[]> = {
   deepseek: [
@@ -143,6 +165,26 @@ const exampleModelPrompts = [
   'Почему важно разделять клиентскую и серверную части приложения? Объясни на простом примере.',
   'Я iOS-разработчик и хочу начать изучать React. С чего лучше начать и почему?',
 ]
+const contextStrategyPromptChoices = [
+  'Мы готовим первый релиз мобильного приложения Habit Flow. Оно помогает студентам 18–24 лет выработать привычку уделять полезному занятию хотя бы 15 минут в день: чтению, языку, спорту или подготовке к экзаменам. Главная ценность — короткий ежедневный ритуал без сложного обучения.',
+  'В MVP оставляем только три функции: список привычек, локальное напоминание в 19:00 по местному времени с возможностью выключить его и экран недельного прогресса с количеством выполненных дней и текущей серией.',
+  'Пользователь может создать до пяти привычек, задать короткое название и выбрать один из нескольких нейтральных цветов. Другие настройки привычки, категории и теги в первый релиз не входят.',
+  'Не делаем социальную ленту, лайки, соревнования, комментарии, общий рейтинг, чат с наставником, каталог курсов и AI-рекомендации. Не добавляй функции только ради эффектной демонстрации.',
+  'Регистрации, аккаунтов, авторизации через Apple или Google и серверной базы не будет. Привычки, отметки и настройка напоминания хранятся только локально на устройстве.',
+  'Не обещаем синхронизацию между устройствами, экспорт данных, резервное копирование или восстановление после удаления приложения. В описании нужно прямо сообщить, что удаление приложения может удалить локальные данные.',
+  'Команда состоит из одного React-разработчика и одного дизайнера, до внутреннего теста есть ровно две недели. Используем знакомый React Native и не создаём новый бэкенд, платежи или внешние интеграции.',
+  'Дизайнер успеет подготовить базовую навигацию, список привычек, создание привычки, отметку выполнения, недельный прогресс, настройки напоминания, пустые состояния и объяснение отказа в разрешении на уведомления.',
+  'Первый тест проведём примерно с двадцатью приглашёнными студентами. Публикацию в App Store и Google Play, полноценную локализацию и расширенную аналитику переносим на следующий этап.',
+  'Критерий успеха: через семь дней после установки не менее 30% новых участников должны открыть приложение минимум три раза. В интерфейсе и маркетинге нельзя обещать медицинский, терапевтический или образовательный эффект.',
+  'Составь краткое ТЗ Habit Flow: цель, аудитория, функции MVP, исключённые функции, ограничения данных, ресурсы команды и метрику успеха.',
+]
+const contextStrategyAgents: Record<ContextStrategyName, { id: string; name: string }> = {
+  sliding: { id: 'day10-comparison-sliding', name: 'Day 10 · Sliding Window' },
+  facts: { id: 'day10-comparison-facts', name: 'Day 10 · Sticky Facts' },
+  branching: { id: 'day10-comparison-branching', name: 'Day 10 · Branching' },
+}
+const branchingLabAgent = { id: 'day10-branching-lab', name: 'Day 10 · Branching Lab' }
+const day10SystemPrompt = 'Веди предметный диалог: опирайся только на условия из сообщений и, если они есть, из карточки фактов. Не выдумывай недостающие детали. О механизмах хранения контекста не рассказывай, если пользователь прямо не спросил.'
 const defaultFormatInstruction = 'Первая строка начинается с "КРАТКО:", затем ровно 3 строки, начинающиеся с "- ". Каждый пункт — не более 8 слов.'
 const defaultJsonExample = '{\n  "summary": "Краткое резюме",\n  "items": ["Пункт 1", "Пункт 2"]\n}'
 const createStopSequenceField = (value = ''): StopSequenceField => ({ id: crypto.randomUUID(), value })
@@ -183,6 +225,12 @@ function App() {
           <button className={`page-nav-button ${activePage === 'context-comparison' ? 'active' : ''}`} onClick={() => setActivePage('context-comparison')}>
             <span>⇄</span> Сжатие
           </button>
+          <button className={`page-nav-button ${activePage === 'context-strategies' ? 'active' : ''}`} onClick={() => setActivePage('context-strategies')}>
+            <span>⑩</span> Стратегии
+          </button>
+          <button className={`page-nav-button ${activePage === 'context-branching' ? 'active' : ''}`} onClick={() => setActivePage('context-branching')}>
+            <span>⑂</span> Ветки
+          </button>
         </nav>
 
         <div className="sidebar-bottom">
@@ -192,7 +240,7 @@ function App() {
       </aside>
 
       <main className="day-main">
-        {activePage === 'chat' ? <ChatPage /> : activePage === 'compare' ? <ComparePage /> : activePage === 'reasoning' ? <ReasoningPage /> : activePage === 'temperature' ? <TemperaturePage /> : activePage === 'models' ? <ModelsPage /> : activePage === 'agents' ? <AgentsPage /> : activePage === 'context-demo' ? <ContextDemoPage /> : <ContextCompressionComparisonPage />}
+        {activePage === 'chat' ? <ChatPage /> : activePage === 'compare' ? <ComparePage /> : activePage === 'reasoning' ? <ReasoningPage /> : activePage === 'temperature' ? <TemperaturePage /> : activePage === 'models' ? <ModelsPage /> : activePage === 'agents' ? <AgentsPage /> : activePage === 'context-demo' ? <ContextDemoPage /> : activePage === 'context-comparison' ? <ContextCompressionComparisonPage /> : activePage === 'context-strategies' ? <ContextStrategiesPage /> : <ContextBranchingPage />}
       </main>
     </div>
   )
@@ -450,6 +498,11 @@ function AgentsPage() {
   const [maxTokens, setMaxTokens] = useState('')
   const [outputFormat, setOutputFormat] = useState<'text' | 'json'>('text')
   const [stopSequenceFields, setStopSequenceFields] = useState<StopSequenceField[]>([])
+  const [compressionEnabled, setCompressionEnabled] = useState(false)
+  const [summarizeAfterMessages, setSummarizeAfterMessages] = useState('10')
+  const [contextStrategy, setContextStrategy] = useState<'none' | 'sliding' | 'facts' | 'branching'>('none')
+  const [contextWindowSize, setContextWindowSize] = useState('10')
+  const [initialFacts, setInitialFacts] = useState('')
   const [input, setInput] = useState('')
   const [answer, setAnswer] = useState('')
   const [runMeta, setRunMeta] = useState<{ durationMs?: number; tokens?: number; conversationTokens?: number; tokenMetrics?: AgentTokenMetrics } | null>(null)
@@ -540,7 +593,24 @@ function AgentsPage() {
     try {
       const numericTemperature = Number(temperature)
       const numericMaxTokens = Number(maxTokens)
+      const numericSummarizeAfterMessages = Number(summarizeAfterMessages)
+      const numericContextWindowSize = Number(contextWindowSize)
       const stopSequenceValues = stopSequenceFields.map(({ value }) => value.trim()).filter(Boolean)
+      let parsedFacts: Record<string, string[]> | undefined
+      if (contextStrategy === 'facts' && initialFacts.trim()) {
+        try {
+          const candidate = JSON.parse(initialFacts) as unknown
+          if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) throw new Error('Facts должны быть JSON-объектом.')
+          parsedFacts = Object.fromEntries(Object.entries(candidate as Record<string, unknown>).map(([key, value]) => [
+            key,
+            Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [],
+          ]))
+        } catch (factsError) {
+          setError(factsError instanceof Error ? factsError.message : 'Проверьте JSON facts.')
+          setIsCreating(false)
+          return
+        }
+      }
       const config: AgentConfig = {
         name: agentName.trim() || undefined,
         provider,
@@ -551,6 +621,15 @@ function AgentsPage() {
         outputPolicy: outputFormat === 'json' || stopSequenceValues.length > 0 ? {
           ...(outputFormat === 'json' ? { format: 'json' as const } : {}),
           ...(stopSequenceValues.length > 0 ? { stopSequences: stopSequenceValues } : {}),
+        } : undefined,
+        contextCompression: compressionEnabled ? {
+          enabled: true,
+          summarizeAfterMessages: Number.isFinite(numericSummarizeAfterMessages) ? Math.min(Math.max(Math.floor(numericSummarizeAfterMessages), 1), 100) : 10,
+        } : undefined,
+        contextStrategy: contextStrategy !== 'none' ? {
+          strategy: contextStrategy,
+          windowSize: Number.isFinite(numericContextWindowSize) ? Math.min(Math.max(Math.floor(numericContextWindowSize), 1), 1_000_000) : 10,
+          ...(parsedFacts ? { facts: parsedFacts } : {}),
         } : undefined,
       }
       const response = await fetch('/api/agents', {
@@ -566,6 +645,11 @@ function AgentsPage() {
       setAgentId('')
       setAgentName('')
       setSystemPrompt('')
+      setCompressionEnabled(false)
+      setSummarizeAfterMessages('10')
+      setContextStrategy('none')
+      setContextWindowSize('10')
+      setInitialFacts('')
       setError(null)
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : 'Не удалось создать агента.')
@@ -655,6 +739,11 @@ function AgentsPage() {
             </div>
             <label>Формат ответа<select value={outputFormat} onChange={(event) => setOutputFormat(event.target.value as 'text' | 'json')}><option value="text">Обычный текст</option><option value="json">JSON</option></select></label>
             <div className="agent-stop-section"><div className="agent-field-heading"><span>Stop sequence</span><small>Необязательно</small></div><div className="stop-list">{stopSequenceFields.map((sequence, index) => <div className="stop-row" key={sequence.id}><input className="stop-input" value={sequence.value} onChange={(event) => setStopSequenceFields((current) => current.map((item) => item.id === sequence.id ? { ...item, value: event.target.value } : item))} placeholder={index === 0 ? 'Например: <END>' : 'Следующая последовательность'} aria-label={`Stop sequence ${index + 1}`} /><button className="stop-remove" type="button" onClick={() => setStopSequenceFields((current) => current.filter((item) => item.id !== sequence.id))} aria-label={`Удалить stop sequence ${index + 1}`}>×</button></div>)}<button className="stop-add" type="button" onClick={() => setStopSequenceFields((current) => [...current, createStopSequenceField()])} aria-label="Добавить stop sequence" title="Добавить stop sequence">＋</button></div></div>
+            <label className="agent-option-toggle"><input type="checkbox" checked={compressionEnabled} onChange={(event) => setCompressionEnabled(event.target.checked)} /><span>Сжатие истории (summary)</span></label>
+            {compressionEnabled && <label>Сжимать после N сообщений<input type="number" min="1" max="100" value={summarizeAfterMessages} onChange={(event) => setSummarizeAfterMessages(event.target.value)} /></label>}
+            <label>Стратегия контекста<select value={contextStrategy} onChange={(event) => setContextStrategy(event.target.value as typeof contextStrategy)}><option value="none">Без стратегии</option><option value="sliding">Sliding Window</option><option value="facts">Sticky Facts</option><option value="branching">Branching</option></select></label>
+            {contextStrategy !== 'none' && <label>Размер окна N<input type="number" min="1" max="1000000" value={contextWindowSize} onChange={(event) => setContextWindowSize(event.target.value)} /><small className="field-help">Окно хранится отдельно у этого агента.</small></label>}
+            {contextStrategy === 'facts' && <label>Начальные facts <span className="field-optional">JSON, необязательно</span><textarea value={initialFacts} onChange={(event) => setInitialFacts(event.target.value)} placeholder='{"goal":["..."],"constraints":[]}' rows={3} /></label>}
             <button className="compare-button" type="submit" disabled={isCreating || !agentId.trim()}>{isCreating ? 'Создаём...' : 'Создать агента'} <span>→</span></button>
           </form>
         </section>
@@ -682,7 +771,9 @@ function AgentsPage() {
 function AgentConfigDetails({ config }: { config: AgentConfig }) {
   const outputFormat = config.outputPolicy?.format === 'json' ? 'JSON' : 'Обычный текст'
   const stopSequences = config.outputPolicy?.stopSequences?.length ? config.outputPolicy.stopSequences.join(' · ') : 'не заданы'
-  return <div className="agent-config-details"><div className="agent-config-details-heading"><span>Параметры выбранного агента</span><small>Текущая конфигурация</small></div><div className="agent-config-details-grid"><div><small>Название</small><strong>{config.name || 'не задано'}</strong></div><div><small>Temperature</small><strong>{config.temperature ?? 'по умолчанию'}</strong></div><div><small>Максимум токенов ответа</small><strong>{config.maxTokens ?? 'без лимита'}</strong></div><div><small>История</small><strong>Сохраняется полностью</strong></div><div><small>Формат ответа</small><strong>{outputFormat}</strong></div><div><small>Лимит входа</small><strong>{config.inputPolicy?.maxCharacters ? `${config.inputPolicy.maxCharacters} символов` : 'без лимита'}</strong></div><div><small>Stop-последовательности</small><strong>{stopSequences}</strong></div><div className="agent-config-details-wide"><small>Системный промпт</small><strong>{config.systemPrompt || 'не задан'}</strong></div></div></div>
+  const strategy = config.contextStrategy
+  const strategyLabel = strategy?.strategy === 'sliding' ? `Sliding Window · N=${strategy.windowSize ?? '—'}` : strategy?.strategy === 'facts' ? `Sticky Facts · N=${strategy.windowSize ?? '—'}` : strategy?.strategy === 'branching' ? 'Branching' : 'не задана'
+  return <div className="agent-config-details"><div className="agent-config-details-heading"><span>Параметры выбранного агента</span><small>Текущая конфигурация</small></div><div className="agent-config-details-grid"><div><small>Название</small><strong>{config.name || 'не задано'}</strong></div><div><small>Temperature</small><strong>{config.temperature ?? 'по умолчанию'}</strong></div><div><small>Максимум токенов ответа</small><strong>{config.maxTokens ?? 'без лимита'}</strong></div><div><small>Сжатие</small><strong>{config.contextCompression?.enabled ? `включено · N=${config.contextCompression.summarizeAfterMessages ?? 10}` : 'выключено'}</strong></div><div><small>Стратегия</small><strong>{strategyLabel}</strong></div><div><small>Формат ответа</small><strong>{outputFormat}</strong></div><div><small>Лимит входа</small><strong>{config.inputPolicy?.maxCharacters ? `${config.inputPolicy.maxCharacters} символов` : 'без лимита'}</strong></div><div><small>Stop-последовательности</small><strong>{stopSequences}</strong></div><div className="agent-config-details-wide"><small>Системный промпт</small><strong>{config.systemPrompt || 'не задан'}</strong></div></div></div>
 }
 
 function AgentTokenMetricsView({ metrics, conversationTokens }: { metrics: AgentTokenMetrics; conversationTokens?: number }) {
@@ -929,6 +1020,217 @@ function ContextCompressionComparisonPage() {
 
 function CompressionComparisonCard({ title, tone, side }: { title: string; tone: 'full' | 'compressed'; side: ContextCompressionComparisonSide }) {
   return <article className={`compression-result-card ${tone}`}><header><div><span className="compression-result-dot" /><strong>{title}</strong></div><div className="compression-result-totals">{tone === 'compressed' ? <><span>Основной: {side.tokenMetrics.totalTokens} ток.</span><span>Summary: {side.summaryTokens ?? 0} ток.</span></> : <span>Итого: {side.totalTokensWithSummary} ток.</span>}</div></header><div className="compression-result-answer"><MarkdownContent content={side.output} /></div><footer><span>Промпт: {side.tokenMetrics.promptTokens}</span><span>Ответ: {side.tokenMetrics.completionTokens}</span>{tone === 'compressed' && <span>В summary: {side.summarizedMessages ?? 0} сообщ.</span>}</footer>{tone === 'compressed' && side.summary && <details className="compression-result-summary"><summary>Показать summary</summary><MarkdownContent content={side.summary} /></details>}</article>
+}
+
+function day10AgentConfig(name: string, strategy: ContextStrategyName): AgentConfig {
+  return { name, provider: 'deepseek', model: 'deepseek-v4-flash', temperature: 0, systemPrompt: day10SystemPrompt, contextStrategy: { strategy, ...(strategy === 'branching' ? {} : { windowSize: 10 }) } }
+}
+
+async function ensureDay10Agent(definition: { id: string; name: string }, strategy: ContextStrategyName) {
+  const config = day10AgentConfig(definition.name, strategy)
+  const found = await fetch(`/api/agents/${definition.id}`)
+  if (found.ok) return
+  if (found.status !== 404) {
+    const data = await found.json() as ApiError
+    throw new Error(data.error || 'Не удалось проверить агента.')
+  }
+  const response = await fetch('/api/agents', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: definition.id, config }) })
+  const data = await response.json() as AgentSummary & ApiError
+  if (!response.ok) throw new Error(data.error || 'Не удалось подготовить агента.')
+}
+
+function asStrategyMessages(messages: AgentStrategyHistory['messages']): ContextStrategyMessage[] {
+  return messages.filter((message) => message.role !== 'system').map((message, index) => ({ id: `${message.role}-${index}-${message.content.slice(0, 12)}`, role: message.role as 'user' | 'assistant', content: message.content, createdAt: '' }))
+}
+
+function strategyStats(turns: ContextStrategyTurn[], name: ContextStrategyName): ContextStrategyStats {
+  const results = turns.map((turn) => turn.results[name]).filter((result): result is ContextStrategyResult => Boolean(result))
+  const sum = (items: AgentTokenMetrics[]) => items.reduce<ContextStrategyUsage>((total, item) => ({ promptTokens: total.promptTokens + item.promptTokens, completionTokens: total.completionTokens + item.completionTokens, totalTokens: total.totalTokens + item.totalTokens }), { promptTokens: 0, completionTokens: 0, totalTokens: 0 })
+  const answers = sum(results.map((result) => result.tokenMetrics))
+  const facts = sum(results.flatMap((result) => result.factsUpdate ? [result.factsUpdate] : []))
+  const overall = {
+    promptTokens: answers.promptTokens + facts.promptTokens,
+    completionTokens: answers.completionTokens + facts.completionTokens,
+    totalTokens: answers.totalTokens + facts.totalTokens,
+  }
+  return { answers, facts, overall, latest: results[results.length - 1]?.tokenMetrics }
+}
+
+function ContextStrategiesPage() {
+  const [contexts, setContexts] = useState<Partial<Record<ContextStrategyName, AgentStrategyContext>>>({})
+  const [histories, setHistories] = useState<Partial<Record<ContextStrategyName, ContextStrategyMessage[]>>>({})
+  const [turns, setTurns] = useState<ContextStrategyTurn[]>([])
+  const [input, setInput] = useState('')
+  const [inspector, setInspector] = useState<'sliding' | 'facts' | null>(null)
+  const [isPromptPickerOpen, setIsPromptPickerOpen] = useState(false)
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => { void load() }, [])
+
+  async function load() {
+    setIsLoading(true)
+    try {
+      await Promise.all((Object.keys(contextStrategyAgents) as ContextStrategyName[]).map((name) => ensureDay10Agent(contextStrategyAgents[name], name)))
+      const entries = await Promise.all((Object.keys(contextStrategyAgents) as ContextStrategyName[]).map(async (name) => {
+        const id = contextStrategyAgents[name].id
+        const [contextResponse, historyResponse] = await Promise.all([fetch(`/api/agents/${id}/context`), fetch(`/api/agents/${id}/history`)])
+        const context = await contextResponse.json() as AgentStrategyContext & ApiError
+        const history = await historyResponse.json() as AgentStrategyHistory & ApiError
+        if (!contextResponse.ok || !historyResponse.ok) throw new Error(context.error || history.error || 'Не удалось загрузить состояние агента.')
+        return [name, context, asStrategyMessages(history.messages)] as const
+      }))
+      setContexts(Object.fromEntries(entries.map(([name, context]) => [name, context])))
+      setHistories(Object.fromEntries(entries.map(([name, , history]) => [name, history])))
+      setError(null)
+    } catch (requestError) { setError(requestError instanceof Error ? requestError.message : 'Не удалось загрузить стратегии.') } finally { setIsLoading(false) }
+  }
+
+  async function send(event: FormEvent) {
+    event.preventDefault()
+    const prompt = input.trim()
+    if (!prompt || isLoading) return
+    setIsLoading(true); setError(null)
+    try {
+      const entries = await Promise.all((Object.keys(contextStrategyAgents) as ContextStrategyName[]).map(async (name) => {
+        const response = await fetch(`/api/agents/${contextStrategyAgents[name].id}/run`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ input: prompt }) })
+        const data = await response.json() as AgentStrategyRunResult & ApiError
+        if (!response.ok) throw new Error(data.error || `Не удалось получить ответ ${name}.`)
+        return [name, { output: data.output, tokenMetrics: data.tokenMetrics, factsUpdate: data.strategyTokenMetrics, factsError: data.strategyError }] as const
+      }))
+      setTurns((current) => [...current, { id: crypto.randomUUID(), input: prompt, createdAt: new Date().toISOString(), results: Object.fromEntries(entries) }])
+      setInput('')
+      await load()
+    } catch (requestError) { setError(requestError instanceof Error ? requestError.message : 'Не удалось выполнить сравнение.') } finally { setIsLoading(false) }
+  }
+
+  async function reset() {
+    if (isLoading || !window.confirm('Очистить историю всех трёх агентов? Это действие нельзя отменить.')) return
+    setIsLoading(true); setError(null)
+    try {
+      await Promise.all((Object.keys(contextStrategyAgents) as ContextStrategyName[]).flatMap((name) => {
+        const id = contextStrategyAgents[name].id
+        return [fetch(`/api/agents/${id}/history`, { method: 'DELETE' }), fetch(`/api/agents/${id}/context/reset`, { method: 'POST' })]
+      }))
+      setTurns([])
+      await load()
+    } catch (requestError) { setError(requestError instanceof Error ? requestError.message : 'Не удалось очистить историю.') } finally { setIsLoading(false) }
+  }
+
+  async function updateWindow(name: 'sliding' | 'facts', value: number) {
+    if (!Number.isInteger(value) || value < 1 || isLoading) return
+    setIsLoading(true); setError(null)
+    try {
+      const response = await fetch(`/api/agents/${contextStrategyAgents[name].id}/context/window`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ windowSize: value }) })
+      const context = await response.json() as AgentStrategyContext & ApiError
+      if (!response.ok) throw new Error(context.error || 'Не удалось изменить окно.')
+      setContexts((current) => ({ ...current, [name]: context }))
+    } catch (requestError) { setError(requestError instanceof Error ? requestError.message : 'Не удалось изменить окно.') } finally { setIsLoading(false) }
+  }
+
+  const factSnapshots = contexts.facts?.factsSnapshots ?? []
+  const latestFacts = factSnapshots[factSnapshots.length - 1]
+  const windows = { sliding: contexts.sliding?.windowSize ?? 10, facts: contexts.facts?.windowSize ?? 10 }
+  return <div className="page-view context-strategies-page">
+    <header className="page-header"><div><p className="eyebrow">День 10 · сравнение</p><h1>Один вопрос — три контекста</h1><p className="header-description">Каждое сообщение уходит в три обычных агента с независимой настройкой контекста. Для Branching здесь показана корневая линия; ветки доступны на отдельной странице.</p></div><button className="clear-context-button" type="button" onClick={() => void reset()} disabled={isLoading}>Очистить историю</button></header>
+    {error && <div className="error-message" role="alert">{error}</div>}
+    <section className="strategy-overview-grid">
+      <StrategyOverviewCard title="Sliding Window" badge="Стратегия 1" description="В запрос попадают последние N сообщений и новый вопрос." stats={strategyStats(turns, 'sliding')} windowSize={windows.sliding} isLoading={isLoading} onWindowSizeChange={(value) => void updateWindow('sliding', value)} actionLabel="Показать окно" onAction={() => setInspector('sliding')} />
+      <StrategyOverviewCard title="Sticky Facts" badge="Стратегия 2" description="Facts обновляются отдельным вызовом, затем в модель идут facts + последние N сообщений." stats={strategyStats(turns, 'facts')} factsTokens={strategyStats(turns, 'facts').facts.totalTokens} windowSize={windows.facts} isLoading={isLoading} onWindowSizeChange={(value) => void updateWindow('facts', value)} actionLabel="Показать facts" onAction={() => setInspector('facts')} />
+      <StrategyOverviewCard title="Branching" badge="Стратегия 3" description="В сравнении используется только корневая линия. Ветки демонстрируются на отдельной странице." stats={strategyStats(turns, 'branching')} />
+    </section>
+    <section className="strategy-turns"><div className="context-demo-chart-heading"><div><p className="eyebrow">Ответы</p><h2>Одинаковая реплика в трёх стратегиях</h2></div><span>{turns.length} ходов</span></div>{turns.length ? turns.map((turn) => <article className="strategy-turn" key={turn.id}><p className="strategy-turn-input">{turn.input}</p><div className="strategy-turn-results">{(['sliding', 'facts', 'branching'] as ContextStrategyName[]).map((name) => <StrategyResultCard key={name} name={name} result={turn.results[name]} />)}</div></article>) : <p className="strategy-empty">Выберите первый вопрос сценария и отправьте его: появятся три независимых ответа.</p>}</section>
+    <form className="strategy-composer" onSubmit={send}><textarea value={input} onChange={(event) => setInput(event.target.value)} disabled={isLoading} rows={4} placeholder="Вставьте следующий вопрос сценария…" /><div><span className="strategy-send-note">Будет отправлено в три стратегии</span><button className="clear-context-button" type="button" onClick={() => setIsPromptPickerOpen(true)} disabled={isLoading}>Выбрать сообщение</button><button className="compare-button" type="submit" disabled={isLoading || !input.trim()}>{isLoading ? 'DeepSeek отвечает…' : 'Сравнить ответы'} <span>→</span></button></div></form>
+    {isPromptPickerOpen && <PromptPickerModal onClose={() => setIsPromptPickerOpen(false)} onPick={(choice) => { setInput(choice); setIsPromptPickerOpen(false) }} />}
+    {inspector === 'sliding' && <StrategyInspectorModal title="Сообщения в Sliding Window" subtitle={`В следующий запрос попадут последние ${windows.sliding} сообщений.`} onClose={() => setInspector(null)}><StrategyContextCard title="Текущее окно" messages={(histories.sliding ?? []).slice(-windows.sliding)} empty="Окно пока пусто." /></StrategyInspectorModal>}
+    {inspector === 'facts' && <StrategyInspectorModal title="Память Sticky Facts" subtitle={`В основной запрос идут эта карточка и последние ${windows.facts} сообщений.`} onClose={() => setInspector(null)}><article className="strategy-context-card"><header><div><p className="eyebrow">Key-Value память</p><h2>Текущие facts</h2></div><span>{latestFacts ? `обновлений: ${contexts.facts?.factsSnapshots?.length}` : 'пока пуста'}</span></header>{latestFacts ? <><pre className="facts-json">{JSON.stringify(latestFacts.values, null, 2)}</pre>{latestFacts.error && <p className="strategy-warning">Последнее обновление facts не удалось: использованы предыдущие значения.</p>}</> : <p className="strategy-empty">Facts появятся после первого сообщения.</p>}</article><StrategyContextCard title="Окно рядом с facts" messages={(histories.facts ?? []).slice(-windows.facts)} empty="Сообщений рядом с facts пока нет." /></StrategyInspectorModal>}
+  </div>
+}
+
+function ContextBranchingPage() {
+  const [context, setContext] = useState<AgentStrategyContext | null>(null)
+  const [input, setInput] = useState('')
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  useEffect(() => { void load() }, [])
+
+  async function load() {
+    setIsLoading(true)
+    try {
+      await ensureDay10Agent(branchingLabAgent, 'branching')
+      const response = await fetch(`/api/agents/${branchingLabAgent.id}/context`)
+      const data = await response.json() as AgentStrategyContext & ApiError
+      if (!response.ok) throw new Error(data.error || 'Не удалось загрузить ветки.')
+      setContext(data); setError(null)
+    } catch (requestError) { setError(requestError instanceof Error ? requestError.message : 'Не удалось загрузить ветки.') } finally { setIsLoading(false) }
+  }
+
+  async function request(path: string, body?: Record<string, unknown>) {
+    setIsLoading(true); setError(null)
+    try {
+      const response = await fetch(path, { method: 'POST', ...(body ? { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {}) })
+      const data = await response.json() as AgentStrategyContext & ApiError
+      if (!response.ok) throw new Error(data.error || 'Не удалось обновить ветки.')
+      setContext(data)
+      return true
+    } catch (requestError) { setError(requestError instanceof Error ? requestError.message : 'Не удалось обновить ветки.'); return false } finally { setIsLoading(false) }
+  }
+
+  async function send(event: FormEvent) {
+    event.preventDefault()
+    const prompt = input.trim()
+    if (!prompt || isLoading) return
+    setIsLoading(true); setError(null)
+    try {
+      const response = await fetch(`/api/agents/${branchingLabAgent.id}/run`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ input: prompt }) })
+      const data = await response.json() as AgentStrategyRunResult & ApiError
+      if (!response.ok) throw new Error(data.error || 'Не удалось продолжить ветку.')
+      setInput(''); await load()
+    } catch (requestError) { setError(requestError instanceof Error ? requestError.message : 'Не удалось продолжить ветку.') } finally { setIsLoading(false) }
+  }
+
+  async function clearBranches() {
+    if (isLoading || !window.confirm('Очистить историю и все ветки этого агента? Это действие нельзя отменить.')) return
+    setIsLoading(true); setError(null)
+    try {
+      await Promise.all([fetch(`/api/agents/${branchingLabAgent.id}/history`, { method: 'DELETE' }), fetch(`/api/agents/${branchingLabAgent.id}/context/reset`, { method: 'POST' })])
+      await load()
+    } catch (requestError) { setError(requestError instanceof Error ? requestError.message : 'Не удалось очистить ветки.') } finally { setIsLoading(false) }
+  }
+
+  const branching = context?.branching
+  const activeBranch = branching?.branches.find((branch) => branch.id === branching.activeBranchId)
+  const checkpoints = branching?.checkpoints ?? []
+  const activeMessages = branching?.activeMessages ?? []
+  const lastAssistant = [...activeMessages].reverse().find((message) => message.role === 'assistant')
+  const totalTokens = activeMessages.reduce((sum, message) => sum + (message.tokenMetrics?.totalTokens ?? 0), 0)
+  return <div className="page-view context-strategies-page branching-page">
+    <header className="page-header"><div><p className="eyebrow">День 10 · стратегия 3</p><h1>Диалог с точкой разветвления</h1><p className="header-description">Это обычный агент со стратегией Branching. Создавайте новую ветку из текущей точки и переключайтесь между любыми сохранёнными линиями.</p></div><div className="branching-header-actions"><span className="model-badge"><span className="pulse-dot" /> DeepSeek</span><button className="clear-context-button" type="button" onClick={() => void clearBranches()} disabled={isLoading}>Очистить ветки</button></div></header>
+    {error && <div className="error-message" role="alert">{error}</div>}
+    <section className="branching-workbench"><aside><p className="eyebrow">Рабочая линия</p><h2>{activeBranch?.label ?? 'Корневая ветка'}</h2><p>{checkpoints.length ? `Создано checkpoint: ${checkpoints.length}. Новый можно поставить в текущей точке активной линии.` : 'Отправьте хотя бы один вопрос, чтобы зафиксировать первую точку.'}</p><small className="branching-total">Всего в активной линии: {totalTokens} ток.</small><button className="context-compression-button" type="button" disabled={isLoading || !lastAssistant} onClick={() => void request(`/api/agents/${branchingLabAgent.id}/context/checkpoint`)}>Создать одну ветку из текущей точки</button>{checkpoints.length > 0 && <div className="checkpoint-list"><small>Созданные точки</small><ol>{checkpoints.map((checkpoint, index) => <li key={checkpoint.id}>Checkpoint {index + 1} · {branching?.branches.find((branch) => branch.id === checkpoint.branchId)?.label ?? 'линия'}</li>)}</ol></div>}<div className="branch-list"><small>Перейти к линии</small><div className="strategy-branch-actions">{branching?.branches.map((branch) => <button type="button" className={`context-compression-button ${branch.id === activeBranch?.id ? 'enabled' : ''}`} key={branch.id} disabled={isLoading} onClick={() => void request(`/api/agents/${branchingLabAgent.id}/context/active-branch`, { branchId: branch.id })}>{branch.label}</button>)}</div></div></aside><StrategyContextCard title={`Сообщения: ${activeBranch?.label ?? 'корневая ветка'}`} messages={activeMessages} empty="Здесь появятся сообщения ветки." /></section>
+    <form className="strategy-composer" onSubmit={send}><textarea value={input} onChange={(event) => setInput(event.target.value)} disabled={isLoading} rows={4} placeholder={`Следующий ход для ${activeBranch?.label ?? 'корневой ветки'}…`} /><div><span className="strategy-send-note">Отправка только в активную ветку</span><button className="compare-button" type="submit" disabled={isLoading || !input.trim()}>{isLoading ? 'DeepSeek отвечает…' : 'Продолжить ветку'} <span>→</span></button></div></form>
+  </div>
+}
+
+function StrategyOverviewCard({ title, badge, description, stats, factsTokens, windowSize, isLoading, onWindowSizeChange, actionLabel, onAction }: { title: string; badge: string; description: string; stats?: ContextStrategyStats; factsTokens?: number; windowSize?: number; isLoading?: boolean; onWindowSizeChange?: (value: number) => void; actionLabel?: string; onAction?: () => void }) {
+  return <article className="strategy-overview-card"><header><div><p className="eyebrow">{badge}</p><h2>{title}</h2></div><strong>{stats?.overall.totalTokens ?? 0} ток.</strong></header><p>{description}</p>{windowSize !== undefined && onWindowSizeChange && <label className="strategy-window-setting">Последних N сообщений<input type="number" min="1" max="1000000" step="1" value={windowSize} onChange={(event) => onWindowSizeChange(Number(event.target.value))} disabled={isLoading} /><small>Настройка этого агента.</small></label>}{actionLabel && onAction && <button type="button" className="strategy-inspect-button" onClick={onAction}>{actionLabel} <span>↗</span></button>}<footer><span>Последний prompt: {stats?.latest?.promptTokens ?? '—'}</span><span>Ответы: {stats?.answers.totalTokens ?? 0}</span>{factsTokens !== undefined && <span>Facts: {factsTokens}</span>}</footer></article>
+}
+
+function PromptPickerModal({ onClose, onPick }: { onClose: () => void; onPick: (choice: string) => void }) {
+  return <div className="strategy-picker-backdrop" role="presentation" onMouseDown={onClose}><section className="strategy-prompt-picker" role="dialog" aria-modal="true" aria-label="Сообщения сценария Habit Flow" onMouseDown={(event) => event.stopPropagation()}><header><div><p className="eyebrow">Сценарий Habit Flow</p><h2>Выберите следующее сообщение</h2></div><button type="button" aria-label="Закрыть" onClick={onClose}>×</button></header><p>Выбор только подставляет текст в поле ввода. Отправка всегда запускает три сравниваемых контекста.</p><div>{contextStrategyPromptChoices.map((choice, index) => <button type="button" key={choice} onClick={() => onPick(choice)}><strong>{index + 1}</strong><span>{choice}</span></button>)}</div></section></div>
+}
+
+function StrategyInspectorModal({ title, subtitle, onClose, children }: { title: string; subtitle: string; onClose: () => void; children: ReactNode }) {
+  return <div className="strategy-picker-backdrop" role="presentation" onMouseDown={onClose}><section className="strategy-context-inspector" role="dialog" aria-modal="true" aria-label={title} onMouseDown={(event) => event.stopPropagation()}><header><div><p className="eyebrow">Контекст модели</p><h2>{title}</h2><p>{subtitle}</p></div><button type="button" aria-label="Закрыть" onClick={onClose}>×</button></header><div className="strategy-inspector-content">{children}</div></section></div>
+}
+
+function StrategyContextCard({ title, messages, empty }: { title: string; messages: ContextStrategyMessage[]; empty: string }) {
+  return <article className="strategy-context-card"><header><div><p className="eyebrow">Контекст модели</p><h2>{title}</h2></div><span>{messages.length} сообщ.</span></header><div className="strategy-message-list">{messages.length ? messages.map((message) => <div className={message.role} key={message.id}><small>{message.role === 'user' ? 'Пользователь' : 'Агент'}</small><span>{message.content}</span></div>) : <p className="strategy-empty">{empty}</p>}</div></article>
+}
+
+function StrategyResultCard({ name, result }: { name: ContextStrategyName; result?: ContextStrategyResult }) {
+  const title = name === 'sliding' ? 'Sliding Window' : name === 'facts' ? 'Sticky Facts' : 'Branching'
+  return <article className={`strategy-result-card ${name}`}><header><strong>{title}</strong>{result && <span>{result.tokenMetrics.totalTokens} ток.</span>}</header>{result ? <><div className="reasoning-content"><MarkdownContent content={result.output} /></div><footer><span>Prompt: {result.tokenMetrics.promptTokens}</span><span>Ответ: {result.tokenMetrics.completionTokens}</span>{result.factsUpdate && <span>Facts: {result.factsUpdate.totalTokens}</span>}{result.factsError && <span className="strategy-warning">facts: ошибка</span>}</footer></> : <p>Не запускался для этого хода.</p>}</article>
 }
 
 function ModelsPage() {
