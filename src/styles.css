@@ -404,6 +404,35 @@ code { padding: 2px 4px; color: #5d60e6; background: #f0f0ff; border-radius: 4px
 .compression-comparison-total .increased { color: #bf7b3b; font-weight: 700; }
 .compression-comparison-caption { margin: 9px 0 0; color: #8f94a5; font-size: 9px; line-height: 1.55; }
 .context-strategies-page { padding-bottom: 18px; }
+
+.memory-controls { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 14px; margin: 18px 0; padding: 14px 16px; background: #fff; border: 1px solid #e9ebf2; border-radius: 14px; box-shadow: 0 5px 17px #27304b05; }
+.memory-controls > div { display: flex; flex-wrap: wrap; align-items: center; gap: 11px; color: #7c8192; font-size: 10px; }
+.memory-controls label { display: inline-flex; align-items: center; gap: 5px; color: #858a9c; font-size: 10px; }
+.memory-controls input[type="number"] { width: 68px; padding: 7px; color: #555a6b; border: 1px solid #e3e5ee; border-radius: 7px; font: inherit; }
+.memory-workbench { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(310px, .95fr); gap: 17px; align-items: start; }
+.memory-dialog, .memory-notebook { display: grid; gap: 13px; padding: 18px; background: #fff; border: 1px solid #e9ebf2; border-radius: 16px; box-shadow: 0 5px 17px #27304b05; }
+.memory-chat-history { display: grid; gap: 9px; min-height: 210px; max-height: 510px; overflow: auto; padding: 2px; }
+.memory-chat-history > div { padding: 11px 13px; border: 1px solid #e8eaf1; border-radius: 11px; color: #606576; font-size: 11px; line-height: 1.55; }
+.memory-chat-history > div.user { background: #f3f3ff; }
+.memory-chat-history > div.assistant { background: #fbfcfe; }
+.memory-chat-history small { display: block; margin-bottom: 5px; color: #969baa; font-size: 9px; font-weight: 700; }
+.memory-chat-history .reasoning-content { padding: 0; }
+.memory-run-metrics { display: flex; flex-wrap: wrap; gap: 10px; padding: 9px 11px; color: #858a9c; background: #f8f8fc; border-radius: 8px; font-size: 10px; }
+.memory-run-metrics strong { color: #5d60e6; }
+.memory-note-form { display: grid; gap: 8px; }
+.memory-note-form select, .memory-note-form textarea { width: 100%; padding: 9px; color: #606576; background: #fbfbfd; border: 1px solid #e2e5ee; border-radius: 8px; font: inherit; font-size: 11px; }
+.memory-note-form textarea { resize: vertical; line-height: 1.45; }
+.memory-note-form .compare-button { justify-content: center; }
+.memory-note-layer { padding-top: 13px; border-top: 1px solid #eceef4; }
+.memory-note-layer header, .memory-note-layer article > div { display: flex; align-items: start; justify-content: space-between; gap: 10px; }
+.memory-note-layer h3 { margin: 3px 0 0; color: #7e8394; font-size: 11px; font-weight: 500; }
+.memory-note-layer header > button, .memory-note-layer article button { padding: 0; color: #5d60e6; background: transparent; border: 0; font: inherit; font-size: 9px; cursor: pointer; }
+.memory-note-layer header > button:disabled, .memory-note-layer article button:disabled { color: #b9bdc9; cursor: default; }
+.memory-note-layer > div { display: grid; gap: 7px; margin-top: 10px; }
+.memory-note-layer article { padding: 9px; background: #f8f8fc; border-radius: 8px; }
+.memory-note-layer article p { margin: 0 0 7px; color: #616677; font-size: 10px; line-height: 1.45; white-space: pre-wrap; }
+.memory-note-layer article small { color: #a0a5b5; font-size: 8px; }
+@media (max-width: 940px) { .memory-workbench { grid-template-columns: 1fr; } }
 .strategy-overview-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 13px; margin-top: 18px; }
 .strategy-overview-card, .strategy-context-card, .strategy-turns, .strategy-controls-panel, .strategy-composer { min-width: 0; background: #fff; border: 1px solid #e9ebf2; border-radius: 14px; box-shadow: 0 5px 17px #27304b05; }
 .strategy-overview-card { padding: 15px; }

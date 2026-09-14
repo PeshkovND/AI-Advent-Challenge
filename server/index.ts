@@ -125,10 +125,7 @@ const CONTEXT_DEMO_CONFIG = {
   provider: 'openrouter' as const,
   model: CONTEXT_DEMO_MODEL,
   systemPrompt: 'Отвечай по существу и учитывай историю диалога.',
-  contextCompression: {
-    enabled: true,
-    summarizeAfterMessages: 10,
-  },
+  contextStrategy: { strategy: 'summary' as const, summarizeAfterMessages: 10 },
 }
 
 async function ensureContextDemoAgent() {
@@ -136,7 +133,7 @@ async function ensureContextDemoAgent() {
   const existing = agentService.list().find((agent) => agent.id === CONTEXT_DEMO_AGENT_ID)
   if (!existing) {
     await agentService.create({ id: CONTEXT_DEMO_AGENT_ID, config: CONTEXT_DEMO_CONFIG })
-  } else if (existing.config.maxTokens !== undefined || existing.config.contextCompression?.summarizeAfterMessages === undefined || existing.config.contextCompression.summarizeAfterMessages === 5) {
+  } else if (existing.config.maxTokens !== undefined || existing.config.contextStrategy?.strategy !== 'summary' || existing.config.contextStrategy.summarizeAfterMessages === 5) {
     const { maxTokens: _oldMaxTokens, ...configWithoutLimit } = existing.config
     await agentService.update(CONTEXT_DEMO_AGENT_ID, { ...configWithoutLimit, ...CONTEXT_DEMO_CONFIG })
   }
@@ -161,7 +158,9 @@ async function getContextDemoState() {
     tokenHistory,
     messages,
     context,
-    compression: agent.config.contextCompression,
+    compression: agent.config.contextStrategy?.strategy === 'summary'
+      ? { enabled: true, summarizeAfterMessages: agent.config.contextStrategy.summarizeAfterMessages ?? 10 }
+      : { enabled: false, summarizeAfterMessages: 10 },
   }
 }
 
@@ -258,13 +257,10 @@ app.post('/api/context-demo/compression', async (request, response) => {
   try {
     await ensureContextDemoAgent()
     const agent = agentService.get(CONTEXT_DEMO_AGENT_ID)
-    const nextSummarizeAfterMessages = summarizeAfterMessages ?? agent.config.contextCompression?.summarizeAfterMessages ?? 10
+    const nextSummarizeAfterMessages = summarizeAfterMessages ?? (agent.config.contextStrategy?.strategy === 'summary' ? agent.config.contextStrategy.summarizeAfterMessages : undefined) ?? 10
     await agentService.update(CONTEXT_DEMO_AGENT_ID, {
       ...agent.config,
-      contextCompression: {
-        enabled,
-        summarizeAfterMessages: nextSummarizeAfterMessages,
-      },
+      contextStrategy: enabled ? { strategy: 'summary', summarizeAfterMessages: nextSummarizeAfterMessages } : undefined,
     })
     response.json(await getContextDemoState())
   } catch (error) {

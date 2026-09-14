@@ -5,7 +5,7 @@ import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
 
 type MessageRole = 'user' | 'assistant'
-type Page = 'chat' | 'compare' | 'reasoning' | 'temperature' | 'models' | 'agents' | 'context-demo' | 'context-comparison' | 'context-strategies' | 'context-branching'
+type Page = 'chat' | 'compare' | 'reasoning' | 'temperature' | 'models' | 'agents' | 'context-demo' | 'context-comparison' | 'context-strategies' | 'context-branching' | 'memory-layers'
 
 type ChatMessage = {
   id: string
@@ -72,8 +72,8 @@ type AgentConfig = {
   maxTokens?: number
   inputPolicy?: { maxCharacters?: number }
   outputPolicy?: { maxCharacters?: number; format?: 'text' | 'json'; stopSequences?: string[] }
-  contextCompression?: { enabled?: boolean; summarizeAfterMessages?: number }
-  contextStrategy?: { strategy: 'sliding' | 'facts' | 'branching'; windowSize?: number; facts?: Record<string, string[]> }
+  contextStrategy?: { strategy: 'sliding' | 'facts' | 'branching' | 'summary'; windowSize?: number; summarizeAfterMessages?: number; facts?: Record<string, string[]> }
+  memoryLayers?: { mode?: 'manual' | 'auto'; enabled?: boolean; shortTermLimit?: number; useWorking?: boolean; useLongTerm?: boolean; working?: ManualMemoryEntry[]; longTerm?: ManualMemoryEntry[]; autoInstructions?: string }
 }
 type AgentSummary = { id: string; config: AgentConfig; createdAt?: string }
 type AgentsListResult = { agents: AgentSummary[]; count: number }
@@ -83,6 +83,9 @@ type AgentContextInfo = { enabled: boolean; summary?: string; summarizedMessages
 type AgentContextCompression = { enabled?: boolean; summarizeAfterMessages?: number }
 type AgentStreamChunk = { content?: string; error?: string; done?: boolean; result?: { durationMs?: number; tokens?: number; conversationTokens?: number; contextMessages?: number; tokenMetrics?: AgentTokenMetrics; context?: AgentContextInfo } }
 type AgentHistoryResult = { messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string; archived?: boolean }>; count: number; conversationTokens?: number }
+type ManualMemoryEntry = { id: string; text: string; createdAt: string }
+type AgentMemorySnapshot = { shortTerm: Array<{ role: 'user' | 'assistant'; content: string }>; working: ManualMemoryEntry[]; longTerm: ManualMemoryEntry[] }
+type MemoryRunResult = { output: string; tokenMetrics: AgentTokenMetrics; memory?: AgentMemorySnapshot }
 type AgentModelOption = { value: string; label: string }
 type ContextDemoScenario = 'short' | 'long' | 'overflow'
 type ContextDemoResponse = {
@@ -185,6 +188,8 @@ const contextStrategyAgents: Record<ContextStrategyName, { id: string; name: str
 }
 const branchingLabAgent = { id: 'day10-branching-lab', name: 'Day 10 · Branching Lab' }
 const day10SystemPrompt = 'Веди предметный диалог: опирайся только на условия из сообщений и, если они есть, из карточки фактов. Не выдумывай недостающие детали. О механизмах хранения контекста не рассказывай, если пользователь прямо не спросил.'
+const memoryLabAgent = { id: 'day11-memory-lab', name: 'Day 11 · Memory notebook' }
+const memoryLabSystemPrompt = 'Ты помощник по планированию и принятию решений. Учитывай только релевантные записи рабочей и долговременной памяти. Текущий запрос пользователя важнее старых записей. Не упоминай устройство памяти, если тебя прямо не спросили.'
 const defaultFormatInstruction = 'Первая строка начинается с "КРАТКО:", затем ровно 3 строки, начинающиеся с "- ". Каждый пункт — не более 8 слов.'
 const defaultJsonExample = '{\n  "summary": "Краткое резюме",\n  "items": ["Пункт 1", "Пункт 2"]\n}'
 const createStopSequenceField = (value = ''): StopSequenceField => ({ id: crypto.randomUUID(), value })
@@ -231,6 +236,9 @@ function App() {
           <button className={`page-nav-button ${activePage === 'context-branching' ? 'active' : ''}`} onClick={() => setActivePage('context-branching')}>
             <span>⑂</span> Ветки
           </button>
+          <button className={`page-nav-button ${activePage === 'memory-layers' ? 'active' : ''}`} onClick={() => setActivePage('memory-layers')}>
+            <span>◉</span> Память
+          </button>
         </nav>
 
         <div className="sidebar-bottom">
@@ -240,7 +248,7 @@ function App() {
       </aside>
 
       <main className="day-main">
-        {activePage === 'chat' ? <ChatPage /> : activePage === 'compare' ? <ComparePage /> : activePage === 'reasoning' ? <ReasoningPage /> : activePage === 'temperature' ? <TemperaturePage /> : activePage === 'models' ? <ModelsPage /> : activePage === 'agents' ? <AgentsPage /> : activePage === 'context-demo' ? <ContextDemoPage /> : activePage === 'context-comparison' ? <ContextCompressionComparisonPage /> : activePage === 'context-strategies' ? <ContextStrategiesPage /> : <ContextBranchingPage />}
+        {activePage === 'chat' ? <ChatPage /> : activePage === 'compare' ? <ComparePage /> : activePage === 'reasoning' ? <ReasoningPage /> : activePage === 'temperature' ? <TemperaturePage /> : activePage === 'models' ? <ModelsPage /> : activePage === 'agents' ? <AgentsPage /> : activePage === 'context-demo' ? <ContextDemoPage /> : activePage === 'context-comparison' ? <ContextCompressionComparisonPage /> : activePage === 'context-strategies' ? <ContextStrategiesPage /> : activePage === 'context-branching' ? <ContextBranchingPage /> : <MemoryLayersPage />}
       </main>
     </div>
   )
@@ -498,9 +506,8 @@ function AgentsPage() {
   const [maxTokens, setMaxTokens] = useState('')
   const [outputFormat, setOutputFormat] = useState<'text' | 'json'>('text')
   const [stopSequenceFields, setStopSequenceFields] = useState<StopSequenceField[]>([])
-  const [compressionEnabled, setCompressionEnabled] = useState(false)
   const [summarizeAfterMessages, setSummarizeAfterMessages] = useState('10')
-  const [contextStrategy, setContextStrategy] = useState<'none' | 'sliding' | 'facts' | 'branching'>('none')
+  const [contextStrategy, setContextStrategy] = useState<'none' | 'sliding' | 'facts' | 'branching' | 'summary'>('none')
   const [contextWindowSize, setContextWindowSize] = useState('10')
   const [initialFacts, setInitialFacts] = useState('')
   const [input, setInput] = useState('')
@@ -622,11 +629,10 @@ function AgentsPage() {
           ...(outputFormat === 'json' ? { format: 'json' as const } : {}),
           ...(stopSequenceValues.length > 0 ? { stopSequences: stopSequenceValues } : {}),
         } : undefined,
-        contextCompression: compressionEnabled ? {
-          enabled: true,
+        contextStrategy: contextStrategy === 'summary' ? {
+          strategy: 'summary',
           summarizeAfterMessages: Number.isFinite(numericSummarizeAfterMessages) ? Math.min(Math.max(Math.floor(numericSummarizeAfterMessages), 1), 100) : 10,
-        } : undefined,
-        contextStrategy: contextStrategy !== 'none' ? {
+        } : contextStrategy !== 'none' ? {
           strategy: contextStrategy,
           windowSize: Number.isFinite(numericContextWindowSize) ? Math.min(Math.max(Math.floor(numericContextWindowSize), 1), 1_000_000) : 10,
           ...(parsedFacts ? { facts: parsedFacts } : {}),
@@ -645,7 +651,6 @@ function AgentsPage() {
       setAgentId('')
       setAgentName('')
       setSystemPrompt('')
-      setCompressionEnabled(false)
       setSummarizeAfterMessages('10')
       setContextStrategy('none')
       setContextWindowSize('10')
@@ -739,10 +744,9 @@ function AgentsPage() {
             </div>
             <label>Формат ответа<select value={outputFormat} onChange={(event) => setOutputFormat(event.target.value as 'text' | 'json')}><option value="text">Обычный текст</option><option value="json">JSON</option></select></label>
             <div className="agent-stop-section"><div className="agent-field-heading"><span>Stop sequence</span><small>Необязательно</small></div><div className="stop-list">{stopSequenceFields.map((sequence, index) => <div className="stop-row" key={sequence.id}><input className="stop-input" value={sequence.value} onChange={(event) => setStopSequenceFields((current) => current.map((item) => item.id === sequence.id ? { ...item, value: event.target.value } : item))} placeholder={index === 0 ? 'Например: <END>' : 'Следующая последовательность'} aria-label={`Stop sequence ${index + 1}`} /><button className="stop-remove" type="button" onClick={() => setStopSequenceFields((current) => current.filter((item) => item.id !== sequence.id))} aria-label={`Удалить stop sequence ${index + 1}`}>×</button></div>)}<button className="stop-add" type="button" onClick={() => setStopSequenceFields((current) => [...current, createStopSequenceField()])} aria-label="Добавить stop sequence" title="Добавить stop sequence">＋</button></div></div>
-            <label className="agent-option-toggle"><input type="checkbox" checked={compressionEnabled} onChange={(event) => setCompressionEnabled(event.target.checked)} /><span>Сжатие истории (summary)</span></label>
-            {compressionEnabled && <label>Сжимать после N сообщений<input type="number" min="1" max="100" value={summarizeAfterMessages} onChange={(event) => setSummarizeAfterMessages(event.target.value)} /></label>}
-            <label>Стратегия контекста<select value={contextStrategy} onChange={(event) => setContextStrategy(event.target.value as typeof contextStrategy)}><option value="none">Без стратегии</option><option value="sliding">Sliding Window</option><option value="facts">Sticky Facts</option><option value="branching">Branching</option></select></label>
-            {contextStrategy !== 'none' && <label>Размер окна N<input type="number" min="1" max="1000000" value={contextWindowSize} onChange={(event) => setContextWindowSize(event.target.value)} /><small className="field-help">Окно хранится отдельно у этого агента.</small></label>}
+            <label>Стратегия контекста<select value={contextStrategy} onChange={(event) => setContextStrategy(event.target.value as typeof contextStrategy)}><option value="none">Без стратегии</option><option value="sliding">Sliding Window</option><option value="facts">Sticky Facts</option><option value="branching">Branching</option><option value="summary">Summary</option></select></label>
+            {(contextStrategy === 'sliding' || contextStrategy === 'facts') && <label>Размер окна N<input type="number" min="1" max="1000000" value={contextWindowSize} onChange={(event) => setContextWindowSize(event.target.value)} /><small className="field-help">Окно хранится отдельно у этого агента.</small></label>}
+            {contextStrategy === 'summary' && <label>Сжимать после N сообщений<input type="number" min="1" max="100" value={summarizeAfterMessages} onChange={(event) => setSummarizeAfterMessages(event.target.value)} /></label>}
             {contextStrategy === 'facts' && <label>Начальные facts <span className="field-optional">JSON, необязательно</span><textarea value={initialFacts} onChange={(event) => setInitialFacts(event.target.value)} placeholder='{"goal":["..."],"constraints":[]}' rows={3} /></label>}
             <button className="compare-button" type="submit" disabled={isCreating || !agentId.trim()}>{isCreating ? 'Создаём...' : 'Создать агента'} <span>→</span></button>
           </form>
@@ -772,8 +776,8 @@ function AgentConfigDetails({ config }: { config: AgentConfig }) {
   const outputFormat = config.outputPolicy?.format === 'json' ? 'JSON' : 'Обычный текст'
   const stopSequences = config.outputPolicy?.stopSequences?.length ? config.outputPolicy.stopSequences.join(' · ') : 'не заданы'
   const strategy = config.contextStrategy
-  const strategyLabel = strategy?.strategy === 'sliding' ? `Sliding Window · N=${strategy.windowSize ?? '—'}` : strategy?.strategy === 'facts' ? `Sticky Facts · N=${strategy.windowSize ?? '—'}` : strategy?.strategy === 'branching' ? 'Branching' : 'не задана'
-  return <div className="agent-config-details"><div className="agent-config-details-heading"><span>Параметры выбранного агента</span><small>Текущая конфигурация</small></div><div className="agent-config-details-grid"><div><small>Название</small><strong>{config.name || 'не задано'}</strong></div><div><small>Temperature</small><strong>{config.temperature ?? 'по умолчанию'}</strong></div><div><small>Максимум токенов ответа</small><strong>{config.maxTokens ?? 'без лимита'}</strong></div><div><small>Сжатие</small><strong>{config.contextCompression?.enabled ? `включено · N=${config.contextCompression.summarizeAfterMessages ?? 10}` : 'выключено'}</strong></div><div><small>Стратегия</small><strong>{strategyLabel}</strong></div><div><small>Формат ответа</small><strong>{outputFormat}</strong></div><div><small>Лимит входа</small><strong>{config.inputPolicy?.maxCharacters ? `${config.inputPolicy.maxCharacters} символов` : 'без лимита'}</strong></div><div><small>Stop-последовательности</small><strong>{stopSequences}</strong></div><div className="agent-config-details-wide"><small>Системный промпт</small><strong>{config.systemPrompt || 'не задан'}</strong></div></div></div>
+  const strategyLabel = strategy?.strategy === 'sliding' ? `Sliding Window · N=${strategy.windowSize ?? '—'}` : strategy?.strategy === 'facts' ? `Sticky Facts · N=${strategy.windowSize ?? '—'}` : strategy?.strategy === 'branching' ? 'Branching' : strategy?.strategy === 'summary' ? `Summary · N=${strategy.summarizeAfterMessages ?? 10}` : 'не задана'
+  return <div className="agent-config-details"><div className="agent-config-details-heading"><span>Параметры выбранного агента</span><small>Текущая конфигурация</small></div><div className="agent-config-details-grid"><div><small>Название</small><strong>{config.name || 'не задано'}</strong></div><div><small>Temperature</small><strong>{config.temperature ?? 'по умолчанию'}</strong></div><div><small>Максимум токенов ответа</small><strong>{config.maxTokens ?? 'без лимита'}</strong></div><div><small>Стратегия контекста</small><strong>{strategyLabel}</strong></div><div><small>Формат ответа</small><strong>{outputFormat}</strong></div><div><small>Лимит входа</small><strong>{config.inputPolicy?.maxCharacters ? `${config.inputPolicy.maxCharacters} символов` : 'без лимита'}</strong></div><div><small>Stop-последовательности</small><strong>{stopSequences}</strong></div><div className="agent-config-details-wide"><small>Системный промпт</small><strong>{config.systemPrompt || 'не задан'}</strong></div></div></div>
 }
 
 function AgentTokenMetricsView({ metrics, conversationTokens }: { metrics: AgentTokenMetrics; conversationTokens?: number }) {
@@ -950,6 +954,106 @@ function ContextDemoPage() {
       <section className="context-demo-chart-section"><div className="context-demo-chart-heading"><div><p className="eyebrow">Динамика</p><h2>Расход токенов по запросам</h2></div><span>{session?.tokenHistory?.length ?? 0} запросов</span></div><TokenUsageChart points={session?.tokenHistory ?? []} /></section>
     </div>
   </div>
+}
+
+function MemoryLayersPage() {
+  const [agent, setAgent] = useState<AgentSummary | null>(null)
+  const [history, setHistory] = useState<AgentHistoryResult['messages']>([])
+  const [input, setInput] = useState('')
+  const [note, setNote] = useState('')
+  const [noteLayer, setNoteLayer] = useState<'working' | 'longTerm'>('working')
+  const [lastMetrics, setLastMetrics] = useState<AgentTokenMetrics | null>(null)
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => { void load() }, [])
+
+  async function ensureAgent() {
+    const existing = await fetch(`/api/agents/${memoryLabAgent.id}`)
+    if (existing.ok) return await existing.json() as AgentSummary
+    if (existing.status !== 404) throw new Error('Не удалось проверить учебного агента памяти.')
+    const response = await fetch('/api/agents', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: memoryLabAgent.id, config: { name: memoryLabAgent.name, provider: 'deepseek', model: 'deepseek-v4-flash', temperature: 0, systemPrompt: memoryLabSystemPrompt, memoryLayers: { mode: 'manual', enabled: true, shortTermLimit: 12, useWorking: true, useLongTerm: true, working: [], longTerm: [] } } }),
+    })
+    const data = await response.json() as AgentSummary & ApiError
+    if (!response.ok) throw new Error(data.error || 'Не удалось создать учебного агента.')
+    return data
+  }
+
+  async function load() {
+    setIsLoading(true)
+    try {
+      const currentAgent = await ensureAgent()
+      const historyResponse = await fetch(`/api/agents/${memoryLabAgent.id}/history`)
+      const historyData = await historyResponse.json() as AgentHistoryResult & ApiError
+      if (!historyResponse.ok) throw new Error(historyData.error || 'Не удалось загрузить историю.')
+      setAgent(currentAgent); setHistory(historyData.messages); setError(null)
+    } catch (requestError) { setError(requestError instanceof Error ? requestError.message : 'Не удалось загрузить память.') } finally { setIsLoading(false) }
+  }
+
+  const memory = agent?.config.memoryLayers ?? { mode: 'manual' as const, enabled: true, shortTermLimit: 12, useWorking: true, useLongTerm: true, working: [], longTerm: [] }
+  const shortTerm = history.slice(-Math.max(2, memory.shortTermLimit ?? 12))
+  if (shortTerm[0]?.role === 'assistant') shortTerm.shift()
+
+  async function saveMemory(next: NonNullable<AgentConfig['memoryLayers']>) {
+    if (!agent) return
+    setIsLoading(true); setError(null)
+    try {
+      const response = await fetch(`/api/agents/${agent.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ config: { ...agent.config, memoryLayers: next } }) })
+      const data = await response.json() as AgentSummary & ApiError
+      if (!response.ok) throw new Error(data.error || 'Не удалось сохранить память.')
+      setAgent(data)
+    } catch (requestError) { setError(requestError instanceof Error ? requestError.message : 'Не удалось сохранить память.') } finally { setIsLoading(false) }
+  }
+
+  async function addNote() {
+    const text = note.trim()
+    if (!text) return
+    const entry: ManualMemoryEntry = { id: `note-${crypto.randomUUID()}`, text, createdAt: new Date().toISOString() }
+    await saveMemory({ ...memory, [noteLayer]: [...(memory[noteLayer] ?? []), entry] })
+    setNote('')
+  }
+
+  async function send(event: FormEvent) {
+    event.preventDefault()
+    const message = input.trim()
+    if (!message) return
+    setIsLoading(true); setError(null)
+    try {
+      const response = await fetch(`/api/agents/${memoryLabAgent.id}/run`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ input: message }) })
+      const data = await response.json() as MemoryRunResult & ApiError
+      if (!response.ok) throw new Error(data.error || 'Не удалось получить ответ агента.')
+      setLastMetrics(data.tokenMetrics)
+      setInput('')
+      await load()
+    } catch (requestError) { setError(requestError instanceof Error ? requestError.message : 'Не удалось получить ответ агента.') } finally { setIsLoading(false) }
+  }
+
+  async function clearShortTerm() {
+    setIsLoading(true); setError(null)
+    try {
+      const response = await fetch(`/api/agents/${memoryLabAgent.id}/history`, { method: 'DELETE' })
+      if (!response.ok) throw new Error('Не удалось очистить текущий диалог.')
+      setHistory([])
+    } catch (requestError) { setError(requestError instanceof Error ? requestError.message : 'Не удалось очистить текущий диалог.') } finally { setIsLoading(false) }
+  }
+
+  const removeNote = (layer: 'working' | 'longTerm', id: string) => void saveMemory({ ...memory, [layer]: (memory[layer] ?? []).filter((entry) => entry.id !== id) })
+
+  return <div className="page-view memory-page">
+    <header className="page-header"><div><p className="eyebrow">День 11 · Memory layers</p><h1>Память под контролем пользователя</h1><p className="header-description">Вы сами сохраняете заметки рабочей задачи и долгосрочные факты. Агент ничего не классифицирует и не записывает за вас.</p></div><div className="model-badge"><span className="pulse-dot" /> DeepSeek</div></header>
+    {error && <div className="error-message" role="alert">{error}</div>}
+    <section className="memory-controls"><div><strong>Режим: {memory.mode ?? 'manual'}</strong><label><input type="checkbox" checked={memory.enabled !== false} onChange={(event) => void saveMemory({ ...memory, enabled: event.target.checked })} disabled={isLoading} /> память агента</label><label><input type="checkbox" checked={memory.useWorking !== false} onChange={(event) => void saveMemory({ ...memory, useWorking: event.target.checked })} disabled={isLoading} /> рабочую</label><label><input type="checkbox" checked={memory.useLongTerm !== false} onChange={(event) => void saveMemory({ ...memory, useLongTerm: event.target.checked })} disabled={isLoading} /> долгосрочную</label></div><label>Лимит short-term<input type="number" min="2" max="100" value={memory.shortTermLimit ?? 12} disabled={isLoading} onChange={(event) => void saveMemory({ ...memory, shortTermLimit: Number(event.target.value) })} /></label></section>
+    <section className="memory-workbench">
+      <div className="memory-dialog"><div className="section-heading"><div><span className="step-number">01</span><div><p className="eyebrow">Short-term · {shortTerm.length}/{memory.shortTermLimit ?? 12}</p><h2>Текущий диалог</h2></div></div><button className="clear-context-button" type="button" disabled={isLoading} onClick={() => void clearShortTerm()}>Новый диалог</button></div><div className="memory-chat-history">{shortTerm.length ? shortTerm.map((message, index) => <div className={message.role} key={`${message.role}-${index}`}><small>{message.role === 'user' ? 'Вы' : 'Агент'}</small><MarkdownContent content={message.content} /></div>) : <p className="strategy-empty">Завершённых ходов пока нет.</p>}</div><form className="strategy-composer" onSubmit={send}><textarea rows={3} value={input} onChange={(event) => setInput(event.target.value)} disabled={isLoading} placeholder="Задайте вопрос агенту…" /><button className="compare-button" type="submit" disabled={isLoading || !input.trim()}>{isLoading ? 'Отправляем…' : 'Отправить'} <span>→</span></button></form>{lastMetrics && <div className="memory-run-metrics"><span>Prompt: <strong>{lastMetrics.promptTokens}</strong></span><span>Ответ: <strong>{lastMetrics.completionTokens}</strong></span><span>Всего: <strong>{lastMetrics.totalTokens}</strong></span></div>}</div>
+      <aside className="memory-notebook"><div className="section-heading"><div><span className="step-number">02</span><div><p className="eyebrow">Memory notebook</p><h2>Добавить заметку</h2></div></div></div><div className="memory-note-form"><select value={noteLayer} onChange={(event) => setNoteLayer(event.target.value as 'working' | 'longTerm')} disabled={isLoading}><option value="working">В рабочую память</option><option value="longTerm">В долгосрочную память</option></select><textarea rows={3} value={note} onChange={(event) => setNote(event.target.value)} disabled={isLoading} placeholder="Например: Решили не использовать платные сервисы." /><button className="compare-button" type="button" disabled={isLoading || !note.trim()} onClick={() => void addNote()}>Сохранить заметку</button></div><MemoryNotebookLayer title="Working memory" subtitle="Только данные незавершённой задачи" entries={memory.working ?? []} onRemove={(id) => removeNote('working', id)} onClear={() => void saveMemory({ ...memory, working: [] })} disabled={isLoading} /><MemoryNotebookLayer title="Long-term memory" subtitle="Профиль, решения и знания между диалогами" entries={memory.longTerm ?? []} onRemove={(id) => removeNote('longTerm', id)} onClear={() => void saveMemory({ ...memory, longTerm: [] })} disabled={isLoading} /></aside>
+    </section>
+  </div>
+}
+
+function MemoryNotebookLayer({ title, subtitle, entries, onRemove, onClear, disabled }: { title: string; subtitle: string; entries: ManualMemoryEntry[]; onRemove: (id: string) => void; onClear: () => void; disabled: boolean }) {
+  return <section className="memory-note-layer"><header><div><p className="eyebrow">{title}</p><h3>{subtitle}</h3></div><button type="button" onClick={onClear} disabled={disabled || !entries.length}>Очистить</button></header>{entries.length ? <div>{entries.map((entry) => <article key={entry.id}><p>{entry.text}</p><div><small>{new Date(entry.createdAt).toLocaleString()}</small><button type="button" onClick={() => onRemove(entry.id)} disabled={disabled}>Удалить</button></div></article>)}</div> : <p className="strategy-empty">Пусто — добавьте запись вручную.</p>}</section>
 }
 
 function ContextCompressionComparisonPage() {

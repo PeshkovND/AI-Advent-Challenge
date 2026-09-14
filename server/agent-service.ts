@@ -1,6 +1,8 @@
 import express, { Request, Response, Router } from 'express'
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
+import { AgentMemory } from './agent-memory'
+import type { AgentMemoryLayersConfig, AgentMemorySnapshot, AutoMemoryUpdate } from './agent-memory'
 
 export type AgentProvider = 'deepseek' | 'huggingface' | 'openrouter'
 export type AgentMessageRole = 'system' | 'user' | 'assistant'
@@ -24,11 +26,8 @@ export type AgentTokenUsagePoint = AgentTokenMetrics & {
   summaryTokens?: number
   strategyTokens?: number
   strategyTokenMetrics?: AgentTokenMetrics
-}
-
-export type AgentContextCompression = {
-  enabled?: boolean
-  summarizeAfterMessages?: number
+  memoryTokens?: number
+  memoryTokenMetrics?: AgentTokenMetrics
 }
 
 export type AgentContextInfo = {
@@ -57,7 +56,7 @@ export type AgentConfig = {
     format?: 'text' | 'json'
     stopSequences?: string[]
   }
-  contextCompression?: AgentContextCompression
+  memoryLayers?: AgentMemoryLayersConfig
   /**
    * Optional context policy used by the Day 10 strategy demo. The policy is
    * part of the agent configuration so the Agent, rather than the storage
@@ -66,25 +65,35 @@ export type AgentConfig = {
   contextStrategy?: AgentContextStrategyConfig
 }
 
-export type AgentContextStrategy = 'sliding' | 'facts' | 'branching'
+export type AgentContextStrategy = 'sliding' | 'facts' | 'branching' | 'summary'
 
 export type AgentContextStrategyConfig = {
   strategy: AgentContextStrategy
   windowSize?: number
+  summarizeAfterMessages?: number
   facts?: Record<string, string[]>
 }
 
 export type AgentContextPreparation = {
   config: AgentConfig
   history: AgentMessage[]
+  summary?: string
+  summaryTokenMetrics?: AgentTokenMetrics
+  summaryToPersist?: unknown
+  context?: AgentContextInfo
   strategyTokenMetrics?: AgentTokenMetrics
   strategyError?: string
 }
 
+export type AgentContextCommit = {
+  archiveHistory?: boolean
+}
+
 export type ContextStrategiesServiceLike = {
   prepareAgentContext(agentId: string, input: string, config: AgentConfig, history: AgentMessage[]): Promise<AgentContextPreparation>
-  recordAgentTurn(agentId: string, config: AgentConfig, input: string, output: string, tokenMetrics: AgentTokenMetrics): Promise<void>
+  recordAgentTurn(agentId: string, config: AgentConfig, input: string, output: string, tokenMetrics: AgentTokenMetrics, preparation?: AgentContextPreparation): Promise<AgentContextCommit>
   getAgentContext?(agentId: string, config: AgentConfig): Promise<unknown>
+  getAgentContextInfo?(agentId: string, config: AgentConfig, history: AgentMessage[]): Promise<AgentContextInfo>
   resetAgentContext?(agentId: string): Promise<unknown>
   setAgentWindowSize?(agentId: string, value: unknown, config: AgentConfig): Promise<unknown>
   createAgentCheckpoint?(agentId: string): Promise<unknown>
@@ -104,6 +113,11 @@ export type AgentRunResult = {
   conversationTokens?: number
   contextMessages?: number
   tokenMetrics: AgentTokenMetrics
+  memory?: AgentMemorySnapshot
+  memoryClassifierTokenMetrics?: AgentTokenMetrics
+  summaryTokenMetrics?: AgentTokenMetrics
+  archiveHistory?: boolean
+  autoMemoryUpdate?: AutoMemoryUpdate
   strategyTokenMetrics?: AgentTokenMetrics
   strategyError?: string
   tokenHistory?: AgentTokenUsagePoint[]
@@ -144,19 +158,10 @@ type AgentState = {
   histories: Record<string, AgentMessage[]>
   conversationTokens: Record<string, number>
   tokenHistory: Record<string, AgentTokenUsagePoint[]>
-  summaries: Record<string, StoredSummary>
-}
-
-type StoredSummary = {
-  content: string
-  summarizedMessages: number
-  estimatedReplacedTokens: number
-  historyCompacted: boolean
-  updatedAt: string
 }
 
 class AgentStateStore {
-  private state: AgentState = { agents: [], histories: {}, conversationTokens: {}, tokenHistory: {}, summaries: {} }
+  private state: AgentState = { agents: [], histories: {}, conversationTokens: {}, tokenHistory: {} }
   private writeQueue: Promise<void> = Promise.resolve()
   readonly ready: Promise<void>
 
@@ -195,10 +200,11 @@ class AgentStateStore {
     await this.persist()
   }
 
-  async addConversationTokens(agentId: string, metrics: AgentTokenMetrics, summaryTokens = 0, strategyTokenMetrics?: AgentTokenMetrics) {
+  async addConversationTokens(agentId: string, metrics: AgentTokenMetrics, summaryTokens = 0, strategyTokenMetrics?: AgentTokenMetrics, memoryTokenMetrics?: AgentTokenMetrics) {
     await this.ready
     const strategyTokens = strategyTokenMetrics?.totalTokens ?? 0
-    const conversationTokens = (this.state.conversationTokens[agentId] ?? 0) + metrics.totalTokens + summaryTokens + strategyTokens
+    const memoryTokens = memoryTokenMetrics?.totalTokens ?? 0
+    const conversationTokens = (this.state.conversationTokens[agentId] ?? 0) + metrics.totalTokens + summaryTokens + strategyTokens + memoryTokens
     this.state.conversationTokens[agentId] = conversationTokens
     const history = this.state.tokenHistory[agentId] ?? []
     this.state.tokenHistory[agentId] = [...history, {
@@ -207,6 +213,7 @@ class AgentStateStore {
       conversationTokens,
       ...(summaryTokens ? { summaryTokens } : {}),
       ...(strategyTokens ? { strategyTokens, strategyTokenMetrics } : {}),
+      ...(memoryTokens ? { memoryTokens, memoryTokenMetrics } : {}),
     }]
     await this.persist()
     return conversationTokens
@@ -222,24 +229,6 @@ class AgentStateStore {
     return [...(this.state.tokenHistory[agentId] ?? [])]
   }
 
-  async getSummary(agentId: string) {
-    await this.ready
-    const summary = this.state.summaries[agentId]
-    return summary ? { ...summary } : undefined
-  }
-
-  async setSummary(agentId: string, summary: StoredSummary) {
-    await this.ready
-    this.state.summaries[agentId] = { ...summary }
-    await this.persist()
-  }
-
-  async clearSummary(agentId: string) {
-    await this.ready
-    delete this.state.summaries[agentId]
-    await this.persist()
-  }
-
   async replaceAgents(agents: AgentRecord[]) {
     await this.ready
     this.state.agents = agents.map((agent) => ({ ...agent, config: { ...agent.config } }))
@@ -252,7 +241,6 @@ class AgentStateStore {
     delete this.state.histories[agentId]
     delete this.state.conversationTokens[agentId]
     delete this.state.tokenHistory[agentId]
-    delete this.state.summaries[agentId]
     await this.persist()
   }
 
@@ -261,7 +249,6 @@ class AgentStateStore {
     delete this.state.histories[agentId]
     delete this.state.conversationTokens[agentId]
     delete this.state.tokenHistory[agentId]
-    delete this.state.summaries[agentId]
     await this.persist()
   }
 
@@ -279,12 +266,6 @@ class AgentStateStore {
             : {},
           tokenHistory: isRecord(parsed.tokenHistory)
             ? Object.fromEntries(Object.entries(parsed.tokenHistory).map(([id, points]) => [id, parseStoredTokenHistory(points)]))
-            : {},
-          summaries: isRecord(parsed.summaries)
-            ? Object.fromEntries(Object.entries(parsed.summaries).flatMap(([id, summary]) => {
-              const parsedSummary = parseStoredSummary(summary)
-              return parsedSummary ? [[id, parsedSummary]] : []
-            }))
             : {},
         }
       }
@@ -431,6 +412,7 @@ class LlmClient {
 
 export class Agent {
   private contextStrategies?: ContextStrategiesServiceLike
+  private memory?: AgentMemory
 
   constructor(
     readonly id: string,
@@ -439,6 +421,13 @@ export class Agent {
     contextStrategies?: ContextStrategiesServiceLike,
   ) {
     this.contextStrategies = contextStrategies
+    if (config.memoryLayers) {
+      this.memory = new AgentMemory(config.memoryLayers, async (systemPrompt, input) => {
+        const classifierConfig = { provider: config.provider, model: config.model, temperature: 0, outputPolicy: { format: 'json' as const } }
+        const completion = await this.client.complete([{ role: 'system', content: systemPrompt }, { role: 'user', content: input }], toLlmOptions(classifierConfig))
+        return { output: completion.content, tokenMetrics: createTokenMetrics(classifierConfig, input, completion) }
+      }, config.systemPrompt)
+    }
   }
 
   setContextStrategiesService(contextStrategies: ContextStrategiesServiceLike) {
@@ -450,13 +439,20 @@ export class Agent {
     const prepared = this.contextStrategies
       ? await this.contextStrategies.prepareAgentContext(this.id, validatedInput, this.config, history)
       : { config: this.config, history }
-    const messages = buildMessages(prepared.config, prepared.history, validatedInput, summary)
+    const memory = this.memory ? await this.memory.prepare(prepared.history, validatedInput, { history, summary: prepared.summary ?? summary }) : undefined
+    const effectiveConfig = memory?.systemPrompt
+      ? { ...prepared.config, systemPrompt: [prepared.config.systemPrompt, memory.systemPrompt].filter(Boolean).join('\n\n') }
+      : prepared.config
+    const messages = buildMessages(effectiveConfig, memory?.history ?? prepared.history, validatedInput, prepared.summary ?? summary)
     const startedAt = Date.now()
     const completion = await this.client.complete(messages, toLlmOptions(this.config))
     const output = applyOutputPolicy(completion.content, this.config.outputPolicy)
     const tokenMetrics = createTokenMetrics(this.config, validatedInput, completion)
 
-    const result = {
+    const contextCommit = this.contextStrategies && this.config.contextStrategy
+      ? await this.contextStrategies.recordAgentTurn(this.id, this.config, validatedInput, output, tokenMetrics, prepared)
+      : {}
+    return {
       agentId: this.id,
       input: validatedInput,
       output,
@@ -467,13 +463,15 @@ export class Agent {
       promptTokens: completion.promptTokens,
       totalTokens: completion.totalTokens,
       tokenMetrics,
+      ...(memory ? { memory: memory.snapshot } : {}),
+      ...(memory?.classifierTokenMetrics ? { memoryClassifierTokenMetrics: memory.classifierTokenMetrics } : {}),
+      ...(memory?.autoUpdate ? { autoMemoryUpdate: memory.autoUpdate } : {}),
+      ...(prepared.summaryTokenMetrics ? { summaryTokenMetrics: prepared.summaryTokenMetrics } : {}),
+      ...(prepared.context ? { context: prepared.context } : {}),
+      ...(contextCommit.archiveHistory ? { archiveHistory: true } : {}),
       ...(prepared.strategyTokenMetrics ? { strategyTokenMetrics: prepared.strategyTokenMetrics } : {}),
       ...(prepared.strategyError ? { strategyError: prepared.strategyError } : {}),
     }
-    if (this.contextStrategies && this.config.contextStrategy) {
-      await this.contextStrategies.recordAgentTurn(this.id, this.config, validatedInput, output, tokenMetrics)
-    }
-    return result
   }
 
   async stream(input: string, history: AgentMessage[], onChunk: (content: string) => void, summary?: string): Promise<AgentRunResult> {
@@ -481,7 +479,11 @@ export class Agent {
     const prepared = this.contextStrategies
       ? await this.contextStrategies.prepareAgentContext(this.id, validatedInput, this.config, history)
       : { config: this.config, history }
-    const messages = buildMessages(prepared.config, prepared.history, validatedInput, summary)
+    const memory = this.memory ? await this.memory.prepare(prepared.history, validatedInput, { history, summary: prepared.summary ?? summary }) : undefined
+    const effectiveConfig = memory?.systemPrompt
+      ? { ...prepared.config, systemPrompt: [prepared.config.systemPrompt, memory.systemPrompt].filter(Boolean).join('\n\n') }
+      : prepared.config
+    const messages = buildMessages(effectiveConfig, memory?.history ?? prepared.history, validatedInput, prepared.summary ?? summary)
     const startedAt = Date.now()
     let streamedOutput = ''
     let emittedOutput = ''
@@ -497,7 +499,10 @@ export class Agent {
     const output = applyOutputPolicy(streamedOutput, this.config.outputPolicy)
     const tokenMetrics = createTokenMetrics(this.config, validatedInput, completion)
 
-    const result = {
+    const contextCommit = this.contextStrategies && this.config.contextStrategy
+      ? await this.contextStrategies.recordAgentTurn(this.id, this.config, validatedInput, output, tokenMetrics, prepared)
+      : {}
+    return {
       agentId: this.id,
       input: validatedInput,
       output,
@@ -505,99 +510,17 @@ export class Agent {
       model: this.config.model,
       durationMs: Date.now() - startedAt,
       tokenMetrics,
+      ...(memory ? { memory: memory.snapshot } : {}),
+      ...(memory?.classifierTokenMetrics ? { memoryClassifierTokenMetrics: memory.classifierTokenMetrics } : {}),
+      ...(memory?.autoUpdate ? { autoMemoryUpdate: memory.autoUpdate } : {}),
+      ...(prepared.summaryTokenMetrics ? { summaryTokenMetrics: prepared.summaryTokenMetrics } : {}),
+      ...(prepared.context ? { context: prepared.context } : {}),
+      ...(contextCommit.archiveHistory ? { archiveHistory: true } : {}),
       ...(prepared.strategyTokenMetrics ? { strategyTokenMetrics: prepared.strategyTokenMetrics } : {}),
       ...(prepared.strategyError ? { strategyError: prepared.strategyError } : {}),
     }
-    if (this.contextStrategies && this.config.contextStrategy) {
-      await this.contextStrategies.recordAgentTurn(this.id, this.config, validatedInput, output, tokenMetrics)
-    }
-    return result
   }
 
-  async summarize(previousSummary: string | undefined, messagesToSummarize: AgentMessage[]) {
-    const messages: AgentMessage[] = [
-      {
-        role: 'system',
-        content: `Ты обновляешь рабочую память агента для продолжения диалога.
-
-На входе могут быть предыдущее summary и новые сообщения. Создай новое компактное summary, которое заменяет предыдущее summary.
-
-Сохрани только информацию, которая может понадобиться в следующих ответах:
-- цель пользователя и текущий контекст задачи;
-- подтверждённые факты, имена, даты, числа и предпочтения;
-- принятые решения и их причины;
-- ограничения, требования и запреты;
-- созданные артефакты, результаты и их состояние;
-- открытые вопросы, незавершённые действия и следующие шаги.
-
-Правила:
-- новые сообщения имеют приоритет над противоречащими им старыми;
-- не добавляй фактов, интерпретаций или рекомендаций от себя;
-- не повторяй диалог дословно и не сохраняй приветствия, воду и промежуточные рассуждения;
-- если факт не подтверждён, явно пометь его как неопределённый;
-- сохрани точные числа, даты, имена, ссылки и формулировки ограничений;
-- отвечай только summary на русском, без вступления;
-- объём: не более 250 слов.
-
-Формат:
-## Цель и контекст
-...
-## Факты и решения
-...
-## Ограничения и предпочтения
-...
-## Открытые вопросы / следующие шаги
-...`,
-      },
-      ...(previousSummary ? [{ role: 'user' as const, content: `Предыдущее резюме:\n${previousSummary}` }] : []),
-      { role: 'user', content: `Новые сообщения для включения в резюме:\n${formatMessagesForSummary(messagesToSummarize)}` },
-    ]
-    const completion = await this.client.complete(messages, toLlmOptions({ ...this.config, maxTokens: Math.min(this.config.maxTokens ?? 800, 800) }))
-    const metrics = createTokenMetrics(this.config, messages.map((message) => message.content).join('\n'), completion)
-    return { content: completion.content.trim(), metrics }
-  }
-
-  getContextInfo(history: AgentMessage[], storedSummary?: StoredSummary, input = '') {
-    const compressionEnabled = Boolean(this.config.contextCompression?.enabled)
-    const summary = compressionEnabled ? storedSummary : undefined
-    return createContextInfo(
-      this.config,
-      history,
-      summary?.content,
-      summary?.summarizedMessages ?? 0,
-      summary?.estimatedReplacedTokens ?? 0,
-      input,
-    )
-  }
-
-  async prepareContext(fullHistory: AgentMessage[], input: string, storedSummary?: StoredSummary) {
-    const policy = this.config.contextCompression
-    if (!policy?.enabled || countDialogMessages(fullHistory) < (policy.summarizeAfterMessages ?? 10)) {
-      return {
-        history: fullHistory,
-        summary: policy?.enabled ? storedSummary?.content : undefined,
-        summaryTokens: 0,
-        summaryToPersist: undefined,
-        info: this.getContextInfo(fullHistory, storedSummary, input),
-      }
-    }
-
-    const summaryResult = await this.summarize(storedSummary?.content, fullHistory)
-    const summaryToPersist: StoredSummary = {
-      content: summaryResult.content,
-      summarizedMessages: (storedSummary?.summarizedMessages ?? 0) + fullHistory.length,
-      estimatedReplacedTokens: (storedSummary?.estimatedReplacedTokens ?? 0) + estimateMessagesTokens(fullHistory),
-      historyCompacted: true,
-      updatedAt: new Date().toISOString(),
-    }
-    return {
-      history: [] as AgentMessage[],
-      summary: summaryToPersist.content,
-      summaryTokens: summaryResult.metrics.totalTokens,
-      summaryToPersist,
-      info: this.getContextInfo([], summaryToPersist, input),
-    }
-  }
 }
 
 export class AgentService {
@@ -706,19 +629,16 @@ export class AgentService {
     await this.ready
     const agent = this.get(id)
     const history = await this.stateStore.getHistory(id)
-    return agent.getContextInfo(history.filter((message) => !message.archived), await this.stateStore.getSummary(id))
+    const activeHistory = history.filter((message) => !message.archived)
+    return this.contextStrategies?.getAgentContextInfo
+      ? this.contextStrategies.getAgentContextInfo(id, agent.config, activeHistory)
+      : createContextInfo(agent.config, activeHistory, undefined, 0, 0)
   }
 
   async clearHistory(id: string) {
     await this.ready
     this.get(id)
     await this.stateStore.clearHistory(id)
-  }
-
-  async clearSummary(id: string) {
-    await this.ready
-    this.get(id)
-    await this.stateStore.clearSummary(id)
   }
 
   async getContextStrategyState(id: string) {
@@ -772,19 +692,18 @@ export class AgentService {
     const storedHistory = await this.stateStore.getHistory(id)
     const activeHistory = storedHistory.filter((message) => !message.archived)
     const sourceHistory = activeHistory.length > 0 ? activeHistory : providedHistory
-    const preparedContext = await agent.prepareContext(sourceHistory, input, await this.stateStore.getSummary(id))
-    const result = await agent.run(input, preparedContext.history, preparedContext.summary)
-    if (preparedContext.summaryToPersist) {
-      await this.stateStore.setSummary(id, preparedContext.summaryToPersist)
+    const result = await agent.run(input, sourceHistory)
+    if (result.autoMemoryUpdate) await this.persistAutoMemory(id, result.autoMemoryUpdate)
+    if (result.archiveHistory) {
       await this.stateStore.archiveActiveHistory(id)
     }
     const contextMessages = await this.stateStore.appendHistory(id, [
       { role: 'user', content: result.input },
       { role: 'assistant', content: result.output },
     ])
-    const conversationTokens = await this.stateStore.addConversationTokens(id, result.tokenMetrics, preparedContext.summaryTokens, result.strategyTokenMetrics)
+    const conversationTokens = await this.stateStore.addConversationTokens(id, result.tokenMetrics, result.summaryTokenMetrics?.totalTokens ?? 0, result.strategyTokenMetrics, result.memoryClassifierTokenMetrics)
     const tokenHistory = await this.stateStore.getTokenHistory(id)
-    return { ...result, contextMessages, conversationTokens, tokenHistory, context: preparedContext.info }
+    return { ...result, contextMessages, conversationTokens, tokenHistory }
   }
 
   async stream(id: string, input: string, providedHistory: AgentMessage[], onChunk: (content: string) => void) {
@@ -793,19 +712,18 @@ export class AgentService {
     const storedHistory = await this.stateStore.getHistory(id)
     const activeHistory = storedHistory.filter((message) => !message.archived)
     const sourceHistory = activeHistory.length > 0 ? activeHistory : providedHistory
-    const preparedContext = await agent.prepareContext(sourceHistory, input, await this.stateStore.getSummary(id))
-    const result = await agent.stream(input, preparedContext.history, onChunk, preparedContext.summary)
-    if (preparedContext.summaryToPersist) {
-      await this.stateStore.setSummary(id, preparedContext.summaryToPersist)
+    const result = await agent.stream(input, sourceHistory, onChunk)
+    if (result.autoMemoryUpdate) await this.persistAutoMemory(id, result.autoMemoryUpdate)
+    if (result.archiveHistory) {
       await this.stateStore.archiveActiveHistory(id)
     }
     const contextMessages = await this.stateStore.appendHistory(id, [
       { role: 'user', content: result.input },
       { role: 'assistant', content: result.output },
     ])
-    const conversationTokens = await this.stateStore.addConversationTokens(id, result.tokenMetrics, preparedContext.summaryTokens, result.strategyTokenMetrics)
+    const conversationTokens = await this.stateStore.addConversationTokens(id, result.tokenMetrics, result.summaryTokenMetrics?.totalTokens ?? 0, result.strategyTokenMetrics, result.memoryClassifierTokenMetrics)
     const tokenHistory = await this.stateStore.getTokenHistory(id)
-    return { ...result, contextMessages, conversationTokens, tokenHistory, context: preparedContext.info }
+    return { ...result, contextMessages, conversationTokens, tokenHistory }
   }
 
   async runEphemeral(input: string, config: AgentConfig, history: AgentMessage[], useContextStrategies = true) {
@@ -826,27 +744,24 @@ export class AgentService {
     const withoutCompression = new Agent('without-compression', normalizeAgentConfig(baseConfig, this.defaultDeepSeekModel), this.client, this.contextStrategies)
     const withCompression = new Agent('with-compression', normalizeAgentConfig({
       ...baseConfig,
-      contextCompression: { enabled: true, summarizeAfterMessages },
+      contextStrategy: { strategy: 'summary', summarizeAfterMessages },
     }, this.defaultDeepSeekModel), this.client, this.contextStrategies)
-
-    const [withoutResult, preparedContext] = await Promise.all([
+    if (this.contextStrategies?.resetAgentContext) await this.contextStrategies.resetAgentContext('with-compression')
+    const [withoutResult, withResult] = await Promise.all([
       withoutCompression.run(input, history),
-      withCompression.prepareContext(history, input),
+      withCompression.run(input, history),
     ])
-    const summary = preparedContext.summaryToPersist
-    if (!summary) throw new AgentError('Подготовленный сценарий не достиг порога сжатия.', 500)
-
-    const withResult = await withCompression.run(input, preparedContext.history, preparedContext.summary)
-    const compressedTotalTokens = preparedContext.summaryTokens + withResult.tokenMetrics.totalTokens
+    if (!withResult.summaryTokenMetrics || !withResult.context?.summary) throw new AgentError('Подготовленный сценарий не достиг порога сжатия.', 500)
+    const compressedTotalTokens = withResult.summaryTokenMetrics.totalTokens + withResult.tokenMetrics.totalTokens
 
     return {
       withoutCompression: { ...withoutResult, totalTokensWithSummary: withoutResult.tokenMetrics.totalTokens },
       withCompression: {
         ...withResult,
         totalTokensWithSummary: compressedTotalTokens,
-        summaryTokens: preparedContext.summaryTokens,
-        summary: summary.content,
-        summarizedMessages: summary.summarizedMessages,
+        summaryTokens: withResult.summaryTokenMetrics.totalTokens,
+        summary: withResult.context.summary,
+        summarizedMessages: withResult.context.summarizedMessages,
       },
     }
   }
@@ -854,6 +769,22 @@ export class AgentService {
   private register(id: string, config: Required<Pick<AgentConfig, 'provider' | 'model'>> & AgentConfig, createdAt: string) {
     this.agents.set(id, new Agent(id, config, this.client, this.contextStrategies))
     this.createdAt.set(id, createdAt)
+  }
+
+  private async persistAutoMemory(id: string, update: AutoMemoryUpdate) {
+    const agent = this.get(id)
+    const memory = agent.config.memoryLayers
+    if (!memory || memory.mode !== 'auto') return
+    const nextConfig = {
+      ...agent.config,
+      memoryLayers: {
+        ...memory,
+        working: update.working,
+        longTerm: update.longTerm,
+      },
+    }
+    this.register(id, nextConfig, this.createdAt.get(id) ?? new Date().toISOString())
+    await this.persistAgents()
   }
 
   private async persistAgents() {
@@ -1108,7 +1039,7 @@ function createContextInfo(
   const estimatedFullPromptTokens = estimateMessagesTokens(buildMessages(config, retainedHistory, input)) + estimatedReplacedTokens
   const estimatedSentPromptTokens = estimateMessagesTokens(buildMessages(config, retainedHistory, input, summary))
   return {
-    enabled: Boolean(config.contextCompression?.enabled),
+    enabled: config.contextStrategy?.strategy === 'summary',
     summary,
     summarizedMessages,
     retainedMessages: retainedHistory.length,
@@ -1174,8 +1105,8 @@ function normalizeAgentConfig(value: unknown, defaultDeepSeekModel: string) {
     maxTokens: readInteger(input.maxTokens, 1, 100000),
     inputPolicy: normalizeInputPolicy(input.inputPolicy),
     outputPolicy: normalizeOutputPolicy(input.outputPolicy),
-    contextCompression: normalizeContextCompression(input.contextCompression),
-    contextStrategy: normalizeContextStrategy(input.contextStrategy),
+    contextStrategy: normalizeContextStrategy(input.contextStrategy) ?? normalizeLegacySummaryStrategy(input.contextCompression),
+    memoryLayers: normalizeMemoryLayers(input.memoryLayers),
   }
 
   return removeUndefined(config)
@@ -1199,14 +1130,6 @@ function normalizeOutputPolicy(value: unknown) {
   })
 }
 
-function normalizeContextCompression(value: unknown) {
-  if (!isRecord(value)) return undefined
-  return removeUndefined({
-    enabled: typeof value.enabled === 'boolean' ? value.enabled : undefined,
-    summarizeAfterMessages: readInteger(value.summarizeAfterMessages, 1, 100) ?? readInteger(value.summarizeAfterUserMessages, 1, 100),
-  })
-}
-
 function normalizeContextStrategy(value: unknown): AgentContextStrategyConfig | undefined {
   if (!isRecord(value)) return undefined
   const strategy: AgentContextStrategy | undefined = value.strategy === 'sliding'
@@ -1215,6 +1138,8 @@ function normalizeContextStrategy(value: unknown): AgentContextStrategyConfig | 
       ? 'facts'
       : value.strategy === 'branching'
         ? 'branching'
+        : value.strategy === 'summary'
+          ? 'summary'
         : undefined
   if (!strategy) return undefined
 
@@ -1230,7 +1155,41 @@ function normalizeContextStrategy(value: unknown): AgentContextStrategyConfig | 
   return removeUndefined({
     strategy,
     windowSize: readInteger(value.windowSize, 1, 1000000),
+    summarizeAfterMessages: readInteger(value.summarizeAfterMessages, 1, 100),
     facts: facts && Object.keys(facts).length ? facts : undefined,
+  })
+}
+
+/** One-release migration for saved Day 9 agents. New configs only use contextStrategy. */
+function normalizeLegacySummaryStrategy(value: unknown): AgentContextStrategyConfig | undefined {
+  if (!isRecord(value) || value.enabled !== true) return undefined
+  return {
+    strategy: 'summary',
+    summarizeAfterMessages: readInteger(value.summarizeAfterMessages, 1, 100) ?? readInteger(value.summarizeAfterUserMessages, 1, 100) ?? 10,
+  }
+}
+
+function normalizeMemoryLayers(value: unknown): AgentMemoryLayersConfig | undefined {
+  if (!isRecord(value)) return undefined
+  const normalizeEntries = (entries: unknown) => Array.isArray(entries)
+    ? entries.slice(0, 50).flatMap((entry) => {
+      if (!isRecord(entry)) return []
+      const text = readString(entry.text, 4_000)
+      if (!text) return []
+      const id = typeof entry.id === 'string' && /^[a-zA-Z0-9_-]{1,80}$/.test(entry.id) ? entry.id : `memory-${globalThis.crypto.randomUUID()}`
+      const createdAt = typeof entry.createdAt === 'string' && !Number.isNaN(Date.parse(entry.createdAt)) ? entry.createdAt : new Date().toISOString()
+      return [{ id, text, createdAt }]
+    })
+    : undefined
+  return removeUndefined({
+    mode: value.mode === 'auto' ? 'auto' as const : value.mode === 'manual' ? 'manual' as const : undefined,
+    enabled: typeof value.enabled === 'boolean' ? value.enabled : undefined,
+    shortTermLimit: readInteger(value.shortTermLimit, 2, 100),
+    useWorking: typeof value.useWorking === 'boolean' ? value.useWorking : undefined,
+    useLongTerm: typeof value.useLongTerm === 'boolean' ? value.useLongTerm : undefined,
+    working: normalizeEntries(value.working),
+    longTerm: normalizeEntries(value.longTerm),
+    autoInstructions: readString(value.autoInstructions, 2_000),
   })
 }
 
@@ -1299,8 +1258,12 @@ function parseStoredTokenHistory(value: unknown): AgentTokenUsagePoint[] {
     const conversationTokens = readUsageInteger(item, 'conversationTokens')
     const summaryTokens = readUsageInteger(item, 'summaryTokens')
     const strategyTokens = readUsageInteger(item, 'strategyTokens')
+    const memoryTokens = readUsageInteger(item, 'memoryTokens')
     const strategyMetrics = isRecord(item.strategyTokenMetrics)
       ? parseTokenMetrics(item.strategyTokenMetrics)
+      : undefined
+    const memoryMetrics = isRecord(item.memoryTokenMetrics)
+      ? parseTokenMetrics(item.memoryTokenMetrics)
       : undefined
     if (promptTokens === undefined || completionTokens === undefined || totalTokens === undefined || conversationTokens === undefined) return []
     return [{
@@ -1313,6 +1276,8 @@ function parseStoredTokenHistory(value: unknown): AgentTokenUsagePoint[] {
       ...(summaryTokens === undefined ? {} : { summaryTokens }),
       ...((strategyTokens ?? strategyMetrics?.totalTokens) === undefined ? {} : { strategyTokens: strategyTokens ?? strategyMetrics!.totalTokens }),
       ...(strategyMetrics ? { strategyTokenMetrics: strategyMetrics } : {}),
+      ...((memoryTokens ?? memoryMetrics?.totalTokens) === undefined ? {} : { memoryTokens: memoryTokens ?? memoryMetrics!.totalTokens }),
+      ...(memoryMetrics ? { memoryTokenMetrics: memoryMetrics } : {}),
     }]
   })
 }
@@ -1324,19 +1289,6 @@ function parseTokenMetrics(value: Record<string, unknown>): AgentTokenMetrics | 
   const totalTokens = readUsageInteger(value, 'totalTokens')
   if (promptTokens === undefined || completionTokens === undefined || totalTokens === undefined) return undefined
   return { inputTokens, promptTokens, completionTokens, totalTokens }
-}
-
-function parseStoredSummary(value: unknown): StoredSummary | undefined {
-  if (!isRecord(value) || typeof value.content !== 'string' || !value.content.trim() || typeof value.updatedAt !== 'string') return undefined
-  const summarizedMessages = readInteger(value.summarizedMessages, 0, 1_000_000)
-  if (summarizedMessages === undefined) return undefined
-  return {
-    content: value.content,
-    summarizedMessages,
-    estimatedReplacedTokens: readInteger(value.estimatedReplacedTokens, 0, 10_000_000) ?? estimateTokens(value.content),
-    historyCompacted: value.historyCompacted === true,
-    updatedAt: value.updatedAt,
-  }
 }
 
 function isNodeError(error: unknown): error is NodeJS.ErrnoException {

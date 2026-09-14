@@ -1,13 +1,13 @@
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 import { AgentError, AgentService } from './agent-service'
-import type { AgentConfig, AgentContextPreparation, AgentMessage, AgentTokenMetrics } from './agent-service'
+import type { AgentConfig, AgentContextCommit, AgentContextInfo, AgentContextPreparation, AgentMessage, AgentTokenMetrics } from './agent-service'
 
 export const FACT_KEYS = ['goal', 'constraints', 'preferences', 'decisions', 'agreements', 'open_questions'] as const
 
 export type FactKey = typeof FACT_KEYS[number]
 export type StickyFacts = Record<FactKey, string[]>
-export type ContextStrategy = 'sliding' | 'facts' | 'branching'
+export type ContextStrategy = 'sliding' | 'facts' | 'branching' | 'summary'
 
 type StoredMessage = {
   id: string
@@ -40,12 +40,20 @@ type Checkpoint = {
   createdAt: string
 }
 
+type ContextSummary = {
+  content: string
+  summarizedMessages: number
+  estimatedReplacedTokens: number
+  updatedAt: string
+}
+
 type AgentContextState = {
   agentId: string
   strategy: ContextStrategy
   windowSize: number
   facts: StickyFacts
   factsSnapshots: FactsSnapshot[]
+  summary?: ContextSummary
   branching: {
     activeBranchId: string
     checkpoints: Checkpoint[]
@@ -89,6 +97,10 @@ export class ContextStrategiesService {
     let nextConfig = config
     let strategyTokenMetrics: AgentTokenMetrics | undefined
     let strategyError: string | undefined
+    let summary: string | undefined
+    let summaryTokenMetrics: AgentTokenMetrics | undefined
+    let summaryToPersist: ContextSummary | undefined
+    let contextInfo: AgentContextInfo | undefined
 
     if (strategy.strategy === 'sliding') {
       selectedHistory = history.slice(-context.windowSize)
@@ -114,25 +126,60 @@ export class ContextStrategiesService {
         contextStrategy: { ...strategy, windowSize: context.windowSize, facts: context.facts },
         systemPrompt: [config.systemPrompt, factsBlock].filter(Boolean).join('\n\n'),
       }
-    } else {
+    } else if (strategy.strategy === 'branching') {
       const branch = findBranch(context.branching.branches, context.branching.activeBranchId)
       // Only an untouched root may adopt history that predates strategy setup.
       // A newly created child branch must start exactly at its checkpoint.
       if (!branch.parentId && branch.messages.length === 0 && history.length > 0) branch.messages = history.map(toStoredMessage)
       selectedHistory = this.agentBranchLineage(context, branch).map(toAgentMessage)
+    } else {
+      const threshold = strategy.summarizeAfterMessages ?? 10
+      if (countDialogMessages(history) >= threshold) {
+        const result = await this.summarizeHistory(context.summary?.content, history, config)
+        summaryToPersist = {
+          content: result.content,
+          summarizedMessages: (context.summary?.summarizedMessages ?? 0) + history.length,
+          estimatedReplacedTokens: (context.summary?.estimatedReplacedTokens ?? 0) + estimateMessagesTokens(history),
+          updatedAt: new Date().toISOString(),
+        }
+        selectedHistory = []
+        summary = summaryToPersist.content
+        summaryTokenMetrics = result.tokenMetrics
+        contextInfo = createSummaryContextInfo(config, selectedHistory, summaryToPersist, input)
+      } else {
+        summary = context.summary?.content
+        contextInfo = createSummaryContextInfo(config, selectedHistory, context.summary, input)
+      }
     }
 
     await this.persist()
-    return { config: nextConfig, history: selectedHistory, strategyTokenMetrics, strategyError }
+    return {
+      config: nextConfig,
+      history: selectedHistory,
+      ...(summary ? { summary } : {}),
+      ...(summaryTokenMetrics ? { summaryTokenMetrics } : {}),
+      ...(summaryToPersist ? { summaryToPersist } : {}),
+      ...(contextInfo ? { context: contextInfo } : {}),
+      ...(strategyTokenMetrics ? { strategyTokenMetrics } : {}),
+      ...(strategyError ? { strategyError } : {}),
+    }
   }
 
-  async recordAgentTurn(agentId: string, config: AgentConfig, input: string, output: string, tokenMetrics: AgentTokenMetrics) {
+  async recordAgentTurn(agentId: string, config: AgentConfig, input: string, output: string, tokenMetrics: AgentTokenMetrics, preparation?: AgentContextPreparation): Promise<AgentContextCommit> {
     await this.ready
     const strategy = config.contextStrategy
-    if (!strategy || strategy.strategy !== 'branching') return
+    if (!strategy) return {}
     const context = this.ensureAgentContext(agentId, strategy.strategy, strategy.windowSize)
-    appendPair(findBranch(context.branching.branches, context.branching.activeBranchId).messages, input, output, tokenMetrics)
+    if (strategy.strategy === 'branching') {
+      appendPair(findBranch(context.branching.branches, context.branching.activeBranchId).messages, input, output, tokenMetrics)
+    }
+    if (strategy.strategy === 'summary' && isContextSummary(preparation?.summaryToPersist)) {
+      context.summary = preparation.summaryToPersist
+      await this.persist()
+      return { archiveHistory: true }
+    }
     await this.persist()
+    return {}
   }
 
   async getAgentContext(agentId: string, config: AgentConfig) {
@@ -142,6 +189,17 @@ export class ContextStrategiesService {
     const context = this.ensureAgentContext(agentId, strategy.strategy, strategy.windowSize)
     await this.persist()
     return this.serializeAgentContext(context)
+  }
+
+  async getAgentContextInfo(agentId: string, config: AgentConfig, history: AgentMessage[]): Promise<AgentContextInfo> {
+    await this.ready
+    const strategy = config.contextStrategy
+    if (!strategy || strategy.strategy !== 'summary') {
+      return createSummaryContextInfo(config, history, undefined, '')
+    }
+    const context = this.ensureAgentContext(agentId, strategy.strategy, strategy.windowSize)
+    await this.persist()
+    return createSummaryContextInfo(config, history, context.summary, '')
   }
 
   async resetAgentContext(agentId: string) {
@@ -230,6 +288,30 @@ export class ContextStrategiesService {
     return { values: normalizeFacts(JSON.parse(result.output)), tokenMetrics: result.tokenMetrics }
   }
 
+  private async summarizeHistory(previousSummary: string | undefined, history: AgentMessage[], config: AgentConfig) {
+    const result = await this.agents.runEphemeral(
+      `Предыдущее резюме:\n${previousSummary || 'Нет.'}\n\nНовые сообщения для включения в резюме:\n${formatMessages(history)}`,
+      {
+        provider: config.provider ?? 'deepseek',
+        model: config.model ?? this.defaultModel,
+        temperature: 0,
+        maxTokens: Math.min(config.maxTokens ?? 800, 800),
+        systemPrompt: `Ты создаёшь компактное summary контекста агента. Верни только summary на русском, без вступления и Markdown-обёртки.
+
+Новое всегда важнее противоречащего старого. Сохрани цель, подтверждённые факты, имена, даты, числа, решения, причины решений, ограничения, предпочтения, состояние артефактов и открытые следующие шаги. Не добавляй догадок, не пересказывай диалог дословно и не сохраняй приветствия или промежуточные рассуждения. Если факт не подтверждён, отметь его как неопределённый. Объём — до 250 слов.
+
+Структура:
+## Цель и контекст
+## Факты и решения
+## Ограничения и предпочтения
+## Открытые вопросы / следующие шаги`,
+      },
+      [],
+      false,
+    )
+    return { content: result.output.trim(), tokenMetrics: result.tokenMetrics }
+  }
+
   private agentBranchLineage(context: AgentContextState, branch: Branch): StoredMessage[] {
     if (!branch.parentId) return [...branch.messages]
     const inherited = this.agentBranchLineage(context, findBranch(context.branching.branches, branch.parentId))
@@ -299,6 +381,38 @@ function normalizeFacts(value: unknown): StickyFacts {
   return facts
 }
 
+function formatMessages(messages: AgentMessage[]) {
+  return messages.map((message) => `${message.role === 'assistant' ? 'Агент' : message.role === 'user' ? 'Пользователь' : 'Система'}: ${message.content}`).join('\n\n')
+}
+
+function countDialogMessages(messages: AgentMessage[]) {
+  return messages.filter((message) => message.role === 'user' || message.role === 'assistant').length
+}
+
+function estimateTokens(value: string) {
+  const normalized = value.trim()
+  return normalized ? Math.max(1, Math.ceil(normalized.length / 3)) : 0
+}
+
+function estimateMessagesTokens(messages: AgentMessage[]) {
+  return messages.reduce((total, message) => total + estimateTokens(message.content) + 4, 0)
+}
+
+function createSummaryContextInfo(config: AgentConfig, retainedHistory: AgentMessage[], summary: ContextSummary | undefined, input: string): AgentContextInfo {
+  const systemTokens = estimateTokens(config.systemPrompt ?? '') + (config.systemPrompt ? 4 : 0)
+  const fullPromptTokens = systemTokens + estimateMessagesTokens(retainedHistory) + estimateTokens(input) + 4 + (summary?.estimatedReplacedTokens ?? 0)
+  const sentPromptTokens = systemTokens + estimateMessagesTokens(retainedHistory) + estimateTokens(input) + 4 + (summary ? estimateTokens(summary.content) + 4 : 0)
+  return {
+    enabled: config.contextStrategy?.strategy === 'summary',
+    ...(summary ? { summary: summary.content } : {}),
+    summarizedMessages: summary?.summarizedMessages ?? 0,
+    retainedMessages: retainedHistory.length,
+    estimatedFullPromptTokens: fullPromptTokens,
+    estimatedSentPromptTokens: sentPromptTokens,
+    estimatedSavedTokens: Math.max(0, fullPromptTokens - sentPromptTokens),
+  }
+}
+
 function appendPair(messages: StoredMessage[], input: string, output: string, tokenMetrics: AgentTokenMetrics) {
   messages.push(
     { id: newId(), role: 'user', content: input, createdAt: new Date().toISOString() },
@@ -340,7 +454,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function isAgentContextState(value: unknown): value is AgentContextState {
   return isRecord(value)
     && typeof value.agentId === 'string'
-    && (value.strategy === 'sliding' || value.strategy === 'facts' || value.strategy === 'branching')
+    && (value.strategy === 'sliding' || value.strategy === 'facts' || value.strategy === 'branching' || value.strategy === 'summary')
     && typeof value.windowSize === 'number'
     && isRecord(value.facts)
     && Array.isArray(value.factsSnapshots)
@@ -348,6 +462,14 @@ function isAgentContextState(value: unknown): value is AgentContextState {
     && Array.isArray(value.branching.branches)
     && Array.isArray(value.branching.checkpoints)
     && typeof value.branching.activeBranchId === 'string'
+}
+
+function isContextSummary(value: unknown): value is ContextSummary {
+  return isRecord(value)
+    && typeof value.content === 'string'
+    && typeof value.summarizedMessages === 'number'
+    && typeof value.estimatedReplacedTokens === 'number'
+    && typeof value.updatedAt === 'string'
 }
 
 function isNodeError(error: unknown): error is NodeJS.ErrnoException {
