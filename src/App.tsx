@@ -5,7 +5,7 @@ import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
 
 type MessageRole = 'user' | 'assistant'
-type Page = 'chat' | 'compare' | 'reasoning' | 'temperature' | 'models' | 'agents' | 'context-demo' | 'context-comparison' | 'context-strategies' | 'context-branching' | 'memory-layers'
+type Page = 'chat' | 'compare' | 'reasoning' | 'temperature' | 'models' | 'agents' | 'context-demo' | 'context-comparison' | 'context-strategies' | 'context-branching' | 'memory-layers' | 'personalization'
 
 type ChatMessage = {
   id: string
@@ -74,6 +74,7 @@ type AgentConfig = {
   outputPolicy?: { maxCharacters?: number; format?: 'text' | 'json'; stopSequences?: string[] }
   contextStrategy?: { strategy: 'sliding' | 'facts' | 'branching' | 'summary'; windowSize?: number; summarizeAfterMessages?: number; facts?: Record<string, string[]> }
   memoryLayers?: { mode?: 'manual' | 'auto'; enabled?: boolean; shortTermLimit?: number; useWorking?: boolean; useLongTerm?: boolean; working?: ManualMemoryEntry[]; longTerm?: ManualMemoryEntry[]; autoInstructions?: string }
+  personalization?: { activeProfileId?: string; profiles?: UserProfile[]; globalLongTerm?: ManualMemoryEntry[] }
 }
 type AgentSummary = { id: string; config: AgentConfig; createdAt?: string }
 type AgentsListResult = { agents: AgentSummary[]; count: number }
@@ -84,8 +85,10 @@ type AgentContextCompression = { enabled?: boolean; summarizeAfterMessages?: num
 type AgentStreamChunk = { content?: string; error?: string; done?: boolean; result?: { durationMs?: number; tokens?: number; conversationTokens?: number; contextMessages?: number; tokenMetrics?: AgentTokenMetrics; context?: AgentContextInfo } }
 type AgentHistoryResult = { messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string; archived?: boolean }>; count: number; conversationTokens?: number }
 type ManualMemoryEntry = { id: string; text: string; createdAt: string }
+type UserProfile = { id: string; name: string; style?: string; format?: string; restrictions?: string }
 type AgentMemorySnapshot = { shortTerm: Array<{ role: 'user' | 'assistant'; content: string }>; working: ManualMemoryEntry[]; longTerm: ManualMemoryEntry[] }
 type MemoryRunResult = { output: string; tokenMetrics: AgentTokenMetrics; memory?: AgentMemorySnapshot }
+type ProfilePreview = { profileId: string; content?: string; error?: string; tokens?: number }
 type AgentModelOption = { value: string; label: string }
 type ContextDemoScenario = 'short' | 'long' | 'overflow'
 type ContextDemoResponse = {
@@ -190,6 +193,16 @@ const branchingLabAgent = { id: 'day10-branching-lab', name: 'Day 10 · Branchin
 const day10SystemPrompt = 'Веди предметный диалог: опирайся только на условия из сообщений и, если они есть, из карточки фактов. Не выдумывай недостающие детали. О механизмах хранения контекста не рассказывай, если пользователь прямо не спросил.'
 const memoryLabAgent = { id: 'day11-memory-lab', name: 'Day 11 · Memory notebook' }
 const memoryLabSystemPrompt = 'Ты помощник по планированию и принятию решений. Учитывай только релевантные записи рабочей и долговременной памяти. Текущий запрос пользователя важнее старых записей. Не упоминай устройство памяти, если тебя прямо не спросили.'
+const personalizationLabAgent = { id: 'day12-personalized-assistant', name: 'Day 12 · Personalized assistant' }
+const personalizationLabSystemPrompt = 'Ты полезный AI-помощник. Отвечай по существу, учитывай текущий вопрос и применяй активные настройки пользователя без упоминания внутреннего устройства профилей и памяти.'
+const defaultProfiles: UserProfile[] = [
+  { id: 'tournament-player', name: 'Кирилл · турнирный игрок Unmatched', style: 'Профессионально и предметно. Используй терминологию Unmatched: темп, позиционка, hand management, value, match-up и win condition.', format: 'Начинай с чёткого вердикта, затем давай разбор match-up, ключевые решения по ходам и риски. Оценивай планы с позиции турнирной игры.', restrictions: 'Не объясняй базовые правила без прямой просьбы. Не выдавай субъективные предпочтения за доказанный факт и отмечай, когда совет зависит от карты, колоды или формата турнира.' },
+  { id: 'new-player', name: 'Саша · начинающий игрок Unmatched', style: 'Дружелюбно, спокойно и простыми словами. Новые термины сразу кратко объясняй на примере.', format: 'Сначала коротко скажи, что делать, затем дай 2–3 простых шага. Добавляй один пример хода или карты, если это поможет.', restrictions: 'Не перегружай продвинутыми комбинациями, вероятностями и длинными списками персонажей. Не предполагай знания колод, карт и турнирной меты.' },
+]
+const profileTestPrompts = [
+  'Я играю в Unmatched за Алису против Медузы. Какой план на первые два хода будет самым надёжным?',
+  'Как оценить match-up между Шерлоком Холмсом и Медузой: какой у каждого план на победу, ключевые риски и что важно учитывать на карте?',
+]
 const defaultFormatInstruction = 'Первая строка начинается с "КРАТКО:", затем ровно 3 строки, начинающиеся с "- ". Каждый пункт — не более 8 слов.'
 const defaultJsonExample = '{\n  "summary": "Краткое резюме",\n  "items": ["Пункт 1", "Пункт 2"]\n}'
 const createStopSequenceField = (value = ''): StopSequenceField => ({ id: crypto.randomUUID(), value })
@@ -239,6 +252,9 @@ function App() {
           <button className={`page-nav-button ${activePage === 'memory-layers' ? 'active' : ''}`} onClick={() => setActivePage('memory-layers')}>
             <span>◉</span> Память
           </button>
+          <button className={`page-nav-button ${activePage === 'personalization' ? 'active' : ''}`} onClick={() => setActivePage('personalization')}>
+            <span>◐</span> Профили
+          </button>
         </nav>
 
         <div className="sidebar-bottom">
@@ -248,7 +264,7 @@ function App() {
       </aside>
 
       <main className="day-main">
-        {activePage === 'chat' ? <ChatPage /> : activePage === 'compare' ? <ComparePage /> : activePage === 'reasoning' ? <ReasoningPage /> : activePage === 'temperature' ? <TemperaturePage /> : activePage === 'models' ? <ModelsPage /> : activePage === 'agents' ? <AgentsPage /> : activePage === 'context-demo' ? <ContextDemoPage /> : activePage === 'context-comparison' ? <ContextCompressionComparisonPage /> : activePage === 'context-strategies' ? <ContextStrategiesPage /> : activePage === 'context-branching' ? <ContextBranchingPage /> : <MemoryLayersPage />}
+        {activePage === 'chat' ? <ChatPage /> : activePage === 'compare' ? <ComparePage /> : activePage === 'reasoning' ? <ReasoningPage /> : activePage === 'temperature' ? <TemperaturePage /> : activePage === 'models' ? <ModelsPage /> : activePage === 'agents' ? <AgentsPage /> : activePage === 'context-demo' ? <ContextDemoPage /> : activePage === 'context-comparison' ? <ContextCompressionComparisonPage /> : activePage === 'context-strategies' ? <ContextStrategiesPage /> : activePage === 'context-branching' ? <ContextBranchingPage /> : activePage === 'memory-layers' ? <MemoryLayersPage /> : <PersonalizationPage />}
       </main>
     </div>
   )
@@ -1054,6 +1070,168 @@ function MemoryLayersPage() {
 
 function MemoryNotebookLayer({ title, subtitle, entries, onRemove, onClear, disabled }: { title: string; subtitle: string; entries: ManualMemoryEntry[]; onRemove: (id: string) => void; onClear: () => void; disabled: boolean }) {
   return <section className="memory-note-layer"><header><div><p className="eyebrow">{title}</p><h3>{subtitle}</h3></div><button type="button" onClick={onClear} disabled={disabled || !entries.length}>Очистить</button></header>{entries.length ? <div>{entries.map((entry) => <article key={entry.id}><p>{entry.text}</p><div><small>{new Date(entry.createdAt).toLocaleString()}</small><button type="button" onClick={() => onRemove(entry.id)} disabled={disabled}>Удалить</button></div></article>)}</div> : <p className="strategy-empty">Пусто — добавьте запись вручную.</p>}</section>
+}
+
+function PersonalizationPage() {
+  const [agent, setAgent] = useState<AgentSummary | null>(null)
+  const [history, setHistory] = useState<AgentHistoryResult['messages']>([])
+  const [draft, setDraft] = useState<UserProfile | null>(null)
+  const [message, setMessage] = useState('')
+  const [workingNote, setWorkingNote] = useState('')
+  const [globalFact, setGlobalFact] = useState('')
+  const [comparisonInput, setComparisonInput] = useState('')
+  const [previews, setPreviews] = useState<ProfilePreview[]>([])
+  const [isLoading, setIsLoading] = useState(false)
+  const [isComparing, setIsComparing] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => { void load() }, [])
+
+  const personalization = agent?.config.personalization ?? { activeProfileId: defaultProfiles[0].id, profiles: defaultProfiles, globalLongTerm: [] }
+  const profiles = personalization.profiles?.length ? personalization.profiles : defaultProfiles
+  const activeProfile = profiles.find((profile) => profile.id === personalization.activeProfileId) ?? profiles[0]
+  const memory = agent?.config.memoryLayers ?? { mode: 'manual' as const, enabled: true, shortTermLimit: 12, useWorking: true, useLongTerm: false, working: [], longTerm: [] }
+  const shortTerm = history.slice(-Math.max(2, memory.shortTermLimit ?? 12))
+  if (shortTerm[0]?.role === 'assistant') shortTerm.shift()
+
+  useEffect(() => { setDraft(activeProfile ? { ...activeProfile } : null) }, [activeProfile?.id, activeProfile?.name, activeProfile?.style, activeProfile?.format, activeProfile?.restrictions])
+
+  async function ensureAgent() {
+    const existing = await fetch(`/api/agents/${personalizationLabAgent.id}`)
+    if (existing.ok) return await existing.json() as AgentSummary
+    if (existing.status !== 404) throw new Error('Не удалось проверить персонализированного агента.')
+    const response = await fetch('/api/agents', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: personalizationLabAgent.id, config: {
+        name: personalizationLabAgent.name, provider: 'deepseek', model: 'deepseek-v4-flash', temperature: 0,
+        systemPrompt: personalizationLabSystemPrompt,
+        memoryLayers: { mode: 'manual', enabled: true, shortTermLimit: 12, useWorking: true, useLongTerm: false, working: [], longTerm: [] },
+        personalization: { activeProfileId: defaultProfiles[0].id, profiles: defaultProfiles, globalLongTerm: [] },
+      } }),
+    })
+    const data = await response.json() as AgentSummary & ApiError
+    if (!response.ok) throw new Error(data.error || 'Не удалось создать персонализированного агента.')
+    return data
+  }
+
+  async function load() {
+    setIsLoading(true)
+    try {
+      const current = await ensureAgent()
+      const response = await fetch(`/api/agents/${personalizationLabAgent.id}/history`)
+      const data = await response.json() as AgentHistoryResult & ApiError
+      if (!response.ok) throw new Error(data.error || 'Не удалось загрузить текущий диалог.')
+      setAgent(current); setHistory(data.messages); setError(null)
+    } catch (requestError) { setError(requestError instanceof Error ? requestError.message : 'Не удалось загрузить профили.') } finally { setIsLoading(false) }
+  }
+
+  async function saveConfig(config: AgentConfig) {
+    if (!agent) return
+    setIsLoading(true); setError(null)
+    try {
+      const response = await fetch(`/api/agents/${agent.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ config }) })
+      const data = await response.json() as AgentSummary & ApiError
+      if (!response.ok) throw new Error(data.error || 'Не удалось сохранить настройки.')
+      setAgent(data)
+    } catch (requestError) { setError(requestError instanceof Error ? requestError.message : 'Не удалось сохранить настройки.') } finally { setIsLoading(false) }
+  }
+
+  async function switchProfile(profileId: string) {
+    if (!agent || profileId === activeProfile?.id) return
+    await saveConfig({ ...agent.config, memoryLayers: { ...memory, working: [] }, personalization: { ...personalization, activeProfileId: profileId, profiles } })
+    try {
+      await fetch(`/api/agents/${agent.id}/history`, { method: 'DELETE' })
+      setHistory([]); setPreviews([])
+    } catch { setError('Профиль переключён, но не удалось очистить историю сессии.') }
+  }
+
+  async function saveProfile() {
+    if (!agent || !draft?.name.trim()) return
+    await saveConfig({ ...agent.config, personalization: { ...personalization, profiles: profiles.map((profile) => profile.id === draft.id ? { ...draft, name: draft.name.trim() } : profile), activeProfileId: draft.id } })
+  }
+
+  async function createProfile() {
+    if (!agent) return
+    const profile = { id: `profile-${crypto.randomUUID()}`, name: 'Новый профиль', style: 'Нейтрально и по существу.', format: 'Краткий ответ с практическими шагами.', restrictions: '' }
+    setDraft(profile)
+    await saveConfig({ ...agent.config, memoryLayers: { ...memory, working: [] }, personalization: { ...personalization, activeProfileId: profile.id, profiles: [...profiles, profile] } })
+    await fetch(`/api/agents/${agent.id}/history`, { method: 'DELETE' })
+    setHistory([]); setPreviews([])
+  }
+
+  async function deleteProfile() {
+    if (!agent || !activeProfile || profiles.length < 2) return
+    const nextProfiles = profiles.filter((profile) => profile.id !== activeProfile.id)
+    await saveConfig({ ...agent.config, memoryLayers: { ...memory, working: [] }, personalization: { ...personalization, activeProfileId: nextProfiles[0].id, profiles: nextProfiles } })
+    await fetch(`/api/agents/${agent.id}/history`, { method: 'DELETE' })
+    setHistory([]); setPreviews([])
+  }
+
+  async function addNote(scope: 'working' | 'global') {
+    if (!agent) return
+    const text = (scope === 'working' ? workingNote : globalFact).trim()
+    if (!text) return
+    const entry = { id: `${scope}-${crypto.randomUUID()}`, text, createdAt: new Date().toISOString() }
+    const config = scope === 'working'
+      ? { ...agent.config, memoryLayers: { ...memory, working: [...(memory.working ?? []), entry] } }
+      : { ...agent.config, personalization: { ...personalization, profiles, globalLongTerm: [...(personalization.globalLongTerm ?? []), entry] } }
+    await saveConfig(config)
+    if (scope === 'working') setWorkingNote(''); else setGlobalFact('')
+  }
+
+  async function removeNote(scope: 'working' | 'global', id: string) {
+    if (!agent) return
+    const config = scope === 'working'
+      ? { ...agent.config, memoryLayers: { ...memory, working: (memory.working ?? []).filter((entry) => entry.id !== id) } }
+      : { ...agent.config, personalization: { ...personalization, profiles, globalLongTerm: (personalization.globalLongTerm ?? []).filter((entry) => entry.id !== id) } }
+    await saveConfig(config)
+  }
+
+  async function send(event: FormEvent) {
+    event.preventDefault()
+    const input = message.trim()
+    if (!input) return
+    setIsLoading(true); setError(null)
+    try {
+      const response = await fetch(`/api/agents/${personalizationLabAgent.id}/run`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ input }) })
+      const data = await response.json() as MemoryRunResult & ApiError
+      if (!response.ok) throw new Error(data.error || 'Не удалось получить ответ агента.')
+      setMessage('')
+      const historyResponse = await fetch(`/api/agents/${personalizationLabAgent.id}/history`)
+      const historyData = await historyResponse.json() as AgentHistoryResult
+      setHistory(historyData.messages)
+    } catch (requestError) { setError(requestError instanceof Error ? requestError.message : 'Не удалось получить ответ агента.') } finally { setIsLoading(false) }
+  }
+
+  async function compareProfiles() {
+    const input = comparisonInput.trim()
+    if (!input) return
+    setIsComparing(true); setError(null); setPreviews([])
+    const results = await Promise.all(profiles.map(async (profile) => {
+      try {
+        const response = await fetch(`/api/agents/${personalizationLabAgent.id}/profile-preview`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ input, profileId: profile.id }) })
+        const data = await response.json() as MemoryRunResult & ApiError
+        return response.ok ? { profileId: profile.id, content: data.output, tokens: data.tokenMetrics?.totalTokens } : { profileId: profile.id, error: data.error || 'Не удалось выполнить проверку.' }
+      } catch { return { profileId: profile.id, error: 'Сеть недоступна.' } }
+    }))
+    setPreviews(results); setIsComparing(false)
+  }
+
+  return <div className="page-view personalization-page">
+    <header className="page-header"><div><p className="eyebrow">День 12 · Personalization</p><h1>Ассистент, который знает пользователя</h1><p className="header-description">Профиль меняет стиль, формат и ограничения каждого ответа. Рабочая память относится к текущей сессии, а глобальные факты сохраняются для всех профилей и диалогов.</p></div><div className="model-badge"><span className="pulse-dot" /> DeepSeek</div></header>
+    {error && <div className="error-message" role="alert">{error}</div>}
+    <section className="profile-switcher"><div><p className="eyebrow">Активный профиль</p><select value={activeProfile?.id ?? ''} onChange={(event) => void switchProfile(event.target.value)} disabled={isLoading}>{profiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.name}</option>)}</select><small>При переключении начинается чистая сессия: short-term и working memory очищаются, глобальные факты остаются.</small></div><div className="profile-switcher-actions"><button type="button" className="secondary-button" onClick={() => void createProfile()} disabled={isLoading}>+ Создать профиль</button><button type="button" className="text-button danger" onClick={() => void deleteProfile()} disabled={isLoading || profiles.length < 2}>Удалить</button></div></section>
+    <section className="personalization-grid">
+      <div className="profile-editor"><div className="section-heading"><div><span className="step-number">01</span><div><p className="eyebrow">Настройки профиля</p><h2>Как отвечать этому пользователю</h2></div></div></div>{draft && <div className="profile-fields"><label>Имя профиля<input value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} disabled={isLoading} /></label><label>Стиль общения<textarea rows={3} value={draft.style ?? ''} onChange={(event) => setDraft({ ...draft, style: event.target.value })} disabled={isLoading} placeholder="Например: спокойно, без жаргона" /></label><label>Формат ответа<textarea rows={3} value={draft.format ?? ''} onChange={(event) => setDraft({ ...draft, format: event.target.value })} disabled={isLoading} placeholder="Например: вывод, три шага, короткий пример" /></label><label>Ограничения<textarea rows={3} value={draft.restrictions ?? ''} onChange={(event) => setDraft({ ...draft, restrictions: event.target.value })} disabled={isLoading} placeholder="Например: не советовать платные сервисы" /></label><button type="button" className="compare-button" onClick={() => void saveProfile()} disabled={isLoading || !draft.name.trim()}>Сохранить профиль</button></div>}</div>
+      <div className="memory-scopes"><div className="section-heading"><div><span className="step-number">02</span><div><p className="eyebrow">Memory scopes</p><h2>Память с разной областью действия</h2></div></div></div><MemoryScope title="Working memory" subtitle="Текущая задача и только эта сессия" entries={memory.working ?? []} value={workingNote} onChange={setWorkingNote} onAdd={() => void addNote('working')} onRemove={(id) => void removeNote('working', id)} disabled={isLoading} /><MemoryScope title="Global long-term memory" subtitle="Факты для всех профилей и будущих диалогов" entries={personalization.globalLongTerm ?? []} value={globalFact} onChange={setGlobalFact} onAdd={() => void addNote('global')} onRemove={(id) => void removeNote('global', id)} disabled={isLoading} /></div>
+    </section>
+    <section className="personalized-chat"><div className="section-heading"><div><span className="step-number">03</span><div><p className="eyebrow">Short-term · {shortTerm.length}/{memory.shortTermLimit ?? 12}</p><h2>Диалог с профилем «{activeProfile?.name}»</h2></div></div></div><div className="profile-applied">В каждый запрос добавлены: <strong>{activeProfile?.name}</strong>, его стиль, формат и ограничения, а также {personalization.globalLongTerm?.length ?? 0} глобальных фактов.</div><div className="personalized-history">{shortTerm.length ? shortTerm.map((item, index) => <div className={item.role} key={`${item.role}-${index}`}><small>{item.role === 'user' ? 'Вы' : 'Агент'}</small><MarkdownContent content={item.content} /></div>) : <p className="strategy-empty">Новая сессия — история диалога пока пуста.</p>}</div><form className="strategy-composer" onSubmit={send}><textarea rows={3} value={message} onChange={(event) => setMessage(event.target.value)} disabled={isLoading} placeholder="Спросите ассистента…" /><button className="compare-button" type="submit" disabled={isLoading || !message.trim()}>{isLoading ? 'Отправляем…' : 'Отправить'} <span>→</span></button></form></section>
+    <section className="profile-comparison"><div className="section-heading"><div><span className="step-number">04</span><div><p className="eyebrow">Проверка</p><h2>Один вопрос — разные профили</h2></div></div></div><p>Один и тот же вопрос отправляется всем профилям без записи в диалог и без изменения памяти — отличается только активный профиль.</p><div className="profile-test-prompts">{profileTestPrompts.map((prompt, index) => <button type="button" key={prompt} onClick={() => setComparisonInput(prompt)} disabled={isComparing}><span>Тест {index + 1}</span>{index === 0 ? 'Первые ходы' : 'Разбор match-up'}</button>)}</div><div className="comparison-form"><textarea rows={3} value={comparisonInput} onChange={(event) => setComparisonInput(event.target.value)} disabled={isComparing} /><button className="compare-button" type="button" onClick={() => void compareProfiles()} disabled={isComparing || !comparisonInput.trim()}>{isComparing ? 'Сравниваем…' : 'Проверить все профили'}</button></div>{previews.length > 0 && <div className="profile-preview-grid">{previews.map((preview) => <article key={preview.profileId}><header><strong>{profiles.find((profile) => profile.id === preview.profileId)?.name}</strong><small>{preview.tokens ? `${preview.tokens} токенов` : 'preview'}</small></header>{preview.error ? <p className="profile-preview-error">{preview.error}</p> : <div className="reasoning-content"><MarkdownContent content={preview.content ?? ''} /></div>}</article>)}</div>}</section>
+  </div>
+}
+
+function MemoryScope({ title, subtitle, entries, value, onChange, onAdd, onRemove, disabled }: { title: string; subtitle: string; entries: ManualMemoryEntry[]; value: string; onChange: (value: string) => void; onAdd: () => void; onRemove: (id: string) => void; disabled: boolean }) {
+  return <section className="memory-scope"><header><div><p className="eyebrow">{title}</p><h3>{subtitle}</h3></div><span>{entries.length}</span></header><div className="memory-scope-list">{entries.length ? entries.map((entry) => <article key={entry.id}><p>{entry.text}</p><button type="button" onClick={() => onRemove(entry.id)} disabled={disabled}>×</button></article>) : <p>Пока пусто.</p>}</div><div className="memory-scope-add"><textarea rows={2} value={value} onChange={(event) => onChange(event.target.value)} disabled={disabled} /><button type="button" className="secondary-button" disabled={disabled || !value.trim()} onClick={onAdd}>Добавить</button></div></section>
 }
 
 function ContextCompressionComparisonPage() {

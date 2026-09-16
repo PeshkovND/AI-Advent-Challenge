@@ -3,6 +3,8 @@ import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 import { AgentMemory } from './agent-memory'
 import type { AgentMemoryLayersConfig, AgentMemorySnapshot, AutoMemoryUpdate } from './agent-memory'
+import { personalizationPrompt } from './agent-personalization'
+import type { AgentPersonalizationConfig } from './agent-personalization'
 
 export type AgentProvider = 'deepseek' | 'huggingface' | 'openrouter'
 export type AgentMessageRole = 'system' | 'user' | 'assistant'
@@ -57,6 +59,7 @@ export type AgentConfig = {
     stopSequences?: string[]
   }
   memoryLayers?: AgentMemoryLayersConfig
+  personalization?: AgentPersonalizationConfig
   /**
    * Optional context policy used by the Day 10 strategy demo. The policy is
    * part of the agent configuration so the Agent, rather than the storage
@@ -440,9 +443,7 @@ export class Agent {
       ? await this.contextStrategies.prepareAgentContext(this.id, validatedInput, this.config, history)
       : { config: this.config, history }
     const memory = this.memory ? await this.memory.prepare(prepared.history, validatedInput, { history, summary: prepared.summary ?? summary }) : undefined
-    const effectiveConfig = memory?.systemPrompt
-      ? { ...prepared.config, systemPrompt: [prepared.config.systemPrompt, memory.systemPrompt].filter(Boolean).join('\n\n') }
-      : prepared.config
+    const effectiveConfig = withPersonalization(prepared.config, memory?.systemPrompt)
     const messages = buildMessages(effectiveConfig, memory?.history ?? prepared.history, validatedInput, prepared.summary ?? summary)
     const startedAt = Date.now()
     const completion = await this.client.complete(messages, toLlmOptions(this.config))
@@ -480,9 +481,7 @@ export class Agent {
       ? await this.contextStrategies.prepareAgentContext(this.id, validatedInput, this.config, history)
       : { config: this.config, history }
     const memory = this.memory ? await this.memory.prepare(prepared.history, validatedInput, { history, summary: prepared.summary ?? summary }) : undefined
-    const effectiveConfig = memory?.systemPrompt
-      ? { ...prepared.config, systemPrompt: [prepared.config.systemPrompt, memory.systemPrompt].filter(Boolean).join('\n\n') }
-      : prepared.config
+    const effectiveConfig = withPersonalization(prepared.config, memory?.systemPrompt)
     const messages = buildMessages(effectiveConfig, memory?.history ?? prepared.history, validatedInput, prepared.summary ?? summary)
     const startedAt = Date.now()
     let streamedOutput = ''
@@ -733,6 +732,21 @@ export class AgentService {
     return agent.run(input, history)
   }
 
+  /** Runs an active saved profile without adding a turn or changing its memory. */
+  async previewProfile(id: string, input: string, profileId: unknown) {
+    await this.ready
+    const agent = this.get(id)
+    const profiles = agent.config.personalization?.profiles ?? []
+    if (typeof profileId !== 'string' || !profiles.some((profile) => profile.id === profileId)) {
+      throw new AgentError('Профиль для сравнения не найден.')
+    }
+    const config = normalizeAgentConfig({
+      ...agent.config,
+      personalization: { ...agent.config.personalization, activeProfileId: profileId },
+    }, this.defaultDeepSeekModel)
+    return new Agent(`${id}-preview`, config, this.client).run(input, [])
+  }
+
   async compareCompression(input: string, history: AgentMessage[], summarizeAfterMessages = 10) {
     await this.ready
     const baseConfig: AgentConfig = {
@@ -941,6 +955,16 @@ export function createAgentRouter(service: AgentService): Router {
     }
   })
 
+  router.post('/:agentId/profile-preview', async (request, response) => {
+    try {
+      const input = request.body?.input
+      if (typeof input !== 'string' || !input.trim()) throw new AgentError('Поле input должно быть непустой строкой.')
+      response.json(await service.previewProfile(request.params.agentId, input, request.body?.profileId))
+    } catch (error) {
+      sendAgentError(response, error)
+    }
+  })
+
   router.post('/:agentId/stream', async (request, response) => {
     try {
       const runRequest = parseRunRequest(request)
@@ -1018,6 +1042,12 @@ function buildMessages(config: AgentConfig, history: AgentMessage[], input: stri
     ...history,
     { role: 'user' as const, content: input },
   ]
+}
+
+function withPersonalization(config: AgentConfig, memoryPrompt?: string): AgentConfig {
+  const personalization = personalizationPrompt(config.personalization)
+  const systemPrompt = [config.systemPrompt, personalization, memoryPrompt].filter(Boolean).join('\n\n')
+  return systemPrompt ? { ...config, systemPrompt } : config
 }
 
 function formatMessagesForSummary(messages: AgentMessage[]) {
@@ -1107,6 +1137,7 @@ function normalizeAgentConfig(value: unknown, defaultDeepSeekModel: string) {
     outputPolicy: normalizeOutputPolicy(input.outputPolicy),
     contextStrategy: normalizeContextStrategy(input.contextStrategy) ?? normalizeLegacySummaryStrategy(input.contextCompression),
     memoryLayers: normalizeMemoryLayers(input.memoryLayers),
+    personalization: normalizePersonalization(input.personalization),
   }
 
   return removeUndefined(config)
@@ -1191,6 +1222,39 @@ function normalizeMemoryLayers(value: unknown): AgentMemoryLayersConfig | undefi
     longTerm: normalizeEntries(value.longTerm),
     autoInstructions: readString(value.autoInstructions, 2_000),
   })
+}
+
+function normalizePersonalization(value: unknown): AgentPersonalizationConfig | undefined {
+  if (!isRecord(value)) return undefined
+  const profiles = Array.isArray(value.profiles)
+    ? value.profiles.slice(0, 20).flatMap((item) => {
+      if (!isRecord(item)) return []
+      const id = typeof item.id === 'string' && /^[a-zA-Z0-9_-]{1,80}$/.test(item.id) ? item.id : undefined
+      const name = readString(item.name, 120)
+      if (!id || !name) return []
+      return [removeUndefined({
+        id,
+        name,
+        style: readString(item.style, 2_000),
+        format: readString(item.format, 2_000),
+        restrictions: readString(item.restrictions, 2_000),
+      })]
+    })
+    : undefined
+  const globalLongTerm = Array.isArray(value.globalLongTerm)
+    ? value.globalLongTerm.slice(0, 50).flatMap((entry) => {
+      if (!isRecord(entry)) return []
+      const text = readString(entry.text, 4_000)
+      if (!text) return []
+      const id = typeof entry.id === 'string' && /^[a-zA-Z0-9_-]{1,80}$/.test(entry.id) ? entry.id : `fact-${globalThis.crypto.randomUUID()}`
+      const createdAt = typeof entry.createdAt === 'string' && !Number.isNaN(Date.parse(entry.createdAt)) ? entry.createdAt : new Date().toISOString()
+      return [{ id, text, createdAt }]
+    })
+    : undefined
+  const activeProfileId = typeof value.activeProfileId === 'string' && profiles?.some((profile) => profile.id === value.activeProfileId)
+    ? value.activeProfileId
+    : profiles?.[0]?.id
+  return removeUndefined({ activeProfileId, profiles, globalLongTerm })
 }
 
 function normalizeAgentId(value: unknown) {

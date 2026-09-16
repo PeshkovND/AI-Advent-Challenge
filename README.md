@@ -46,6 +46,7 @@ npm run agents:cli -- bulk --config agents-config.example.json
 Сжатие истории, его настройки и сценарий сравнения описаны в [`docs/day-9.md`](docs/day-9.md).
 Стратегии управления контекстом, включая summary, описаны в [`docs/day-10.md`](docs/day-10.md).
 Явные слои памяти и режимы manual/auto описаны в [`docs/day-11.md`](docs/day-11.md).
+Профили пользователя, глобальная память и проверка различий ответов описаны в [`docs/day-12.md`](docs/day-12.md).
 
 ## Запуск
 
