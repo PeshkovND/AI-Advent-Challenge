@@ -75,16 +75,20 @@ type AgentConfig = {
   contextStrategy?: { strategy: 'sliding' | 'facts' | 'branching' | 'summary'; windowSize?: number; summarizeAfterMessages?: number; facts?: Record<string, string[]> }
   memoryLayers?: { mode?: 'manual' | 'auto'; enabled?: boolean; shortTermLimit?: number; useWorking?: boolean; useLongTerm?: boolean; working?: ManualMemoryEntry[]; longTerm?: ManualMemoryEntry[]; autoInstructions?: string }
   personalization?: { activeProfileId?: string; profiles?: UserProfile[]; globalLongTerm?: ManualMemoryEntry[] }
+  invariants?: { enabled?: boolean; items?: AgentInvariant[] }
   taskState?: AgentTaskState
   taskMachine?: boolean
 }
+type AgentInvariant = { id: string; title: string; rule: string }
+type InvariantField = AgentInvariant
+type InvariantCheckInfo = { status: 'passed' | 'repaired' | 'blocked'; attempts: number; violatedInvariantIds: string[]; explanation?: string; safeDirection?: string }
 type AgentSummary = { id: string; config: AgentConfig; createdAt?: string }
 type AgentsListResult = { agents: AgentSummary[]; count: number }
 type AgentTokenMetrics = { inputTokens: number; promptTokens: number; completionTokens: number; totalTokens: number }
 type AgentTokenUsagePoint = AgentTokenMetrics & { turn: number; conversationTokens: number; summaryTokens?: number; strategyTokens?: number; strategyTokenMetrics?: AgentTokenMetrics }
 type AgentContextInfo = { enabled: boolean; summary?: string; summarizedMessages: number; retainedMessages: number; estimatedFullPromptTokens: number; estimatedSentPromptTokens: number; estimatedSavedTokens: number; summaryTokens?: number }
 type AgentContextCompression = { enabled?: boolean; summarizeAfterMessages?: number }
-type AgentStreamChunk = { content?: string; error?: string; done?: boolean; result?: { durationMs?: number; tokens?: number; conversationTokens?: number; contextMessages?: number; tokenMetrics?: AgentTokenMetrics; context?: AgentContextInfo } }
+type AgentStreamChunk = { content?: string; error?: string; done?: boolean; result?: { durationMs?: number; tokens?: number; conversationTokens?: number; contextMessages?: number; tokenMetrics?: AgentTokenMetrics; context?: AgentContextInfo; invariantCheck?: InvariantCheckInfo } }
 type AgentHistoryResult = { messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string; archived?: boolean }>; count: number; conversationTokens?: number }
 type ManualMemoryEntry = { id: string; text: string; createdAt: string }
 type UserProfile = { id: string; name: string; style?: string; format?: string; restrictions?: string }
@@ -92,7 +96,7 @@ type TaskStage = 'planning' | 'execution' | 'validation' | 'done'
 type TaskStatus = 'active' | 'paused'
 type AgentTaskState = { id?: string; task: string; stage: TaskStage; status: TaskStatus; currentStep: string; expectedAction: string; expectedActor?: 'agent' | 'user'; completedSteps?: string[]; updatedAt: string }
 type TaskRunResult = MemoryRunResult & { taskState?: AgentTaskState; taskNotice?: string }
-type TaskRunEvent = { type: 'message'; content: string; taskState?: AgentTaskState } | { type: 'done'; taskState?: AgentTaskState; taskNotice?: string } | { type: 'error'; error: string }
+type TaskRunEvent = { type: 'message'; content: string; taskState?: AgentTaskState; invariantCheck?: InvariantCheckInfo } | { type: 'done'; taskState?: AgentTaskState; taskNotice?: string; invariantCheck?: InvariantCheckInfo } | { type: 'error'; error: string }
 type AgentMemorySnapshot = { shortTerm: Array<{ role: 'user' | 'assistant'; content: string }>; working: ManualMemoryEntry[]; longTerm: ManualMemoryEntry[] }
 type MemoryRunResult = { output: string; tokenMetrics: AgentTokenMetrics; memory?: AgentMemorySnapshot }
 type ProfilePreview = { profileId: string; content?: string; error?: string; tokens?: number }
@@ -210,12 +214,19 @@ const profileTestPrompts = [
   'Я играю в Unmatched за Алису против Медузы. Какой план на первые два хода будет самым надёжным?',
   'Как оценить match-up между Шерлоком Холмсом и Медузой: какой у каждого план на победу, ключевые риски и что важно учитывать на карте?',
 ]
-const taskStateLabAgent = { id: 'day13-task-state-lab', name: 'Day 13 · Task state machine' }
-const taskStateLabSystemPrompt = 'Ты помощник по ведению задач. Продолжай работу с актуального этапа и текущего шага. Не повторяй уже пройденные объяснения, если они есть в истории или формальном состоянии. Отвечай только на то, что помогает выполнить ожидаемое действие. При смене этапа коротко сообщи о запуске следующего шага. Сервер сам сделает внутреннее продолжение и покажет его результат отдельным сообщением.'
+const taskStateLabAgent = { id: 'day13-task-state-lab', name: 'Day 14 · Task state + invariants' }
+const taskStateLabSystemPrompt = 'Ты iOS-архитектор и помощник по ведению задач. Продолжай работу с актуального этапа и текущего шага. Не повторяй уже пройденные объяснения, если они есть в истории или формальном состоянии. Отвечай только на то, что помогает выполнить ожидаемое действие. При смене этапа коротко сообщи о запуске следующего шага. Сервер сам сделает внутреннее продолжение и покажет его результат отдельным сообщением.'
 const day13Profiles: UserProfile[] = [
   { id: 'ios-developer', name: 'Алекс · iOS-разработчик', style: 'Технически точно и прагматично. Используй Swift, SwiftUI, UIKit, Concurrency, MVVM и Apple Human Interface Guidelines только когда это уместно.', format: 'Сначала дай решение или архитектурный вывод, затем конкретные шаги, API и критерии проверки. Для кода объясняй границы ответственности и обработку ошибок.', restrictions: 'Не предлагай устаревшие iOS-подходы без причины. Отделяй подтверждённые требования от допущений и не выдавай псевдокод за готовую production-реализацию.' },
 ]
 const day13Memory = { mode: 'auto' as const, enabled: true, shortTermLimit: 12, useWorking: true, useLongTerm: true, autoInstructions: 'Сохраняй в рабочую память требования текущей iOS-задачи, принятые архитектурные решения, API-контракты и незавершённые шаги. В долгосрочную память добавляй только устойчивые предпочтения по стеку или проектным правилам. Не сохраняй черновые ответы и временные детали задачи.' }
+const day14Invariants: AgentInvariant[] = [
+  { id: 'swiftui', title: 'UI-слой', rule: 'Использовать SwiftUI. Не предлагать Flutter, React Native или UIKit как реализацию интерфейса.' },
+  { id: 'ios-16', title: 'Минимальная версия iOS', rule: 'Поддерживать только iOS 16 и новее.' },
+  { id: 'mvvm', title: 'Архитектура', rule: 'Строить решение в архитектуре MVVM.' },
+  { id: 'networking', title: 'Сетевой слой', rule: 'Использовать URLSession. Не предлагать сторонние сетевые SDK.' },
+  { id: 'privacy', title: 'Данные', rule: 'Не отправлять персональные данные в аналитику.' },
+]
 const taskStageLabels: Record<TaskStage, { title: string; description: string }> = {
   planning: { title: 'Planning', description: 'Формулируем цель и план.' },
   execution: { title: 'Execution', description: 'Выполняем согласованный план.' },
@@ -225,6 +236,7 @@ const taskStageLabels: Record<TaskStage, { title: string; description: string }>
 const defaultFormatInstruction = 'Первая строка начинается с "КРАТКО:", затем ровно 3 строки, начинающиеся с "- ". Каждый пункт — не более 8 слов.'
 const defaultJsonExample = '{\n  "summary": "Краткое резюме",\n  "items": ["Пункт 1", "Пункт 2"]\n}'
 const createStopSequenceField = (value = ''): StopSequenceField => ({ id: crypto.randomUUID(), value })
+const createInvariantField = (): InvariantField => ({ id: `invariant-${crypto.randomUUID()}`, title: '', rule: '' })
 
 function App() {
   const [activePage, setActivePage] = useState<Page>('chat')
@@ -548,9 +560,11 @@ function AgentsPage() {
   const [contextStrategy, setContextStrategy] = useState<'none' | 'sliding' | 'facts' | 'branching' | 'summary'>('none')
   const [contextWindowSize, setContextWindowSize] = useState('10')
   const [initialFacts, setInitialFacts] = useState('')
+  const [invariantsEnabled, setInvariantsEnabled] = useState(false)
+  const [invariantFields, setInvariantFields] = useState<InvariantField[]>([])
   const [input, setInput] = useState('')
   const [answer, setAnswer] = useState('')
-  const [runMeta, setRunMeta] = useState<{ durationMs?: number; tokens?: number; conversationTokens?: number; tokenMetrics?: AgentTokenMetrics } | null>(null)
+  const [runMeta, setRunMeta] = useState<{ durationMs?: number; tokens?: number; conversationTokens?: number; tokenMetrics?: AgentTokenMetrics; invariantCheck?: InvariantCheckInfo } | null>(null)
   const [historyCount, setHistoryCount] = useState(0)
   const [isLoadingAgents, setIsLoadingAgents] = useState(true)
   const [isCreating, setIsCreating] = useState(false)
@@ -641,6 +655,7 @@ function AgentsPage() {
       const numericSummarizeAfterMessages = Number(summarizeAfterMessages)
       const numericContextWindowSize = Number(contextWindowSize)
       const stopSequenceValues = stopSequenceFields.map(({ value }) => value.trim()).filter(Boolean)
+      const invariantItems = invariantFields.map((item) => ({ ...item, title: item.title.trim(), rule: item.rule.trim() })).filter((item) => item.title && item.rule)
       let parsedFacts: Record<string, string[]> | undefined
       if (contextStrategy === 'facts' && initialFacts.trim()) {
         try {
@@ -675,6 +690,7 @@ function AgentsPage() {
           windowSize: Number.isFinite(numericContextWindowSize) ? Math.min(Math.max(Math.floor(numericContextWindowSize), 1), 1_000_000) : 10,
           ...(parsedFacts ? { facts: parsedFacts } : {}),
         } : undefined,
+        invariants: invariantsEnabled ? { enabled: true, items: invariantItems } : undefined,
       }
       const response = await fetch('/api/agents', {
         method: 'POST',
@@ -693,6 +709,8 @@ function AgentsPage() {
       setContextStrategy('none')
       setContextWindowSize('10')
       setInitialFacts('')
+      setInvariantsEnabled(false)
+      setInvariantFields([])
       setError(null)
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : 'Не удалось создать агента.')
@@ -776,6 +794,7 @@ function AgentsPage() {
               <label>Модель<select value={model} onChange={(event) => setModel(event.target.value)}>{agentModelOptions[provider].map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}</select></label>
             </div>
             <label>Системный промпт<textarea value={systemPrompt} onChange={(event) => setSystemPrompt(event.target.value)} placeholder="Например: отвечай кратко и с примерами..." rows={3} /></label>
+            <div className="invariant-editor"><div className="agent-field-heading"><span>Инварианты</span><label className="invariant-toggle"><input type="checkbox" checked={invariantsEnabled} onChange={(event) => setInvariantsEnabled(event.target.checked)} /> Включить</label></div><p>Жёсткие правила, которые агент не имеет права нарушать.</p>{invariantsEnabled && <div className="invariant-list">{invariantFields.map((item, index) => <div className="invariant-row" key={item.id}><input value={item.title} onChange={(event) => setInvariantFields((current) => current.map((entry) => entry.id === item.id ? { ...entry, title: event.target.value } : entry))} placeholder={`Правило ${index + 1}, например: Стек`} aria-label={`Название инварианта ${index + 1}`} /><textarea value={item.rule} onChange={(event) => setInvariantFields((current) => current.map((entry) => entry.id === item.id ? { ...entry, rule: event.target.value } : entry))} placeholder="Например: Использовать только SwiftUI и iOS 16+." rows={2} aria-label={`Описание инварианта ${index + 1}`} /><button className="stop-remove" type="button" onClick={() => setInvariantFields((current) => current.filter((entry) => entry.id !== item.id))} aria-label={`Удалить инвариант ${index + 1}`}>×</button></div>)}<button className="stop-add" type="button" onClick={() => setInvariantFields((current) => [...current, createInvariantField()])}>＋ Добавить инвариант</button></div>}</div>
             <div className="agent-form-row">
               <label>Температура<input type="number" min="0" max="2" step="0.1" value={temperature} onChange={(event) => setTemperature(event.target.value)} /></label>
               <label>Максимум токенов <span className="field-optional">необязательно</span><input type="number" min="1" value={maxTokens} onChange={(event) => setMaxTokens(event.target.value)} placeholder="без лимита" /></label>
@@ -801,7 +820,7 @@ function AgentsPage() {
             <textarea value={input} onChange={(event) => setInput(event.target.value)} placeholder="Напишите сообщение выбранному агенту..." rows={5} disabled={isRunning || agents.length === 0} />
             <button className="compare-button" type="submit" disabled={isRunning || !input.trim() || agents.length === 0}>{isRunning ? 'Агент отвечает...' : 'Отправить сообщение'} <span>→</span></button>
           </form>
-          <div className="agent-answer"><div className="agent-answer-heading"><div><p className="eyebrow">Ответ агента</p><h3>{selectedAgent?.config.name || selectedAgent?.id || 'Агент не выбран'}</h3></div><div className="agent-answer-actions">{runMeta && <span className="response-status">{runMeta.durationMs ?? '—'} мс · {runMeta.tokens ?? '—'} tokens</span>}<button className="clear-context-button" type="button" onClick={() => void clearAgentHistory()} disabled={isRunning || historyCount === 0}>Очистить контекст</button></div></div>{runMeta?.tokenMetrics && <AgentTokenMetricsView metrics={runMeta.tokenMetrics} conversationTokens={runMeta.conversationTokens} />}{answer ? <div className="reasoning-content"><MarkdownContent content={answer} /></div> : <div className="agent-empty">{isRunning ? <><span className="loading-spinner" /> Получаем потоковый ответ...</> : 'Здесь появится ответ выбранного агента.'}</div>}</div>
+          <div className="agent-answer"><div className="agent-answer-heading"><div><p className="eyebrow">Ответ агента</p><h3>{selectedAgent?.config.name || selectedAgent?.id || 'Агент не выбран'}</h3></div><div className="agent-answer-actions">{runMeta && <span className="response-status">{runMeta.durationMs ?? '—'} мс · {runMeta.tokens ?? '—'} tokens</span>}<button className="clear-context-button" type="button" onClick={() => void clearAgentHistory()} disabled={isRunning || historyCount === 0}>Очистить контекст</button></div></div>{runMeta?.invariantCheck && <InvariantCheckBadge check={runMeta.invariantCheck} />}{runMeta?.tokenMetrics && <AgentTokenMetricsView metrics={runMeta.tokenMetrics} conversationTokens={runMeta.conversationTokens} />}{answer ? <div className="reasoning-content"><MarkdownContent content={answer} /></div> : <div className="agent-empty">{isRunning ? <><span className="loading-spinner" /> Получаем проверенный ответ...</> : 'Здесь появится ответ выбранного агента.'}</div>}</div>
         </section>
       </div>
 
@@ -815,7 +834,8 @@ function AgentConfigDetails({ config }: { config: AgentConfig }) {
   const stopSequences = config.outputPolicy?.stopSequences?.length ? config.outputPolicy.stopSequences.join(' · ') : 'не заданы'
   const strategy = config.contextStrategy
   const strategyLabel = strategy?.strategy === 'sliding' ? `Sliding Window · N=${strategy.windowSize ?? '—'}` : strategy?.strategy === 'facts' ? `Sticky Facts · N=${strategy.windowSize ?? '—'}` : strategy?.strategy === 'branching' ? 'Branching' : strategy?.strategy === 'summary' ? `Summary · N=${strategy.summarizeAfterMessages ?? 10}` : 'не задана'
-  return <div className="agent-config-details"><div className="agent-config-details-heading"><span>Параметры выбранного агента</span><small>Текущая конфигурация</small></div><div className="agent-config-details-grid"><div><small>Название</small><strong>{config.name || 'не задано'}</strong></div><div><small>Temperature</small><strong>{config.temperature ?? 'по умолчанию'}</strong></div><div><small>Максимум токенов ответа</small><strong>{config.maxTokens ?? 'без лимита'}</strong></div><div><small>Стратегия контекста</small><strong>{strategyLabel}</strong></div><div><small>Формат ответа</small><strong>{outputFormat}</strong></div><div><small>Лимит входа</small><strong>{config.inputPolicy?.maxCharacters ? `${config.inputPolicy.maxCharacters} символов` : 'без лимита'}</strong></div><div><small>Stop-последовательности</small><strong>{stopSequences}</strong></div><div className="agent-config-details-wide"><small>Системный промпт</small><strong>{config.systemPrompt || 'не задан'}</strong></div></div></div>
+  const invariants = config.invariants?.enabled ? config.invariants.items ?? [] : []
+  return <div className="agent-config-details"><div className="agent-config-details-heading"><span>Параметры выбранного агента</span><small>Текущая конфигурация</small></div><div className="agent-config-details-grid"><div><small>Название</small><strong>{config.name || 'не задано'}</strong></div><div><small>Temperature</small><strong>{config.temperature ?? 'по умолчанию'}</strong></div><div><small>Максимум токенов ответа</small><strong>{config.maxTokens ?? 'без лимита'}</strong></div><div><small>Стратегия контекста</small><strong>{strategyLabel}</strong></div><div><small>Формат ответа</small><strong>{outputFormat}</strong></div><div><small>Лимит входа</small><strong>{config.inputPolicy?.maxCharacters ? `${config.inputPolicy.maxCharacters} символов` : 'без лимита'}</strong></div><div><small>Stop-последовательности</small><strong>{stopSequences}</strong></div><div><small>Инварианты</small><strong>{invariants.length ? `${invariants.length} активн.` : 'не заданы'}</strong></div><div className="agent-config-details-wide"><small>Системный промпт</small><strong>{config.systemPrompt || 'не задан'}</strong></div>{invariants.length > 0 && <div className="agent-config-details-wide"><small>Жёсткие правила</small><strong>{invariants.map((item) => `${item.title}: ${item.rule}`).join(' · ')}</strong></div>}</div></div>
 }
 
 function AgentTokenMetricsView({ metrics, conversationTokens }: { metrics: AgentTokenMetrics; conversationTokens?: number }) {
@@ -1256,6 +1276,11 @@ function MemoryScope({ title, subtitle, entries, value, onChange, onAdd, onRemov
   return <section className="memory-scope"><header><div><p className="eyebrow">{title}</p><h3>{subtitle}</h3></div><span>{entries.length}</span></header><div className="memory-scope-list">{entries.length ? entries.map((entry) => <article key={entry.id}><p>{entry.text}</p><button type="button" onClick={() => onRemove(entry.id)} disabled={disabled}>×</button></article>) : <p>Пока пусто.</p>}</div><div className="memory-scope-add"><textarea rows={2} value={value} onChange={(event) => onChange(event.target.value)} disabled={disabled} /><button type="button" className="secondary-button" disabled={disabled || !value.trim()} onClick={onAdd}>Добавить</button></div></section>
 }
 
+function InvariantCheckBadge({ check }: { check: InvariantCheckInfo }) {
+  const label = check.status === 'passed' ? 'Инварианты соблюдены' : check.status === 'repaired' ? `Ответ исправлен · ${check.attempts}` : 'Ответ заблокирован'
+  return <div className={`invariant-check-badge ${check.status}`}><strong>{label}</strong>{check.violatedInvariantIds.length > 0 && <span>Правила: {check.violatedInvariantIds.join(', ')}</span>}{check.safeDirection && <span>{check.safeDirection}</span>}</div>
+}
+
 function TaskStatePage() {
   const [agent, setAgent] = useState<AgentSummary | null>(null)
   const [history, setHistory] = useState<AgentHistoryResult['messages']>([])
@@ -1264,6 +1289,7 @@ function TaskStatePage() {
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [isPausing, setIsPausing] = useState(false)
+  const [lastInvariantCheck, setLastInvariantCheck] = useState<InvariantCheckInfo | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => { void load() }, [])
@@ -1280,8 +1306,9 @@ function TaskStatePage() {
       const current = await existing.json() as AgentSummary
       const hasIosProfile = current.config.personalization?.activeProfileId === day13Profiles[0].id && current.config.personalization.profiles?.some((profile) => profile.id === day13Profiles[0].id)
       const hasAutomaticMemory = current.config.memoryLayers?.mode === 'auto'
-      if (current.config.taskMachine && current.config.systemPrompt === taskStateLabSystemPrompt && hasIosProfile && hasAutomaticMemory) return current
-      const response = await fetch(`/api/agents/${taskStateLabAgent.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ config: { ...current.config, systemPrompt: taskStateLabSystemPrompt, taskMachine: true, memoryLayers: { ...day13Memory, working: current.config.memoryLayers?.working ?? [], longTerm: current.config.memoryLayers?.longTerm ?? [] }, personalization: { activeProfileId: day13Profiles[0].id, profiles: day13Profiles, globalLongTerm: current.config.personalization?.globalLongTerm ?? [] }, contextStrategy: current.config.contextStrategy ?? { strategy: 'summary', summarizeAfterMessages: 10 } } }) })
+      const hasInvariants = current.config.invariants?.enabled === true && current.config.invariants.items?.length === day14Invariants.length
+      if (current.config.taskMachine && current.config.systemPrompt === taskStateLabSystemPrompt && current.config.name === taskStateLabAgent.name && hasIosProfile && hasAutomaticMemory && hasInvariants) return current
+      const response = await fetch(`/api/agents/${taskStateLabAgent.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ config: { ...current.config, name: taskStateLabAgent.name, systemPrompt: taskStateLabSystemPrompt, taskMachine: true, invariants: { enabled: true, items: day14Invariants }, memoryLayers: { ...day13Memory, working: current.config.memoryLayers?.working ?? [], longTerm: current.config.memoryLayers?.longTerm ?? [] }, personalization: { activeProfileId: day13Profiles[0].id, profiles: day13Profiles, globalLongTerm: current.config.personalization?.globalLongTerm ?? [] }, contextStrategy: current.config.contextStrategy ?? { strategy: 'summary', summarizeAfterMessages: 10 } } }) })
       const migrated = await response.json() as AgentSummary & ApiError
       if (!response.ok) throw new Error(migrated.error || 'Не удалось обновить учебного агента.')
       return migrated
@@ -1294,7 +1321,7 @@ function TaskStatePage() {
         systemPrompt: taskStateLabSystemPrompt, taskMachine: true,
         memoryLayers: { ...day13Memory, working: [], longTerm: [] },
         personalization: { activeProfileId: day13Profiles[0].id, profiles: day13Profiles, globalLongTerm: [] },
-        contextStrategy: { strategy: 'summary', summarizeAfterMessages: 10 },
+        contextStrategy: { strategy: 'summary', summarizeAfterMessages: 10 }, invariants: { enabled: true, items: day14Invariants },
       } }),
     })
     const data = await response.json() as AgentSummary & ApiError
@@ -1349,9 +1376,11 @@ function TaskStatePage() {
           if (taskEvent.type === 'message') {
             setHistory((current) => [...current, { role: 'assistant', content: taskEvent.content }])
             if (taskEvent.taskState) setAgent((current) => current ? { ...current, config: { ...current.config, taskState: taskEvent.taskState } } : current)
+            if (taskEvent.invariantCheck) setLastInvariantCheck(taskEvent.invariantCheck)
           } else if (taskEvent.type === 'done') {
             if (taskEvent.taskState) setAgent((current) => current ? { ...current, config: { ...current.config, taskState: taskEvent.taskState } } : current)
             if (taskEvent.taskNotice) setError(taskEvent.taskNotice)
+            if (taskEvent.invariantCheck) setLastInvariantCheck(taskEvent.invariantCheck)
           } else streamError = taskEvent.error
         }
         if (done) break
@@ -1372,7 +1401,7 @@ function TaskStatePage() {
       const data = await response.json() as { reset?: boolean } & ApiError
       if (!response.ok || !data.reset) throw new Error(data.error || errorMessage)
       setAgent((current) => current ? { ...current, config: { ...current.config, taskState: undefined } } : current)
-      setHistory([]); setInput('')
+      setHistory([]); setInput(''); setLastInvariantCheck(null)
     } catch (requestError) { setError(requestError instanceof Error ? requestError.message : errorMessage) } finally { setIsLoading(false) }
   }
 
@@ -1398,6 +1427,7 @@ function TaskStatePage() {
       const decoder = new TextDecoder()
       let buffer = ''
       let streamError: string | undefined
+      let taskWasCreated = false
       while (true) {
         const { done, value } = await reader.read()
         buffer += decoder.decode(value, { stream: !done })
@@ -1408,15 +1438,24 @@ function TaskStatePage() {
           const taskEvent = JSON.parse(line) as TaskRunEvent
           if (taskEvent.type === 'message') {
             setHistory((current) => [...current, { role: 'assistant', content: taskEvent.content }])
-            if (taskEvent.taskState) setAgent((current) => current ? { ...current, config: { ...current.config, taskState: taskEvent.taskState } } : current)
+            if (taskEvent.taskState) {
+              taskWasCreated = true
+              setAgent((current) => current ? { ...current, config: { ...current.config, taskState: taskEvent.taskState } } : current)
+            }
+            if (taskEvent.invariantCheck) setLastInvariantCheck(taskEvent.invariantCheck)
           } else if (taskEvent.type === 'done') {
-            if (taskEvent.taskState) setAgent((current) => current ? { ...current, config: { ...current.config, taskState: taskEvent.taskState } } : current)
+            if (taskEvent.taskState) {
+              taskWasCreated = true
+              setAgent((current) => current ? { ...current, config: { ...current.config, taskState: taskEvent.taskState } } : current)
+            }
             if (taskEvent.taskNotice) setError(taskEvent.taskNotice)
+            if (taskEvent.invariantCheck) setLastInvariantCheck(taskEvent.invariantCheck)
           } else streamError = taskEvent.error
         }
         if (done) break
       }
       if (streamError) throw new Error(streamError)
+      if (!taskWasCreated) return
       const historyResponse = await fetch(`/api/agents/${taskStateLabAgent.id}/task-state/history`)
       const historyData = await historyResponse.json() as AgentHistoryResult & ApiError
       if (!historyResponse.ok) throw new Error(historyData.error || 'Не удалось обновить историю.')
@@ -1427,13 +1466,16 @@ function TaskStatePage() {
   const isPaused = state?.status === 'paused'
   const isDone = state?.stage === 'done'
   const expectedActor = state?.expectedActor ?? (state?.stage === 'execution' ? 'agent' : 'user')
-  if (!state) return <div className="page-view task-state-page"><header className="page-header"><div><p className="eyebrow">День 13 · Task state machine</p><h1>Диалоговый агент с состоянием задачи</h1><p className="header-description">Опишите новую задачу обычным сообщением. Агент сам откроет planning, составит план и будет обновлять шаги после каждого ответа.</p></div><div className="task-status-badge"><span />Готов к задаче</div></header>{error && <div className="error-message" role="alert">{error}</div>}<section className="task-dialog task-start-dialog"><div className="section-heading"><div><span className="step-number">01</span><div><p className="eyebrow">New task</p><h2>С чего начнём?</h2></div></div></div><p className="task-dialog-note">Профиль, глобальная память, рабочая память и summary-стратегия уже подключены. Первое сообщение станет целью новой задачи.</p><form className="strategy-composer" onSubmit={send}><textarea rows={4} value={input} onChange={(event) => setInput(event.target.value)} disabled={isLoading} placeholder="Например: подготовь план тестового турнира Unmatched на восемь игроков" /><button className="compare-button" type="submit" disabled={isLoading || !input.trim()}>{isLoading ? 'Создаём…' : 'Начать задачу'} <span>→</span></button></form></section></div>
+  const invariants = agent?.config.invariants?.enabled ? agent.config.invariants.items ?? [] : []
+  const invariantsPanel = <section className="task-invariants-overview"><div className="section-heading"><div><span className="step-number">02</span><div><p className="eyebrow">Hard constraints</p><h2>Инварианты агента</h2></div></div><span className="same-prompt">{invariants.length} активн.</span></div><p className="task-dialog-note">Они хранятся вне диалога, применяются на каждом этапе и не отменяются профилем или памятью.</p><div className="invariants-rules">{invariants.map((item) => <article key={item.id}><small>{item.id}</small><strong>{item.title}</strong><p>{item.rule}</p></article>)}</div>{lastInvariantCheck && <InvariantCheckBadge check={lastInvariantCheck} />}</section>
+  if (!state) return <div className="page-view task-state-page"><header className="page-header"><div><p className="eyebrow">День 14 · Task state + invariants</p><h1>Задача в заданных границах</h1><p className="header-description">Агент планирует и выполняет задачу по этапам, одновременно соблюдая неизменяемые технические правила.</p></div><div className="task-status-badge"><span />Готов к задаче</div></header>{error && <div className="error-message" role="alert">{error}</div>}{invariantsPanel}<section className="task-dialog task-start-dialog"><div className="section-heading"><div><span className="step-number">03</span><div><p className="eyebrow">New task</p><h2>С чего начнём?</h2></div></div></div><p className="task-dialog-note">Профиль, глобальная память, рабочая память и summary-стратегия уже подключены. Первое сообщение станет целью новой задачи.</p>{history.length > 0 && <div className="task-history">{history.map((message, index) => <div className={message.role} key={`${message.role}-${index}`}><small>{message.role === 'user' ? 'Вы' : 'Агент'}</small><MarkdownContent content={message.content} /></div>)}</div>}<form className="strategy-composer" onSubmit={send}><textarea rows={4} value={input} onChange={(event) => setInput(event.target.value)} disabled={isLoading} placeholder="Например: спроектируй экран профиля на SwiftUI для iOS 16" /><button className="compare-button" type="submit" disabled={isLoading || !input.trim()}>{isLoading ? 'Создаём…' : 'Начать задачу'} <span>→</span></button></form></section></div>
   return <div className="page-view task-state-page">
-    <header className="page-header"><div><p className="eyebrow">День 13 · Task state machine</p><h1>Формализованное состояние задачи</h1><p className="header-description">Агент получает этап, текущий шаг и ожидаемое действие в каждом запросе. Пауза сохраняет контекст, а продолжение начинается с сохранённого шага.</p></div><div className={`task-status-badge ${isPaused ? 'paused' : isDone ? 'done' : ''}`}><span />{isPaused ? 'На паузе' : isDone ? 'Завершена' : 'В работе'}</div></header>
+    <header className="page-header"><div><p className="eyebrow">День 14 · Task state + invariants</p><h1>Задача в заданных границах</h1><p className="header-description">Агент получает этап, текущий шаг, ожидаемое действие и жёсткие инварианты в каждом запросе.</p></div><div className={`task-status-badge ${isPaused ? 'paused' : isDone ? 'done' : ''}`}><span />{isPaused ? 'На паузе' : isDone ? 'Завершена' : 'В работе'}</div></header>
     {error && <div className="error-message" role="alert">{error}</div>}
     {state && <><section className="task-stage-track" aria-label="Этапы задачи">{(['planning', 'execution', 'validation', 'done'] as TaskStage[]).map((stage, index) => <div className={`${stage === state.stage ? 'active' : ''} ${(['planning', 'execution', 'validation', 'done'] as TaskStage[]).indexOf(state.stage) > index ? 'complete' : ''}`} key={stage}><span>{index + 1}</span><strong>{taskStageLabels[stage].title}</strong><small>{taskStageLabels[stage].description}</small></div>)}</section>
     <section className="task-state-overview"><div className="section-heading"><div><span className="step-number">01</span><div><p className="eyebrow">Автоматическое состояние</p><h2>Над чем сейчас работает агент</h2></div></div></div><dl className="task-state-details"><div><dt>Задача</dt><dd>{state.task}</dd></div><div><dt>Текущий шаг</dt><dd>{state.currentStep}</dd></div><div><dt>Ожидаемое действие</dt><dd>{state.expectedAction}</dd></div></dl><div className="task-state-footer"><span>Этап: <strong>{taskStageLabels[state.stage].title}</strong></span><span>Ожидается: <strong>{expectedActor === 'agent' ? 'действие агента' : 'ваше действие'}</strong></span><span>Обновлено: {new Date(state.updatedAt).toLocaleTimeString()}</span><div className="task-state-buttons">{!isDone && <button type="button" className="pause-button" onClick={() => void togglePause()} disabled={isPausing}>{isPaused ? 'Продолжить задачу' : 'Поставить на паузу'}</button>}<button type="button" className={isDone ? 'new-task-button' : 'cancel-task-button'} onClick={() => void (isDone ? startNewTask() : cancelTask())} disabled={isLoading}>{isDone ? 'Новая задача' : 'Отменить задачу'}</button></div></div><p className="task-transition-note">{isPaused ? 'Задача на паузе: сообщения временно не отправляются. Продолжите её, когда будете готовы.' : isDone ? 'Задача завершена. Создайте новую задачу, когда будете готовы.' : expectedActor === 'agent' ? 'Агент выполняет этап самостоятельно и сам передаст готовый результат на проверку.' : state.stage === 'planning' ? 'Утвердите план или укажите правки — после этого агент начнёт выполнение.' : 'Проверьте результат: подтвердите его или укажите, что требуется доработать.'}</p></section>
-    <section className="task-dialog"><div className="section-heading"><div><span className="step-number">02</span><div><p className="eyebrow">Continuation · {history.length} сообщений</p><h2>Диалог без повторных объяснений</h2></div></div></div><p className="task-dialog-note">Состояние и история сохраняются при паузе. После продолжения агент получает их снова и продолжает с текущего шага.</p><div className="task-history" ref={historyRef} onScroll={(event) => { const element = event.currentTarget; shouldAutoScrollRef.current = element.scrollHeight - element.scrollTop - element.clientHeight < 24 }}>{history.length ? history.map((message, index) => <div className={message.role} key={`${message.role}-${index}`}><small>{message.role === 'user' ? 'Вы' : 'Агент'}</small><MarkdownContent content={message.content} /></div>) : <p className="strategy-empty">Начните диалог — агент увидит состояние задачи автоматически.</p>}</div><form className="strategy-composer" onSubmit={send}><textarea rows={3} value={input} onChange={(event) => setInput(event.target.value)} disabled={isLoading || isPaused || isDone} placeholder={isPaused ? 'Продолжите задачу, чтобы написать сообщение.' : isDone ? 'Создайте новую задачу для нового диалога.' : 'Опишите действие или попросите помочь с текущим шагом…'} /><button className="compare-button" type="submit" disabled={isLoading || isPaused || isDone || !input.trim()}>{isLoading ? 'Агент выполняет…' : 'Отправить'} <span>→</span></button></form><div className={`task-composer-state ${expectedActor === 'agent' ? 'agent-turn' : ''}`}><span>Текущий этап</span><strong>{taskStageLabels[state.stage].title}</strong><span>{expectedActor === 'agent' ? 'Агент выполняет следующий шаг' : isDone ? 'Задача завершена' : 'Ожидается ваше действие'}</span></div></section></>}
+    {invariantsPanel}
+    <section className="task-dialog"><div className="section-heading"><div><span className="step-number">03</span><div><p className="eyebrow">Continuation · {history.length} сообщений</p><h2>Диалог без повторных объяснений</h2></div></div></div><p className="task-dialog-note">Состояние и история сохраняются при паузе. После продолжения агент получает их снова и продолжает с текущего шага.</p><div className="task-history" ref={historyRef} onScroll={(event) => { const element = event.currentTarget; shouldAutoScrollRef.current = element.scrollHeight - element.scrollTop - element.clientHeight < 24 }}>{history.length ? history.map((message, index) => <div className={message.role} key={`${message.role}-${index}`}><small>{message.role === 'user' ? 'Вы' : 'Агент'}</small><MarkdownContent content={message.content} /></div>) : <p className="strategy-empty">Начните диалог — агент увидит состояние задачи автоматически.</p>}</div><form className="strategy-composer" onSubmit={send}><textarea rows={3} value={input} onChange={(event) => setInput(event.target.value)} disabled={isLoading || isPaused || isDone} placeholder={isPaused ? 'Продолжите задачу, чтобы написать сообщение.' : isDone ? 'Создайте новую задачу для нового диалога.' : 'Опишите действие или попросите помочь с текущим шагом…'} /><button className="compare-button" type="submit" disabled={isLoading || isPaused || isDone || !input.trim()}>{isLoading ? 'Агент выполняет…' : 'Отправить'} <span>→</span></button></form><div className={`task-composer-state ${expectedActor === 'agent' ? 'agent-turn' : ''}`}><span>Текущий этап</span><strong>{taskStageLabels[state.stage].title}</strong><span>{expectedActor === 'agent' ? 'Агент выполняет следующий шаг' : isDone ? 'Задача завершена' : 'Ожидается ваше действие'}</span></div></section></>}
   </div>
 }
 

@@ -279,6 +279,26 @@ code { padding: 2px 4px; color: #5d60e6; background: #f0f0ff; border-radius: 4px
 .agent-field-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: #73788a; font-size: 10px; font-weight: 700; }
 .agent-field-heading small { color: #a0a5b5; font-size: 9px; font-weight: 500; }
 .agent-stop-section .stop-list { margin-top: 7px; }
+.invariant-editor { display: grid; gap: 8px; padding: 11px; background: #f8f8ff; border: 1px solid #e5e6fb; border-radius: 9px; }
+.invariant-editor > p { margin: 0; color: #969bac; font-size: 9px; line-height: 1.5; }
+.invariant-toggle { display: flex !important; align-items: center; gap: 6px !important; color: #626777 !important; font-size: 10px !important; }
+.invariant-toggle input { width: 15px; height: 15px; accent-color: #5d60e6; }
+.invariant-list { display: grid; gap: 7px; }
+.invariant-row { position: relative; display: grid; gap: 6px; padding: 8px 34px 8px 8px; background: #fff; border: 1px solid #e6e7f2; border-radius: 8px; }
+.invariant-row .stop-remove { position: absolute; top: 8px; right: 7px; }
+.invariants-layout { display: grid; grid-template-columns: minmax(260px, .8fr) minmax(0, 1.2fr); gap: 15px; margin-top: 28px; }
+.invariants-panel, .invariant-run-panel { min-width: 0; padding: 22px; background: #fff; border: 1px solid #e9ebf2; border-radius: 14px; box-shadow: 0 5px 17px #27304b05; }
+.invariants-rules { display: grid; gap: 8px; margin-top: 17px; }
+.invariants-rules article { display: grid; gap: 4px; padding: 11px; background: #f8f8ff; border: 1px solid #e6e6fb; border-radius: 9px; }
+.invariants-rules small { color: #696be3; font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; }
+.invariants-rules strong { color: #555a6b; font-size: 11px; }
+.invariants-rules p { margin: 0; color: #777d8e; font-size: 10px; line-height: 1.55; }
+.invariant-run-panel .example-prompts { margin: 15px 0; }
+.invariant-check-badge { display: grid; gap: 4px; margin-top: 14px; padding: 10px 11px; border: 1px solid #dceede; border-radius: 9px; color: #37795a; background: #f3fbf6; font-size: 10px; line-height: 1.5; }
+.invariant-check-badge.repaired { color: #8a6425; background: #fff9ee; border-color: #f0d8aa; }
+.invariant-check-badge.blocked { color: #a94f5a; background: #fff5f6; border-color: #f0cbd1; }
+.invariant-check-badge strong { font-size: 10px; }
+.invariant-output { margin-top: 14px; padding-top: 14px; border-top: 1px solid #eceef4; }
 .agent-form .compare-button, .agent-message-form .compare-button { justify-content: center; margin-top: 3px; }
 .agent-context-settings { display: grid; gap: 9px; padding: 11px; background: #f8f8ff; border: 1px solid #e9e9fa; border-radius: 9px; }
 .agent-context-toggle { display: flex; align-items: center; justify-content: space-between; gap: 10px; color: #626777; }
@@ -504,6 +524,8 @@ code { padding: 2px 4px; color: #5d60e6; background: #f0f0ff; border-radius: 4px
 .task-stage-track strong { font-size: 10px; }
 .task-stage-track small { font-size: 8px; line-height: 1.35; }
 .task-state-overview, .task-dialog { padding: 18px; background: #fff; border: 1px solid #e9ebf2; border-radius: 14px; box-shadow: 0 5px 17px #27304b05; }
+.task-invariants-overview { margin-top: 15px; padding: 18px; background: #fff; border: 1px solid #e9ebf2; border-radius: 14px; box-shadow: 0 5px 17px #27304b05; }
+.task-invariants-overview .invariants-rules { grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); }
 .task-state-details { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 11px; margin: 15px 0 12px; }
 .task-state-details > div { min-width: 0; padding: 13px; background: #f8f8ff; border: 1px solid #e6e6fb; border-radius: 10px; }
 .task-state-details dt { margin-bottom: 6px; color: #969bac; font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
@@ -684,6 +706,7 @@ code { padding: 2px 4px; color: #5d60e6; background: #f0f0ff; border-radius: 4px
   .prompt-actions { align-items: stretch; flex-direction: column; }
   .compare-button { justify-content: center; }
   .agents-layout { grid-template-columns: 1fr; }
+  .invariants-layout { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 680px) {

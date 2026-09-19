@@ -5,6 +5,8 @@ import { AgentMemory } from './agent-memory'
 import type { AgentMemoryLayersConfig, AgentMemorySnapshot, AutoMemoryUpdate } from './agent-memory'
 import { personalizationPrompt } from './agent-personalization'
 import type { AgentPersonalizationConfig } from './agent-personalization'
+import { activeInvariants, blockedInvariantMessage, invariantCheckInput, invariantCheckSystemPrompt, invariantsPrompt, parseInvariantVerdict, repairInvariantPrompt } from './agent-invariants'
+import type { AgentInvariantsConfig, InvariantCheckInfo, InvariantVerdict } from './agent-invariants'
 import { actorForStage, advanceTaskState, applyTaskDecision, isPlanApproved, isResultApproved, newTaskState, parseTaskDecision, returnTaskToExecution, taskScopeId, taskStatePrompt } from './task-state'
 import type { AgentTaskState, TaskDecision } from './task-state'
 
@@ -62,6 +64,7 @@ export type AgentConfig = {
   }
   memoryLayers?: AgentMemoryLayersConfig
   personalization?: AgentPersonalizationConfig
+  invariants?: AgentInvariantsConfig
   taskState?: AgentTaskState
   taskMachine?: boolean
   /**
@@ -132,11 +135,13 @@ export type AgentRunResult = {
   taskDecision?: TaskDecision
   taskState?: AgentTaskState
   taskNotice?: string
+  invariantCheck?: InvariantCheckInfo
 }
 
 export type AgentTaskRunEvent = {
   content: string
   taskState?: AgentTaskState
+  invariantCheck?: InvariantCheckInfo
 }
 
 type CompletionResult = {
@@ -450,19 +455,76 @@ export class Agent {
     this.contextStrategies = contextStrategies
   }
 
+  async inspectInputInvariants(input: string) {
+    const validatedInput = validateInput(input, this.config.inputPolicy)
+    return this.checkInvariants('input', validatedInput)
+  }
+
+  private async checkInvariants(kind: 'input' | 'output', text: string) {
+    const items = activeInvariants(this.config.invariants)
+    if (!items.length) return { enabled: false as const }
+    const checkConfig: Required<Pick<AgentConfig, 'provider' | 'model'>> & AgentConfig = { provider: this.config.provider, model: this.config.model, temperature: 0, maxTokens: 1_200, outputPolicy: { format: 'json' } }
+    try {
+      const completion = await this.client.complete([
+        { role: 'system', content: invariantCheckSystemPrompt(kind) },
+        { role: 'user', content: invariantCheckInput(kind, items, text) },
+      ], toLlmOptions(checkConfig))
+      const verdict = parseInvariantVerdict(completion.content, new Set(items.map((item) => item.id)))
+      if (!verdict) return { enabled: true as const, error: 'Проверяющий инвариантов вернул некорректный результат.', tokenMetrics: createTokenMetrics(checkConfig, text, completion) }
+      return { enabled: true as const, verdict, tokenMetrics: createTokenMetrics(checkConfig, text, completion) }
+    } catch (error) {
+      return { enabled: true as const, error: error instanceof Error ? error.message : 'Не удалось проверить инварианты.' }
+    }
+  }
+
   async run(input: string, history: AgentMessage[] = [], summary?: string, contextId = this.id, signal?: AbortSignal): Promise<AgentRunResult> {
     const validatedInput = validateInput(input, this.config.inputPolicy)
+    const startedAt = Date.now()
+    const preflight = await this.checkInvariants('input', validatedInput)
+    if (preflight.enabled && (!preflight.verdict || preflight.verdict.verdict === 'conflict')) {
+      const explanation = preflight.error ?? blockedInvariantMessage(preflight.verdict)
+      return this.blockedInvariantResult(validatedInput, explanation, preflight.verdict, 0, preflight.tokenMetrics, startedAt)
+    }
     const prepared = this.contextStrategies
       ? await this.contextStrategies.prepareAgentContext(contextId, validatedInput, this.config, history)
       : { config: this.config, history }
     const memory = this.memory ? await this.memory.prepare(prepared.history, validatedInput, { history, summary: prepared.summary ?? summary }) : undefined
     const effectiveConfig = withRuntimeContext(prepared.config, memory?.systemPrompt)
     const messages = buildMessages(effectiveConfig, memory?.history ?? prepared.history, validatedInput, prepared.summary ?? summary)
-    const startedAt = Date.now()
-    const completion = await this.client.complete(messages, toLlmOptions(this.config), signal)
-    const taskDecision = this.config.taskMachine ? parseTaskDecision(completion.content) : undefined
-    const output = taskDecision?.answer ?? applyOutputPolicy(completion.content, this.config.outputPolicy)
-    const tokenMetrics = createTokenMetrics(this.config, validatedInput, completion)
+    let completion = await this.client.complete(messages, toLlmOptions(this.config), signal)
+    let rawOutput = completion.content
+    let taskDecision = this.config.taskMachine ? parseTaskDecision(rawOutput) : undefined
+    let output = taskDecision?.answer ?? applyOutputPolicy(rawOutput, this.config.outputPolicy)
+    let tokenMetrics = sumTokenMetrics(preflight.tokenMetrics, createTokenMetrics(this.config, validatedInput, completion))
+    let attempts = 0
+    const violatedIds = new Set<string>()
+    let postCheck = await this.checkInvariants('output', output)
+    tokenMetrics = sumTokenMetrics(tokenMetrics, postCheck.tokenMetrics)
+    while (postCheck.enabled && postCheck.verdict?.verdict === 'conflict' && attempts < 2) {
+      attempts += 1
+      for (const violation of postCheck.verdict.violations) violatedIds.add(violation.invariantId)
+      const repairMessages: AgentMessage[] = [...messages, { role: 'system', content: repairInvariantPrompt(activeInvariants(this.config.invariants), postCheck.verdict) }]
+      completion = await this.client.complete(repairMessages, toLlmOptions(this.config), signal)
+      rawOutput = completion.content
+      taskDecision = this.config.taskMachine ? parseTaskDecision(rawOutput) : undefined
+      output = taskDecision?.answer ?? applyOutputPolicy(rawOutput, this.config.outputPolicy)
+      tokenMetrics = sumTokenMetrics(tokenMetrics, createTokenMetrics(this.config, validatedInput, completion))
+      const nextCheck = await this.checkInvariants('output', output)
+      tokenMetrics = sumTokenMetrics(tokenMetrics, nextCheck.tokenMetrics)
+      const previousIds = [...postCheck.verdict.violations].map((violation) => violation.invariantId).sort().join('|')
+      const nextIds = nextCheck.verdict?.verdict === 'conflict' ? nextCheck.verdict.violations.map((violation) => violation.invariantId).sort().join('|') : ''
+      postCheck = nextCheck
+      if (previousIds === nextIds) break
+    }
+    if (postCheck.enabled && (!postCheck.verdict || postCheck.verdict.verdict === 'conflict')) {
+      if (postCheck.verdict) for (const violation of postCheck.verdict.violations) violatedIds.add(violation.invariantId)
+      const explanation = postCheck.error
+        ?? (postCheck.verdict ? blockedInvariantMessage(postCheck.verdict, 'Не удалось сформировать ответ, совместимый с инвариантами.') : 'Не удалось безопасно проверить ответ на соответствие инвариантам.')
+      return this.blockedInvariantResult(validatedInput, explanation, postCheck.verdict, attempts, tokenMetrics, startedAt, [...violatedIds])
+    }
+    const invariantCheck: InvariantCheckInfo | undefined = preflight.enabled
+      ? { status: attempts > 0 ? 'repaired' : 'passed', attempts, violatedInvariantIds: [...violatedIds] }
+      : undefined
 
     const contextCommit = this.contextStrategies && this.config.contextStrategy
       ? await this.contextStrategies.recordAgentTurn(contextId, this.config, validatedInput, output, tokenMetrics, prepared)
@@ -474,9 +536,9 @@ export class Agent {
       provider: this.config.provider,
       model: this.config.model,
       durationMs: Date.now() - startedAt,
-      tokens: completion.tokens,
-      promptTokens: completion.promptTokens,
-      totalTokens: completion.totalTokens,
+      tokens: tokenMetrics.completionTokens,
+      promptTokens: tokenMetrics.promptTokens,
+      totalTokens: tokenMetrics.totalTokens,
       tokenMetrics,
       ...(memory ? { memory: memory.snapshot } : {}),
       ...(memory?.classifierTokenMetrics ? { memoryClassifierTokenMetrics: memory.classifierTokenMetrics } : {}),
@@ -487,10 +549,39 @@ export class Agent {
       ...(prepared.strategyTokenMetrics ? { strategyTokenMetrics: prepared.strategyTokenMetrics } : {}),
       ...(prepared.strategyError ? { strategyError: prepared.strategyError } : {}),
       ...(taskDecision ? { taskDecision } : {}),
+      ...(invariantCheck ? { invariantCheck } : {}),
+    }
+  }
+
+  private blockedInvariantResult(input: string, output: string, verdict: InvariantVerdict | undefined, attempts: number, tokenMetrics: AgentTokenMetrics | undefined, startedAt: number, violatedInvariantIds = verdict?.violations.map((violation) => violation.invariantId) ?? []): AgentRunResult {
+    const metrics = tokenMetrics ?? { inputTokens: 0, promptTokens: 0, completionTokens: 0, totalTokens: 0 }
+    return {
+      agentId: this.id,
+      input,
+      output,
+      provider: this.config.provider,
+      model: this.config.model,
+      durationMs: Date.now() - startedAt,
+      tokens: metrics.completionTokens,
+      promptTokens: metrics.promptTokens,
+      totalTokens: metrics.totalTokens,
+      tokenMetrics: metrics,
+      invariantCheck: {
+        status: 'blocked',
+        attempts,
+        violatedInvariantIds,
+        explanation: output,
+        ...(verdict?.safeDirection ? { safeDirection: verdict.safeDirection } : {}),
+      },
     }
   }
 
   async stream(input: string, history: AgentMessage[], onChunk: (content: string) => void, summary?: string, contextId = this.id): Promise<AgentRunResult> {
+    if (activeInvariants(this.config.invariants).length) {
+      const result = await this.run(input, history, summary, contextId)
+      onChunk(result.output)
+      return result
+    }
     const validatedInput = validateInput(input, this.config.inputPolicy)
     const prepared = this.contextStrategies
       ? await this.contextStrategies.prepareAgentContext(contextId, validatedInput, this.config, history)
@@ -603,6 +694,22 @@ export class AgentService {
     this.register(id, normalizeAgentConfig(config, this.defaultDeepSeekModel), this.createdAt.get(id) ?? new Date().toISOString())
     await this.persistAgents()
     return this.describe(this.agents.get(id)!)
+  }
+
+  async getInvariants(id: string) {
+    await this.ready
+    const invariants = this.get(id).config.invariants
+    return invariants ?? { enabled: false, items: [] }
+  }
+
+  async updateInvariants(id: string, invariants: unknown) {
+    await this.ready
+    const agent = this.get(id)
+    if (!isRecord(invariants) || !('invariants' in invariants)) throw new AgentError('Передайте объект { invariants: { enabled, items } }.')
+    const nextConfig = normalizeAgentConfig({ ...agent.config, invariants: invariants.invariants }, this.defaultDeepSeekModel)
+    this.register(id, nextConfig, this.createdAt.get(id) ?? new Date().toISOString())
+    await this.persistAgents()
+    return this.get(id).config.invariants ?? { enabled: false, items: [] }
   }
 
   list() {
@@ -783,6 +890,15 @@ export class AgentService {
     await this.ready
     let agent = this.get(id)
     if (agent.config.taskMachine && !agent.config.taskState) {
+      // Do not persist a task whose very objective violates a hard rule.
+      // Agent.run will return the same safe refusal and append it to the normal
+      // agent history, but there is intentionally no taskState to continue.
+      const initialGuard = await agent.inspectInputInvariants(input)
+      if (initialGuard.enabled && (!initialGuard.verdict || initialGuard.verdict.verdict === 'conflict')) {
+        const result = await agent.run(input, providedHistory, undefined, id)
+        onTaskEvent?.({ content: result.output, ...(result.invariantCheck ? { invariantCheck: result.invariantCheck } : {}) })
+        return result
+      }
       const state = newTaskState(validateInput(input, agent.config.inputPolicy))
       const memory = agent.config.memoryLayers ? { ...agent.config.memoryLayers, working: [] } : undefined
       this.register(id, normalizeAgentConfig({ ...agent.config, taskState: state, memoryLayers: memory }, this.defaultDeepSeekModel), this.createdAt.get(id) ?? new Date().toISOString())
@@ -797,13 +913,20 @@ export class AgentService {
     const initialState = agent.config.taskState
     const initialStage = initialState?.stage
     const isInternalContinuation = input.startsWith('ВНУТРЕННЕЕ ПРОДОЛЖЕНИЕ')
-    const userTransition = initialState?.stage === 'planning' && isPlanApproved(input)
-      ? { answer: '', nextStage: 'execution' as const, currentStep: 'Выполнить согласованный план и подготовить результат.', expectedAction: 'Агент выполняет работу и передаёт готовый результат на проверку.' }
-      : initialState?.stage === 'validation'
-        ? isResultApproved(input)
-          ? { answer: '', nextStage: 'done' as const, currentStep: 'Результат принят пользователем.', expectedAction: 'Задача завершена.' }
-          : { answer: '', nextStage: 'execution' as const, currentStep: `Исправить замечание пользователя: ${input}`.slice(0, 2_000), expectedAction: 'Агент вносит правки и передаёт обновлённый результат на проверку.' }
-        : undefined
+    // Validation feedback is normally a command for the state machine. Check it
+    // before applying that command so a conflicting requested change cannot
+    // silently move validation back into execution.
+    const inputGuard = initialState?.stage === 'validation' ? await agent.inspectInputInvariants(input) : undefined
+    const invariantBlocked = inputGuard?.enabled === true && (!inputGuard.verdict || inputGuard.verdict.verdict === 'conflict')
+    const userTransition = invariantBlocked
+      ? undefined
+      : initialState?.stage === 'planning' && isPlanApproved(input)
+        ? { answer: '', nextStage: 'execution' as const, currentStep: 'Выполнить согласованный план и подготовить результат.', expectedAction: 'Агент выполняет работу и передаёт готовый результат на проверку.' }
+        : initialState?.stage === 'validation'
+          ? isResultApproved(input)
+            ? { answer: '', nextStage: 'done' as const, currentStep: 'Результат принят пользователем.', expectedAction: 'Задача завершена.' }
+            : { answer: '', nextStage: 'execution' as const, currentStep: `Исправить замечание пользователя: ${input}`.slice(0, 2_000), expectedAction: 'Агент вносит правки и передаёт обновлённый результат на проверку.' }
+          : undefined
     // Подтверждения и замечания на этапах, где ожидается пользователь, — это
     // команды state machine. Не отправляем их сначала в модель: иначе она
     // успевает выдать промежуточный ответ, а затем execution выдаёт второй.
@@ -814,7 +937,24 @@ export class AgentService {
         : initialState?.stage === 'validation'
           ? 'Правка принята. Перехожу к execution и готовлю полную обновлённую версию результата.'
           : ''
-    const result: AgentRunResult = userTransition
+    const result: AgentRunResult = invariantBlocked
+      ? {
+          agentId: agent.id,
+          input: validateInput(input, agent.config.inputPolicy),
+          output: blockedInvariantMessage(inputGuard?.verdict),
+          provider: agent.config.provider,
+          model: agent.config.model,
+          durationMs: 0,
+          tokenMetrics: { inputTokens: 0, promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+          invariantCheck: {
+            status: 'blocked',
+            attempts: 0,
+            violatedInvariantIds: inputGuard?.verdict?.violations.map((violation) => violation.invariantId) ?? [],
+            explanation: blockedInvariantMessage(inputGuard?.verdict),
+            ...(inputGuard?.verdict?.safeDirection ? { safeDirection: inputGuard.verdict.safeDirection } : {}),
+          },
+        }
+      : userTransition
       ? {
           agentId: agent.id,
           input: validateInput(input, agent.config.inputPolicy),
@@ -835,7 +975,7 @@ export class AgentService {
       { role: 'assistant', content: result.output },
     ])
     let conversationTokens = await this.stateStore.addConversationTokens(scope, result.tokenMetrics, result.summaryTokenMetrics?.totalTokens ?? 0, result.strategyTokenMetrics, result.memoryClassifierTokenMetrics)
-    onTaskEvent?.({ content: result.output, taskState: taskUpdate?.state ?? this.get(id).config.taskState })
+    onTaskEvent?.({ content: result.output, taskState: taskUpdate?.state ?? this.get(id).config.taskState, ...(result.invariantCheck ? { invariantCheck: result.invariantCheck } : {}) })
 
     // Execution belongs to the agent. After a transition into it, run a bounded
     // internal loop until the agent itself reaches validation.
@@ -851,13 +991,20 @@ export class AgentService {
       this.activeTaskRuns.set(scope, controller)
       try {
         const continuation = await continuationAgent.run(continuationInput, continuationHistory, undefined, scope, controller.signal)
-        const completionDecision = continuation.taskDecision ?? { answer: '', nextStage: 'validation' as const, currentStep: 'Проверить готовый результат.', expectedAction: 'Пользователь проверяет результат: принимает его или указывает правки.' }
+        const completionDecision = continuation.invariantCheck?.status === 'blocked'
+          ? {
+              answer: '',
+              nextStage: 'planning' as const,
+              currentStep: 'Уточнить требования, конфликтующие с инвариантами.',
+              expectedAction: 'Пользователь корректирует требование в рамках активных инвариантов, затем подтверждает обновлённый план.',
+            }
+          : continuation.taskDecision ?? { answer: '', nextStage: 'validation' as const, currentStep: 'Проверить готовый результат.', expectedAction: 'Пользователь проверяет результат: принимает его или указывает правки.' }
         const continuationUpdate = await this.applyTaskDecision(id, continuationInput, completionDecision)
         if (continuation.autoMemoryUpdate) await this.persistAutoMemory(id, continuation.autoMemoryUpdate)
         if (continuation.archiveHistory) await this.stateStore.archiveActiveHistory(scope)
         contextMessages = await this.stateStore.appendHistory(scope, [{ role: 'assistant', content: continuation.output }])
         conversationTokens = await this.stateStore.addConversationTokens(scope, continuation.tokenMetrics, continuation.summaryTokenMetrics?.totalTokens ?? 0, continuation.strategyTokenMetrics, continuation.memoryClassifierTokenMetrics)
-        onTaskEvent?.({ content: continuation.output, taskState: continuationUpdate?.state ?? this.get(id).config.taskState })
+        onTaskEvent?.({ content: continuation.output, taskState: continuationUpdate?.state ?? this.get(id).config.taskState, ...(continuation.invariantCheck ? { invariantCheck: continuation.invariantCheck } : {}) })
         automaticSteps += 1
         if (!continuationUpdate) break
         taskUpdate = continuationUpdate
@@ -1042,6 +1189,22 @@ export function createAgentRouter(service: AgentService): Router {
     try {
       const body = isRecord(request.body) ? request.body : {}
       response.json(await service.update(request.params.agentId, body.config ?? body))
+    } catch (error) {
+      sendAgentError(response, error)
+    }
+  })
+
+  router.get('/:agentId/invariants', async (request, response) => {
+    try {
+      response.json(await service.getInvariants(request.params.agentId))
+    } catch (error) {
+      sendAgentError(response, error)
+    }
+  })
+
+  router.put('/:agentId/invariants', async (request, response) => {
+    try {
+      response.json(await service.updateInvariants(request.params.agentId, request.body))
     } catch (error) {
       sendAgentError(response, error)
     }
@@ -1261,6 +1424,15 @@ function createTokenMetrics(
   return { inputTokens: estimateTokens(input), promptTokens, completionTokens, totalTokens }
 }
 
+function sumTokenMetrics(...metrics: Array<AgentTokenMetrics | undefined>) {
+  return metrics.reduce<AgentTokenMetrics>((total, item) => ({
+    inputTokens: total.inputTokens + (item?.inputTokens ?? 0),
+    promptTokens: total.promptTokens + (item?.promptTokens ?? 0),
+    completionTokens: total.completionTokens + (item?.completionTokens ?? 0),
+    totalTokens: total.totalTokens + (item?.totalTokens ?? 0),
+  }), { inputTokens: 0, promptTokens: 0, completionTokens: 0, totalTokens: 0 })
+}
+
 /** Приближённая оценка для учебных метрик: точный токенизатор зависит от модели. */
 function estimateTokens(value: string) {
   const normalized = value.trim()
@@ -1281,8 +1453,9 @@ function buildMessages(config: AgentConfig, history: AgentMessage[], input: stri
 
 function withRuntimeContext(config: AgentConfig, memoryPrompt?: string): AgentConfig {
   const personalization = personalizationPrompt(config.personalization)
+  const invariants = invariantsPrompt(config.invariants)
   const taskState = taskStatePrompt(config.taskState)
-  const systemPrompt = [config.systemPrompt, personalization, taskState, memoryPrompt].filter(Boolean).join('\n\n')
+  const systemPrompt = [config.systemPrompt, personalization, invariants, taskState, memoryPrompt].filter(Boolean).join('\n\n')
   return systemPrompt ? { ...config, systemPrompt } : config
 }
 
@@ -1374,6 +1547,7 @@ function normalizeAgentConfig(value: unknown, defaultDeepSeekModel: string) {
     contextStrategy: normalizeContextStrategy(input.contextStrategy) ?? normalizeLegacySummaryStrategy(input.contextCompression),
     memoryLayers: normalizeMemoryLayers(input.memoryLayers),
     personalization: normalizePersonalization(input.personalization),
+    invariants: normalizeInvariants(input.invariants),
     taskState: normalizeTaskState(input.taskState),
     taskMachine: input.taskMachine === true ? true : undefined,
   }
@@ -1493,6 +1667,25 @@ function normalizePersonalization(value: unknown): AgentPersonalizationConfig | 
     ? value.activeProfileId
     : profiles?.[0]?.id
   return removeUndefined({ activeProfileId, profiles, globalLongTerm })
+}
+
+function normalizeInvariants(value: unknown): AgentInvariantsConfig | undefined {
+  if (!isRecord(value)) return undefined
+  const items = Array.isArray(value.items)
+    ? value.items.slice(0, 20).flatMap((item) => {
+      if (!isRecord(item)) return []
+      const title = readString(item.title, 160)
+      const rule = readString(item.rule, 2_000)
+      if (!title || !rule) return []
+      const id = typeof item.id === 'string' && /^[a-zA-Z0-9_-]{1,80}$/.test(item.id)
+        ? item.id
+        : `invariant-${globalThis.crypto.randomUUID()}`
+      return [{ id, title, rule }]
+    })
+    : []
+  const uniqueItems = items.filter((item, index, all) => all.findIndex((candidate) => candidate.id === item.id) === index)
+  if (!uniqueItems.length && value.enabled !== true) return undefined
+  return { enabled: value.enabled === true, items: uniqueItems }
 }
 
 function normalizeTaskState(value: unknown): AgentTaskState | undefined {
