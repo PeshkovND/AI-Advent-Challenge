@@ -5,7 +5,7 @@ import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
 
 type MessageRole = 'user' | 'assistant'
-type Page = 'chat' | 'compare' | 'reasoning' | 'temperature' | 'models' | 'agents' | 'context-demo' | 'context-comparison' | 'context-strategies' | 'context-branching' | 'memory-layers' | 'personalization'
+type Page = 'chat' | 'compare' | 'reasoning' | 'temperature' | 'models' | 'agents' | 'context-demo' | 'context-comparison' | 'context-strategies' | 'context-branching' | 'memory-layers' | 'personalization' | 'task-state'
 
 type ChatMessage = {
   id: string
@@ -75,6 +75,8 @@ type AgentConfig = {
   contextStrategy?: { strategy: 'sliding' | 'facts' | 'branching' | 'summary'; windowSize?: number; summarizeAfterMessages?: number; facts?: Record<string, string[]> }
   memoryLayers?: { mode?: 'manual' | 'auto'; enabled?: boolean; shortTermLimit?: number; useWorking?: boolean; useLongTerm?: boolean; working?: ManualMemoryEntry[]; longTerm?: ManualMemoryEntry[]; autoInstructions?: string }
   personalization?: { activeProfileId?: string; profiles?: UserProfile[]; globalLongTerm?: ManualMemoryEntry[] }
+  taskState?: AgentTaskState
+  taskMachine?: boolean
 }
 type AgentSummary = { id: string; config: AgentConfig; createdAt?: string }
 type AgentsListResult = { agents: AgentSummary[]; count: number }
@@ -86,6 +88,11 @@ type AgentStreamChunk = { content?: string; error?: string; done?: boolean; resu
 type AgentHistoryResult = { messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string; archived?: boolean }>; count: number; conversationTokens?: number }
 type ManualMemoryEntry = { id: string; text: string; createdAt: string }
 type UserProfile = { id: string; name: string; style?: string; format?: string; restrictions?: string }
+type TaskStage = 'planning' | 'execution' | 'validation' | 'done'
+type TaskStatus = 'active' | 'paused'
+type AgentTaskState = { id?: string; task: string; stage: TaskStage; status: TaskStatus; currentStep: string; expectedAction: string; expectedActor?: 'agent' | 'user'; completedSteps?: string[]; updatedAt: string }
+type TaskRunResult = MemoryRunResult & { taskState?: AgentTaskState; taskNotice?: string }
+type TaskRunEvent = { type: 'message'; content: string; taskState?: AgentTaskState } | { type: 'done'; taskState?: AgentTaskState; taskNotice?: string } | { type: 'error'; error: string }
 type AgentMemorySnapshot = { shortTerm: Array<{ role: 'user' | 'assistant'; content: string }>; working: ManualMemoryEntry[]; longTerm: ManualMemoryEntry[] }
 type MemoryRunResult = { output: string; tokenMetrics: AgentTokenMetrics; memory?: AgentMemorySnapshot }
 type ProfilePreview = { profileId: string; content?: string; error?: string; tokens?: number }
@@ -203,6 +210,18 @@ const profileTestPrompts = [
   'Я играю в Unmatched за Алису против Медузы. Какой план на первые два хода будет самым надёжным?',
   'Как оценить match-up между Шерлоком Холмсом и Медузой: какой у каждого план на победу, ключевые риски и что важно учитывать на карте?',
 ]
+const taskStateLabAgent = { id: 'day13-task-state-lab', name: 'Day 13 · Task state machine' }
+const taskStateLabSystemPrompt = 'Ты помощник по ведению задач. Продолжай работу с актуального этапа и текущего шага. Не повторяй уже пройденные объяснения, если они есть в истории или формальном состоянии. Отвечай только на то, что помогает выполнить ожидаемое действие. При смене этапа коротко сообщи о запуске следующего шага. Сервер сам сделает внутреннее продолжение и покажет его результат отдельным сообщением.'
+const day13Profiles: UserProfile[] = [
+  { id: 'ios-developer', name: 'Алекс · iOS-разработчик', style: 'Технически точно и прагматично. Используй Swift, SwiftUI, UIKit, Concurrency, MVVM и Apple Human Interface Guidelines только когда это уместно.', format: 'Сначала дай решение или архитектурный вывод, затем конкретные шаги, API и критерии проверки. Для кода объясняй границы ответственности и обработку ошибок.', restrictions: 'Не предлагай устаревшие iOS-подходы без причины. Отделяй подтверждённые требования от допущений и не выдавай псевдокод за готовую production-реализацию.' },
+]
+const day13Memory = { mode: 'auto' as const, enabled: true, shortTermLimit: 12, useWorking: true, useLongTerm: true, autoInstructions: 'Сохраняй в рабочую память требования текущей iOS-задачи, принятые архитектурные решения, API-контракты и незавершённые шаги. В долгосрочную память добавляй только устойчивые предпочтения по стеку или проектным правилам. Не сохраняй черновые ответы и временные детали задачи.' }
+const taskStageLabels: Record<TaskStage, { title: string; description: string }> = {
+  planning: { title: 'Planning', description: 'Формулируем цель и план.' },
+  execution: { title: 'Execution', description: 'Выполняем согласованный план.' },
+  validation: { title: 'Validation', description: 'Проверяем результат и критерии.' },
+  done: { title: 'Done', description: 'Задача завершена.' },
+}
 const defaultFormatInstruction = 'Первая строка начинается с "КРАТКО:", затем ровно 3 строки, начинающиеся с "- ". Каждый пункт — не более 8 слов.'
 const defaultJsonExample = '{\n  "summary": "Краткое резюме",\n  "items": ["Пункт 1", "Пункт 2"]\n}'
 const createStopSequenceField = (value = ''): StopSequenceField => ({ id: crypto.randomUUID(), value })
@@ -255,6 +274,9 @@ function App() {
           <button className={`page-nav-button ${activePage === 'personalization' ? 'active' : ''}`} onClick={() => setActivePage('personalization')}>
             <span>◐</span> Профили
           </button>
+          <button className={`page-nav-button ${activePage === 'task-state' ? 'active' : ''}`} onClick={() => setActivePage('task-state')}>
+            <span>⑬</span> Состояние задачи
+          </button>
         </nav>
 
         <div className="sidebar-bottom">
@@ -264,7 +286,7 @@ function App() {
       </aside>
 
       <main className="day-main">
-        {activePage === 'chat' ? <ChatPage /> : activePage === 'compare' ? <ComparePage /> : activePage === 'reasoning' ? <ReasoningPage /> : activePage === 'temperature' ? <TemperaturePage /> : activePage === 'models' ? <ModelsPage /> : activePage === 'agents' ? <AgentsPage /> : activePage === 'context-demo' ? <ContextDemoPage /> : activePage === 'context-comparison' ? <ContextCompressionComparisonPage /> : activePage === 'context-strategies' ? <ContextStrategiesPage /> : activePage === 'context-branching' ? <ContextBranchingPage /> : activePage === 'memory-layers' ? <MemoryLayersPage /> : <PersonalizationPage />}
+        {activePage === 'chat' ? <ChatPage /> : activePage === 'compare' ? <ComparePage /> : activePage === 'reasoning' ? <ReasoningPage /> : activePage === 'temperature' ? <TemperaturePage /> : activePage === 'models' ? <ModelsPage /> : activePage === 'agents' ? <AgentsPage /> : activePage === 'context-demo' ? <ContextDemoPage /> : activePage === 'context-comparison' ? <ContextCompressionComparisonPage /> : activePage === 'context-strategies' ? <ContextStrategiesPage /> : activePage === 'context-branching' ? <ContextBranchingPage /> : activePage === 'memory-layers' ? <MemoryLayersPage /> : activePage === 'personalization' ? <PersonalizationPage /> : <TaskStatePage />}
       </main>
     </div>
   )
@@ -1232,6 +1254,187 @@ function PersonalizationPage() {
 
 function MemoryScope({ title, subtitle, entries, value, onChange, onAdd, onRemove, disabled }: { title: string; subtitle: string; entries: ManualMemoryEntry[]; value: string; onChange: (value: string) => void; onAdd: () => void; onRemove: (id: string) => void; disabled: boolean }) {
   return <section className="memory-scope"><header><div><p className="eyebrow">{title}</p><h3>{subtitle}</h3></div><span>{entries.length}</span></header><div className="memory-scope-list">{entries.length ? entries.map((entry) => <article key={entry.id}><p>{entry.text}</p><button type="button" onClick={() => onRemove(entry.id)} disabled={disabled}>×</button></article>) : <p>Пока пусто.</p>}</div><div className="memory-scope-add"><textarea rows={2} value={value} onChange={(event) => onChange(event.target.value)} disabled={disabled} /><button type="button" className="secondary-button" disabled={disabled || !value.trim()} onClick={onAdd}>Добавить</button></div></section>
+}
+
+function TaskStatePage() {
+  const [agent, setAgent] = useState<AgentSummary | null>(null)
+  const [history, setHistory] = useState<AgentHistoryResult['messages']>([])
+  const historyRef = useRef<HTMLDivElement>(null)
+  const shouldAutoScrollRef = useRef(true)
+  const [input, setInput] = useState('')
+  const [isLoading, setIsLoading] = useState(false)
+  const [isPausing, setIsPausing] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => { void load() }, [])
+  useEffect(() => {
+    if (!shouldAutoScrollRef.current) return
+    historyRef.current?.scrollTo({ top: historyRef.current.scrollHeight, behavior: 'smooth' })
+  }, [history.length])
+
+  const state = agent?.config.taskState
+
+  async function ensureAgent() {
+    const existing = await fetch(`/api/agents/${taskStateLabAgent.id}`)
+    if (existing.ok) {
+      const current = await existing.json() as AgentSummary
+      const hasIosProfile = current.config.personalization?.activeProfileId === day13Profiles[0].id && current.config.personalization.profiles?.some((profile) => profile.id === day13Profiles[0].id)
+      const hasAutomaticMemory = current.config.memoryLayers?.mode === 'auto'
+      if (current.config.taskMachine && current.config.systemPrompt === taskStateLabSystemPrompt && hasIosProfile && hasAutomaticMemory) return current
+      const response = await fetch(`/api/agents/${taskStateLabAgent.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ config: { ...current.config, systemPrompt: taskStateLabSystemPrompt, taskMachine: true, memoryLayers: { ...day13Memory, working: current.config.memoryLayers?.working ?? [], longTerm: current.config.memoryLayers?.longTerm ?? [] }, personalization: { activeProfileId: day13Profiles[0].id, profiles: day13Profiles, globalLongTerm: current.config.personalization?.globalLongTerm ?? [] }, contextStrategy: current.config.contextStrategy ?? { strategy: 'summary', summarizeAfterMessages: 10 } } }) })
+      const migrated = await response.json() as AgentSummary & ApiError
+      if (!response.ok) throw new Error(migrated.error || 'Не удалось обновить учебного агента.')
+      return migrated
+    }
+    if (existing.status !== 404) throw new Error('Не удалось проверить учебного агента задачи.')
+    const response = await fetch('/api/agents', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: taskStateLabAgent.id, config: {
+        name: taskStateLabAgent.name, provider: 'deepseek', model: 'deepseek-v4-flash', temperature: 0,
+        systemPrompt: taskStateLabSystemPrompt, taskMachine: true,
+        memoryLayers: { ...day13Memory, working: [], longTerm: [] },
+        personalization: { activeProfileId: day13Profiles[0].id, profiles: day13Profiles, globalLongTerm: [] },
+        contextStrategy: { strategy: 'summary', summarizeAfterMessages: 10 },
+      } }),
+    })
+    const data = await response.json() as AgentSummary & ApiError
+    if (!response.ok) throw new Error(data.error || 'Не удалось создать учебного агента.')
+    return data
+  }
+
+  async function load() {
+    setIsLoading(true)
+    try {
+      const current = await ensureAgent()
+      const response = await fetch(`/api/agents/${taskStateLabAgent.id}/task-state/history`)
+      const data = await response.json() as AgentHistoryResult & ApiError
+      if (!response.ok) throw new Error(data.error || 'Не удалось загрузить историю задачи.')
+      setAgent(current); setHistory(data.messages); setError(null)
+    } catch (requestError) { setError(requestError instanceof Error ? requestError.message : 'Не удалось загрузить задачу.') } finally { setIsLoading(false) }
+  }
+
+  async function togglePause() {
+    if (!state || state.stage === 'done') return
+    setIsPausing(true); setError(null)
+    try {
+      const response = await fetch(`/api/agents/${taskStateLabAgent.id}/task-state`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: state.status === 'paused' ? 'resume' : 'pause' }),
+      })
+      const data = await response.json() as AgentTaskState & ApiError
+      if (!response.ok) throw new Error(data.error || 'Не удалось обновить состояние задачи.')
+      if (!agent) throw new Error('Агент не загружен.')
+      setAgent({ ...agent, config: { ...agent.config, taskState: data } })
+      if (state.status === 'paused' && data.expectedActor === 'agent') void continueExecution()
+    } catch (requestError) { setError(requestError instanceof Error ? requestError.message : 'Не удалось обновить состояние задачи.') } finally { setIsPausing(false) }
+  }
+
+  async function continueExecution() {
+    setIsLoading(true); setError(null)
+    try {
+      const response = await fetch(`/api/agents/${taskStateLabAgent.id}/task-run-events`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ input: 'ВНУТРЕННЕЕ ПРОДОЛЖЕНИЕ: продолжи execution с сохранённого текущего шага.' }) })
+      if (!response.ok || !response.body) throw new Error('Не удалось продолжить выполнение задачи.')
+      const reader = response.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ''
+      let streamError: string | undefined
+      while (true) {
+        const { done, value } = await reader.read()
+        buffer += decoder.decode(value, { stream: !done })
+        const lines = buffer.split('\n')
+        buffer = lines.pop() ?? ''
+        for (const line of lines) {
+          if (!line.trim()) continue
+          const taskEvent = JSON.parse(line) as TaskRunEvent
+          if (taskEvent.type === 'message') {
+            setHistory((current) => [...current, { role: 'assistant', content: taskEvent.content }])
+            if (taskEvent.taskState) setAgent((current) => current ? { ...current, config: { ...current.config, taskState: taskEvent.taskState } } : current)
+          } else if (taskEvent.type === 'done') {
+            if (taskEvent.taskState) setAgent((current) => current ? { ...current, config: { ...current.config, taskState: taskEvent.taskState } } : current)
+            if (taskEvent.taskNotice) setError(taskEvent.taskNotice)
+          } else streamError = taskEvent.error
+        }
+        if (done) break
+      }
+      if (streamError) throw new Error(streamError)
+      const historyResponse = await fetch(`/api/agents/${taskStateLabAgent.id}/task-state/history`)
+      const historyData = await historyResponse.json() as AgentHistoryResult & ApiError
+      if (!historyResponse.ok) throw new Error(historyData.error || 'Не удалось обновить историю.')
+      setHistory(historyData.messages)
+    } catch (requestError) { setError(requestError instanceof Error ? requestError.message : 'Не удалось продолжить выполнение задачи.') } finally { setIsLoading(false) }
+  }
+
+  async function resetTask(confirmMessage: string, errorMessage: string) {
+    if (!state || !window.confirm(confirmMessage)) return
+    setIsLoading(true); setError(null)
+    try {
+      const response = await fetch(`/api/agents/${taskStateLabAgent.id}/task-state`, { method: 'DELETE' })
+      const data = await response.json() as { reset?: boolean } & ApiError
+      if (!response.ok || !data.reset) throw new Error(data.error || errorMessage)
+      setAgent((current) => current ? { ...current, config: { ...current.config, taskState: undefined } } : current)
+      setHistory([]); setInput('')
+    } catch (requestError) { setError(requestError instanceof Error ? requestError.message : errorMessage) } finally { setIsLoading(false) }
+  }
+
+  async function cancelTask() {
+    await resetTask('Отменить эту задачу? Её история и рабочая память будут очищены. Профиль и долгосрочная память сохранятся.', 'Не удалось отменить задачу.')
+  }
+
+  async function startNewTask() {
+    await resetTask('Начать новую задачу? История и рабочая память завершённой задачи будут очищены. Профиль и долгосрочная память сохранятся.', 'Не удалось начать новую задачу.')
+  }
+
+  async function send(event: FormEvent) {
+    event.preventDefault()
+    const message = input.trim()
+    if (!message || state?.status === 'paused' || state?.stage === 'done') return
+    setIsLoading(true); setError(null)
+    try {
+      setInput('')
+      setHistory((current) => [...current, { role: 'user', content: message }])
+      const response = await fetch(`/api/agents/${taskStateLabAgent.id}/task-run-events`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ input: message }) })
+      if (!response.ok || !response.body) throw new Error('Не удалось запустить выполнение задачи.')
+      const reader = response.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ''
+      let streamError: string | undefined
+      while (true) {
+        const { done, value } = await reader.read()
+        buffer += decoder.decode(value, { stream: !done })
+        const lines = buffer.split('\n')
+        buffer = lines.pop() ?? ''
+        for (const line of lines) {
+          if (!line.trim()) continue
+          const taskEvent = JSON.parse(line) as TaskRunEvent
+          if (taskEvent.type === 'message') {
+            setHistory((current) => [...current, { role: 'assistant', content: taskEvent.content }])
+            if (taskEvent.taskState) setAgent((current) => current ? { ...current, config: { ...current.config, taskState: taskEvent.taskState } } : current)
+          } else if (taskEvent.type === 'done') {
+            if (taskEvent.taskState) setAgent((current) => current ? { ...current, config: { ...current.config, taskState: taskEvent.taskState } } : current)
+            if (taskEvent.taskNotice) setError(taskEvent.taskNotice)
+          } else streamError = taskEvent.error
+        }
+        if (done) break
+      }
+      if (streamError) throw new Error(streamError)
+      const historyResponse = await fetch(`/api/agents/${taskStateLabAgent.id}/task-state/history`)
+      const historyData = await historyResponse.json() as AgentHistoryResult & ApiError
+      if (!historyResponse.ok) throw new Error(historyData.error || 'Не удалось обновить историю.')
+      setHistory(historyData.messages)
+    } catch (requestError) { setError(requestError instanceof Error ? requestError.message : 'Не удалось получить ответ агента.') } finally { setIsLoading(false) }
+  }
+
+  const isPaused = state?.status === 'paused'
+  const isDone = state?.stage === 'done'
+  const expectedActor = state?.expectedActor ?? (state?.stage === 'execution' ? 'agent' : 'user')
+  if (!state) return <div className="page-view task-state-page"><header className="page-header"><div><p className="eyebrow">День 13 · Task state machine</p><h1>Диалоговый агент с состоянием задачи</h1><p className="header-description">Опишите новую задачу обычным сообщением. Агент сам откроет planning, составит план и будет обновлять шаги после каждого ответа.</p></div><div className="task-status-badge"><span />Готов к задаче</div></header>{error && <div className="error-message" role="alert">{error}</div>}<section className="task-dialog task-start-dialog"><div className="section-heading"><div><span className="step-number">01</span><div><p className="eyebrow">New task</p><h2>С чего начнём?</h2></div></div></div><p className="task-dialog-note">Профиль, глобальная память, рабочая память и summary-стратегия уже подключены. Первое сообщение станет целью новой задачи.</p><form className="strategy-composer" onSubmit={send}><textarea rows={4} value={input} onChange={(event) => setInput(event.target.value)} disabled={isLoading} placeholder="Например: подготовь план тестового турнира Unmatched на восемь игроков" /><button className="compare-button" type="submit" disabled={isLoading || !input.trim()}>{isLoading ? 'Создаём…' : 'Начать задачу'} <span>→</span></button></form></section></div>
+  return <div className="page-view task-state-page">
+    <header className="page-header"><div><p className="eyebrow">День 13 · Task state machine</p><h1>Формализованное состояние задачи</h1><p className="header-description">Агент получает этап, текущий шаг и ожидаемое действие в каждом запросе. Пауза сохраняет контекст, а продолжение начинается с сохранённого шага.</p></div><div className={`task-status-badge ${isPaused ? 'paused' : isDone ? 'done' : ''}`}><span />{isPaused ? 'На паузе' : isDone ? 'Завершена' : 'В работе'}</div></header>
+    {error && <div className="error-message" role="alert">{error}</div>}
+    {state && <><section className="task-stage-track" aria-label="Этапы задачи">{(['planning', 'execution', 'validation', 'done'] as TaskStage[]).map((stage, index) => <div className={`${stage === state.stage ? 'active' : ''} ${(['planning', 'execution', 'validation', 'done'] as TaskStage[]).indexOf(state.stage) > index ? 'complete' : ''}`} key={stage}><span>{index + 1}</span><strong>{taskStageLabels[stage].title}</strong><small>{taskStageLabels[stage].description}</small></div>)}</section>
+    <section className="task-state-overview"><div className="section-heading"><div><span className="step-number">01</span><div><p className="eyebrow">Автоматическое состояние</p><h2>Над чем сейчас работает агент</h2></div></div></div><dl className="task-state-details"><div><dt>Задача</dt><dd>{state.task}</dd></div><div><dt>Текущий шаг</dt><dd>{state.currentStep}</dd></div><div><dt>Ожидаемое действие</dt><dd>{state.expectedAction}</dd></div></dl><div className="task-state-footer"><span>Этап: <strong>{taskStageLabels[state.stage].title}</strong></span><span>Ожидается: <strong>{expectedActor === 'agent' ? 'действие агента' : 'ваше действие'}</strong></span><span>Обновлено: {new Date(state.updatedAt).toLocaleTimeString()}</span><div className="task-state-buttons">{!isDone && <button type="button" className="pause-button" onClick={() => void togglePause()} disabled={isPausing}>{isPaused ? 'Продолжить задачу' : 'Поставить на паузу'}</button>}<button type="button" className={isDone ? 'new-task-button' : 'cancel-task-button'} onClick={() => void (isDone ? startNewTask() : cancelTask())} disabled={isLoading}>{isDone ? 'Новая задача' : 'Отменить задачу'}</button></div></div><p className="task-transition-note">{isPaused ? 'Задача на паузе: сообщения временно не отправляются. Продолжите её, когда будете готовы.' : isDone ? 'Задача завершена. Создайте новую задачу, когда будете готовы.' : expectedActor === 'agent' ? 'Агент выполняет этап самостоятельно и сам передаст готовый результат на проверку.' : state.stage === 'planning' ? 'Утвердите план или укажите правки — после этого агент начнёт выполнение.' : 'Проверьте результат: подтвердите его или укажите, что требуется доработать.'}</p></section>
+    <section className="task-dialog"><div className="section-heading"><div><span className="step-number">02</span><div><p className="eyebrow">Continuation · {history.length} сообщений</p><h2>Диалог без повторных объяснений</h2></div></div></div><p className="task-dialog-note">Состояние и история сохраняются при паузе. После продолжения агент получает их снова и продолжает с текущего шага.</p><div className="task-history" ref={historyRef} onScroll={(event) => { const element = event.currentTarget; shouldAutoScrollRef.current = element.scrollHeight - element.scrollTop - element.clientHeight < 24 }}>{history.length ? history.map((message, index) => <div className={message.role} key={`${message.role}-${index}`}><small>{message.role === 'user' ? 'Вы' : 'Агент'}</small><MarkdownContent content={message.content} /></div>) : <p className="strategy-empty">Начните диалог — агент увидит состояние задачи автоматически.</p>}</div><form className="strategy-composer" onSubmit={send}><textarea rows={3} value={input} onChange={(event) => setInput(event.target.value)} disabled={isLoading || isPaused || isDone} placeholder={isPaused ? 'Продолжите задачу, чтобы написать сообщение.' : isDone ? 'Создайте новую задачу для нового диалога.' : 'Опишите действие или попросите помочь с текущим шагом…'} /><button className="compare-button" type="submit" disabled={isLoading || isPaused || isDone || !input.trim()}>{isLoading ? 'Агент выполняет…' : 'Отправить'} <span>→</span></button></form><div className={`task-composer-state ${expectedActor === 'agent' ? 'agent-turn' : ''}`}><span>Текущий этап</span><strong>{taskStageLabels[state.stage].title}</strong><span>{expectedActor === 'agent' ? 'Агент выполняет следующий шаг' : isDone ? 'Задача завершена' : 'Ожидается ваше действие'}</span></div></section></>}
+  </div>
 }
 
 function ContextCompressionComparisonPage() {

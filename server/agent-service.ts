@@ -5,6 +5,8 @@ import { AgentMemory } from './agent-memory'
 import type { AgentMemoryLayersConfig, AgentMemorySnapshot, AutoMemoryUpdate } from './agent-memory'
 import { personalizationPrompt } from './agent-personalization'
 import type { AgentPersonalizationConfig } from './agent-personalization'
+import { actorForStage, advanceTaskState, applyTaskDecision, isPlanApproved, isResultApproved, newTaskState, parseTaskDecision, returnTaskToExecution, taskScopeId, taskStatePrompt } from './task-state'
+import type { AgentTaskState, TaskDecision } from './task-state'
 
 export type AgentProvider = 'deepseek' | 'huggingface' | 'openrouter'
 export type AgentMessageRole = 'system' | 'user' | 'assistant'
@@ -60,6 +62,8 @@ export type AgentConfig = {
   }
   memoryLayers?: AgentMemoryLayersConfig
   personalization?: AgentPersonalizationConfig
+  taskState?: AgentTaskState
+  taskMachine?: boolean
   /**
    * Optional context policy used by the Day 10 strategy demo. The policy is
    * part of the agent configuration so the Agent, rather than the storage
@@ -125,6 +129,14 @@ export type AgentRunResult = {
   strategyError?: string
   tokenHistory?: AgentTokenUsagePoint[]
   context?: AgentContextInfo
+  taskDecision?: TaskDecision
+  taskState?: AgentTaskState
+  taskNotice?: string
+}
+
+export type AgentTaskRunEvent = {
+  content: string
+  taskState?: AgentTaskState
 }
 
 type CompletionResult = {
@@ -308,8 +320,8 @@ export class AgentError extends Error {
 class LlmClient {
   constructor(private readonly options: AgentServiceOptions) {}
 
-  async complete(messages: AgentMessage[], options: LlmOptions): Promise<CompletionResult> {
-    const apiResponse = await this.request(messages, options, false)
+  async complete(messages: AgentMessage[], options: LlmOptions, signal?: AbortSignal): Promise<CompletionResult> {
+    const apiResponse = await this.request(messages, options, false, signal)
     const data = await readJson(apiResponse)
 
     if (!apiResponse.ok) throw this.toError(data, apiResponse.status)
@@ -368,7 +380,7 @@ class LlmClient {
     }
   }
 
-  private async request(messages: AgentMessage[], options: LlmOptions, stream: boolean) {
+  private async request(messages: AgentMessage[], options: LlmOptions, stream: boolean, signal?: AbortSignal) {
     const isHuggingFace = options.provider === 'huggingface'
     const isOpenRouter = options.provider === 'openrouter'
     const apiKey = isHuggingFace ? this.options.huggingFaceApiKey : isOpenRouter ? this.options.openRouterApiKey : this.options.deepSeekApiKey
@@ -398,6 +410,7 @@ class LlmClient {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(body),
+        ...(signal ? { signal } : {}),
       },
     )
   }
@@ -437,21 +450,22 @@ export class Agent {
     this.contextStrategies = contextStrategies
   }
 
-  async run(input: string, history: AgentMessage[] = [], summary?: string): Promise<AgentRunResult> {
+  async run(input: string, history: AgentMessage[] = [], summary?: string, contextId = this.id, signal?: AbortSignal): Promise<AgentRunResult> {
     const validatedInput = validateInput(input, this.config.inputPolicy)
     const prepared = this.contextStrategies
-      ? await this.contextStrategies.prepareAgentContext(this.id, validatedInput, this.config, history)
+      ? await this.contextStrategies.prepareAgentContext(contextId, validatedInput, this.config, history)
       : { config: this.config, history }
     const memory = this.memory ? await this.memory.prepare(prepared.history, validatedInput, { history, summary: prepared.summary ?? summary }) : undefined
-    const effectiveConfig = withPersonalization(prepared.config, memory?.systemPrompt)
+    const effectiveConfig = withRuntimeContext(prepared.config, memory?.systemPrompt)
     const messages = buildMessages(effectiveConfig, memory?.history ?? prepared.history, validatedInput, prepared.summary ?? summary)
     const startedAt = Date.now()
-    const completion = await this.client.complete(messages, toLlmOptions(this.config))
-    const output = applyOutputPolicy(completion.content, this.config.outputPolicy)
+    const completion = await this.client.complete(messages, toLlmOptions(this.config), signal)
+    const taskDecision = this.config.taskMachine ? parseTaskDecision(completion.content) : undefined
+    const output = taskDecision?.answer ?? applyOutputPolicy(completion.content, this.config.outputPolicy)
     const tokenMetrics = createTokenMetrics(this.config, validatedInput, completion)
 
     const contextCommit = this.contextStrategies && this.config.contextStrategy
-      ? await this.contextStrategies.recordAgentTurn(this.id, this.config, validatedInput, output, tokenMetrics, prepared)
+      ? await this.contextStrategies.recordAgentTurn(contextId, this.config, validatedInput, output, tokenMetrics, prepared)
       : {}
     return {
       agentId: this.id,
@@ -472,16 +486,17 @@ export class Agent {
       ...(contextCommit.archiveHistory ? { archiveHistory: true } : {}),
       ...(prepared.strategyTokenMetrics ? { strategyTokenMetrics: prepared.strategyTokenMetrics } : {}),
       ...(prepared.strategyError ? { strategyError: prepared.strategyError } : {}),
+      ...(taskDecision ? { taskDecision } : {}),
     }
   }
 
-  async stream(input: string, history: AgentMessage[], onChunk: (content: string) => void, summary?: string): Promise<AgentRunResult> {
+  async stream(input: string, history: AgentMessage[], onChunk: (content: string) => void, summary?: string, contextId = this.id): Promise<AgentRunResult> {
     const validatedInput = validateInput(input, this.config.inputPolicy)
     const prepared = this.contextStrategies
-      ? await this.contextStrategies.prepareAgentContext(this.id, validatedInput, this.config, history)
+      ? await this.contextStrategies.prepareAgentContext(contextId, validatedInput, this.config, history)
       : { config: this.config, history }
     const memory = this.memory ? await this.memory.prepare(prepared.history, validatedInput, { history, summary: prepared.summary ?? summary }) : undefined
-    const effectiveConfig = withPersonalization(prepared.config, memory?.systemPrompt)
+    const effectiveConfig = withRuntimeContext(prepared.config, memory?.systemPrompt)
     const messages = buildMessages(effectiveConfig, memory?.history ?? prepared.history, validatedInput, prepared.summary ?? summary)
     const startedAt = Date.now()
     let streamedOutput = ''
@@ -495,11 +510,12 @@ export class Agent {
       emittedOutput = visibleOutput
     })
 
-    const output = applyOutputPolicy(streamedOutput, this.config.outputPolicy)
+    const taskDecision = this.config.taskMachine ? parseTaskDecision(streamedOutput) : undefined
+    const output = taskDecision?.answer ?? applyOutputPolicy(streamedOutput, this.config.outputPolicy)
     const tokenMetrics = createTokenMetrics(this.config, validatedInput, completion)
 
     const contextCommit = this.contextStrategies && this.config.contextStrategy
-      ? await this.contextStrategies.recordAgentTurn(this.id, this.config, validatedInput, output, tokenMetrics, prepared)
+      ? await this.contextStrategies.recordAgentTurn(contextId, this.config, validatedInput, output, tokenMetrics, prepared)
       : {}
     return {
       agentId: this.id,
@@ -517,6 +533,7 @@ export class Agent {
       ...(contextCommit.archiveHistory ? { archiveHistory: true } : {}),
       ...(prepared.strategyTokenMetrics ? { strategyTokenMetrics: prepared.strategyTokenMetrics } : {}),
       ...(prepared.strategyError ? { strategyError: prepared.strategyError } : {}),
+      ...(taskDecision ? { taskDecision } : {}),
     }
   }
 
@@ -529,6 +546,7 @@ export class AgentService {
   private readonly defaultDeepSeekModel: string
   private readonly stateStore: AgentStateStore
   private contextStrategies?: ContextStrategiesServiceLike
+  private readonly activeTaskRuns = new Map<string, AbortController>()
   readonly ready: Promise<void>
 
   constructor(options: AgentServiceOptions) {
@@ -685,44 +703,211 @@ export class AgentService {
       : { configured: false }
   }
 
-  async run(id: string, input: string, providedHistory: AgentMessage[] = []) {
+  async getTaskState(id: string) {
+    await this.ready
+    const state = this.get(id).config.taskState
+    if (!state) throw new AgentError('У агента не настроено состояние задачи.', 404)
+    return state
+  }
+
+  async getTaskHistory(id: string) {
+    await this.ready
+    const state = this.get(id).config.taskState
+    return state ? this.stateStore.getHistory(taskScopeId(id, state)) : []
+  }
+
+  async resetTask(id: string) {
     await this.ready
     const agent = this.get(id)
-    const storedHistory = await this.stateStore.getHistory(id)
+    const previous = agent.config.taskState
+    if (previous) {
+      const scope = taskScopeId(id, previous)
+      await this.stateStore.clearHistory(scope)
+      if (this.contextStrategies?.resetAgentContext) await this.contextStrategies.resetAgentContext(scope)
+    }
+    const memory = agent.config.memoryLayers
+    this.register(id, normalizeAgentConfig({ ...agent.config, taskState: undefined, memoryLayers: memory ? { ...memory, working: [] } : undefined }, this.defaultDeepSeekModel), this.createdAt.get(id) ?? new Date().toISOString())
+    await this.persistAgents()
+    return { reset: true }
+  }
+
+  async transitionTaskState(id: string, input: unknown) {
+    await this.ready
+    const agent = this.get(id)
+    const body = isRecord(input) ? input : {}
+    const action = body.action
+    const current = agent.config.taskState
+    let next: AgentTaskState
+    if (action === 'start') {
+      const task = readString(body.task, 4_000)
+      const currentStep = readString(body.currentStep, 2_000)
+      const expectedAction = readString(body.expectedAction, 2_000)
+      if (!task || !currentStep || !expectedAction) throw new AgentError('Для старта укажите задачу, текущий шаг и ожидаемое действие.')
+      next = { ...newTaskState(task), currentStep, expectedAction }
+    } else {
+      if (!current) throw new AgentError('Сначала запустите задачу.')
+      if (action === 'pause') next = { ...current, status: 'paused', updatedAt: new Date().toISOString() }
+      else if (action === 'resume') {
+        if (current.stage === 'done') throw new AgentError('Завершённую задачу нельзя продолжить: создайте новую.')
+        next = { ...current, status: 'active', updatedAt: new Date().toISOString() }
+      } else if (action === 'update') {
+        const currentStep = readString(body.currentStep, 2_000)
+        const expectedAction = readString(body.expectedAction, 2_000)
+        if (!currentStep || !expectedAction) throw new AgentError('Укажите текущий шаг и ожидаемое действие.')
+        next = { ...current, currentStep, expectedAction, updatedAt: new Date().toISOString() }
+      } else if (action === 'advance') {
+        const currentStep = readString(body.currentStep, 2_000)
+        const expectedAction = readString(body.expectedAction, 2_000)
+        if (!currentStep || !expectedAction) throw new AgentError('Для следующего этапа укажите текущий шаг и ожидаемое действие.')
+        try { next = advanceTaskState(current, { currentStep, expectedAction }) } catch (error) { throw new AgentError(error instanceof Error ? error.message : 'Не удалось сменить этап.') }
+      } else if (action === 'return-to-execution') {
+        const currentStep = readString(body.currentStep, 2_000)
+        const expectedAction = readString(body.expectedAction, 2_000)
+        if (!currentStep || !expectedAction) throw new AgentError('Для возврата на доработку укажите текущий шаг и ожидаемое действие.')
+        try { next = returnTaskToExecution(current, { currentStep, expectedAction }) } catch (error) { throw new AgentError(error instanceof Error ? error.message : 'Не удалось вернуть задачу на доработку.') }
+      } else throw new AgentError('Неизвестное действие состояния задачи.')
+    }
+    if (action === 'start' && current) {
+      const previousScope = taskScopeId(id, current)
+      await this.stateStore.clearHistory(previousScope)
+      if (this.contextStrategies?.resetAgentContext) await this.contextStrategies.resetAgentContext(previousScope)
+    }
+    const memory = action === 'start' && agent.config.memoryLayers ? { ...agent.config.memoryLayers, working: [] } : agent.config.memoryLayers
+    this.register(id, normalizeAgentConfig({ ...agent.config, taskState: next, memoryLayers: memory }, this.defaultDeepSeekModel), this.createdAt.get(id) ?? new Date().toISOString())
+    await this.persistAgents()
+    if (action === 'pause' && current) this.activeTaskRuns.get(taskScopeId(id, current))?.abort()
+    return this.get(id).config.taskState!
+  }
+
+  async run(id: string, input: string, providedHistory: AgentMessage[] = [], onTaskEvent?: (event: AgentTaskRunEvent) => void) {
+    await this.ready
+    let agent = this.get(id)
+    if (agent.config.taskMachine && !agent.config.taskState) {
+      const state = newTaskState(validateInput(input, agent.config.inputPolicy))
+      const memory = agent.config.memoryLayers ? { ...agent.config.memoryLayers, working: [] } : undefined
+      this.register(id, normalizeAgentConfig({ ...agent.config, taskState: state, memoryLayers: memory }, this.defaultDeepSeekModel), this.createdAt.get(id) ?? new Date().toISOString())
+      await this.persistAgents()
+      agent = this.get(id)
+    }
+    if (agent.config.taskState?.status === 'paused') throw new AgentError('Задача на паузе. Продолжите её перед новым сообщением.', 409)
+    const scope = agent.config.taskState ? taskScopeId(id, agent.config.taskState) : id
+    const storedHistory = await this.stateStore.getHistory(scope)
     const activeHistory = storedHistory.filter((message) => !message.archived)
     const sourceHistory = activeHistory.length > 0 ? activeHistory : providedHistory
-    const result = await agent.run(input, sourceHistory)
+    const initialState = agent.config.taskState
+    const initialStage = initialState?.stage
+    const isInternalContinuation = input.startsWith('ВНУТРЕННЕЕ ПРОДОЛЖЕНИЕ')
+    const userTransition = initialState?.stage === 'planning' && isPlanApproved(input)
+      ? { answer: '', nextStage: 'execution' as const, currentStep: 'Выполнить согласованный план и подготовить результат.', expectedAction: 'Агент выполняет работу и передаёт готовый результат на проверку.' }
+      : initialState?.stage === 'validation'
+        ? isResultApproved(input)
+          ? { answer: '', nextStage: 'done' as const, currentStep: 'Результат принят пользователем.', expectedAction: 'Задача завершена.' }
+          : { answer: '', nextStage: 'execution' as const, currentStep: `Исправить замечание пользователя: ${input}`.slice(0, 2_000), expectedAction: 'Агент вносит правки и передаёт обновлённый результат на проверку.' }
+        : undefined
+    // Подтверждения и замечания на этапах, где ожидается пользователь, — это
+    // команды state machine. Не отправляем их сначала в модель: иначе она
+    // успевает выдать промежуточный ответ, а затем execution выдаёт второй.
+    const transitionOutput = initialState?.stage === 'planning'
+      ? 'План подтверждён. Начинаю выполнение согласованного плана.'
+      : initialState?.stage === 'validation' && userTransition?.nextStage === 'done'
+        ? 'Результат принят. Задача завершена.'
+        : initialState?.stage === 'validation'
+          ? 'Правка принята. Перехожу к execution и готовлю полную обновлённую версию результата.'
+          : ''
+    const result: AgentRunResult = userTransition
+      ? {
+          agentId: agent.id,
+          input: validateInput(input, agent.config.inputPolicy),
+          output: transitionOutput,
+          provider: agent.config.provider,
+          model: agent.config.model,
+          durationMs: 0,
+          tokenMetrics: { inputTokens: 0, promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+        }
+      : await agent.run(input, sourceHistory, undefined, scope)
+    let taskUpdate = await this.applyTaskDecision(id, input, userTransition ?? result.taskDecision)
     if (result.autoMemoryUpdate) await this.persistAutoMemory(id, result.autoMemoryUpdate)
     if (result.archiveHistory) {
-      await this.stateStore.archiveActiveHistory(id)
+      await this.stateStore.archiveActiveHistory(scope)
     }
-    const contextMessages = await this.stateStore.appendHistory(id, [
-      { role: 'user', content: result.input },
+    let contextMessages = await this.stateStore.appendHistory(scope, [
+      ...(isInternalContinuation ? [] : [{ role: 'user' as const, content: result.input }]),
       { role: 'assistant', content: result.output },
     ])
-    const conversationTokens = await this.stateStore.addConversationTokens(id, result.tokenMetrics, result.summaryTokenMetrics?.totalTokens ?? 0, result.strategyTokenMetrics, result.memoryClassifierTokenMetrics)
-    const tokenHistory = await this.stateStore.getTokenHistory(id)
-    return { ...result, contextMessages, conversationTokens, tokenHistory }
+    let conversationTokens = await this.stateStore.addConversationTokens(scope, result.tokenMetrics, result.summaryTokenMetrics?.totalTokens ?? 0, result.strategyTokenMetrics, result.memoryClassifierTokenMetrics)
+    onTaskEvent?.({ content: result.output, taskState: taskUpdate?.state ?? this.get(id).config.taskState })
+
+    // Execution belongs to the agent. After a transition into it, run a bounded
+    // internal loop until the agent itself reaches validation.
+    const stateChanged = initialStage !== undefined && taskUpdate?.state.stage !== initialStage
+    const shouldAutoRun = stateChanged || (isInternalContinuation && initialState?.expectedActor === 'agent')
+    let automaticSteps = 0
+    while (shouldAutoRun && !taskUpdate?.notice && taskUpdate?.state.status === 'active' && taskUpdate.state.expectedActor === 'agent' && automaticSteps < 4) {
+      const beforeContinuation = taskUpdate.state
+      const continuationAgent = this.get(id)
+      const continuationHistory = (await this.stateStore.getHistory(scope)).filter((message) => !message.archived)
+      const continuationInput = `ВНУТРЕННЕЕ ПРОДОЛЖЕНИЕ: выполни шаг «${beforeContinuation.currentStep}» на этапе execution. Не жди подтверждения пользователя. Если результат задачи готов, сам переведи её в validation и покажи пользователю полное самостоятельное решение с учётом всех правок; не ограничивайся списком изменённых мест. Иначе опиши выполненную часть и следующий конкретный шаг execution.`
+      const controller = new AbortController()
+      this.activeTaskRuns.set(scope, controller)
+      try {
+        const continuation = await continuationAgent.run(continuationInput, continuationHistory, undefined, scope, controller.signal)
+        const completionDecision = continuation.taskDecision ?? { answer: '', nextStage: 'validation' as const, currentStep: 'Проверить готовый результат.', expectedAction: 'Пользователь проверяет результат: принимает его или указывает правки.' }
+        const continuationUpdate = await this.applyTaskDecision(id, continuationInput, completionDecision)
+        if (continuation.autoMemoryUpdate) await this.persistAutoMemory(id, continuation.autoMemoryUpdate)
+        if (continuation.archiveHistory) await this.stateStore.archiveActiveHistory(scope)
+        contextMessages = await this.stateStore.appendHistory(scope, [{ role: 'assistant', content: continuation.output }])
+        conversationTokens = await this.stateStore.addConversationTokens(scope, continuation.tokenMetrics, continuation.summaryTokenMetrics?.totalTokens ?? 0, continuation.strategyTokenMetrics, continuation.memoryClassifierTokenMetrics)
+        onTaskEvent?.({ content: continuation.output, taskState: continuationUpdate?.state ?? this.get(id).config.taskState })
+        automaticSteps += 1
+        if (!continuationUpdate) break
+        taskUpdate = continuationUpdate
+        const unchanged = taskUpdate.state.stage === beforeContinuation.stage && taskUpdate.state.currentStep === beforeContinuation.currentStep && taskUpdate.state.expectedAction === beforeContinuation.expectedAction
+        if (unchanged) break
+      } catch (error) {
+        const latestState = this.get(id).config.taskState
+        taskUpdate = latestState?.status === 'paused'
+          ? { state: latestState }
+          : { state: beforeContinuation, notice: error instanceof Error ? `Не удалось автоматически продолжить execution: ${error.message}` : 'Не удалось автоматически продолжить execution.' }
+        break
+      } finally {
+        if (this.activeTaskRuns.get(scope) === controller) this.activeTaskRuns.delete(scope)
+      }
+    }
+    if (automaticSteps === 4 && taskUpdate?.state.expectedActor === 'agent') taskUpdate = { state: taskUpdate.state, notice: 'Автоматическое выполнение остановлено после 4 шагов, чтобы избежать бесконечного цикла.' }
+    const tokenHistory = await this.stateStore.getTokenHistory(scope)
+    return { ...result, contextMessages, conversationTokens, tokenHistory, ...(taskUpdate?.state ? { taskState: taskUpdate.state } : {}), ...(taskUpdate?.notice ? { taskNotice: taskUpdate.notice } : {}) }
   }
 
   async stream(id: string, input: string, providedHistory: AgentMessage[], onChunk: (content: string) => void) {
     await this.ready
     const agent = this.get(id)
-    const storedHistory = await this.stateStore.getHistory(id)
+    if (agent.config.taskState?.status === 'paused') throw new AgentError('Задача на паузе. Продолжите её перед новым сообщением.', 409)
+    const scope = agent.config.taskState ? taskScopeId(id, agent.config.taskState) : id
+    const storedHistory = await this.stateStore.getHistory(scope)
     const activeHistory = storedHistory.filter((message) => !message.archived)
     const sourceHistory = activeHistory.length > 0 ? activeHistory : providedHistory
-    const result = await agent.stream(input, sourceHistory, onChunk)
+    const result = await agent.stream(input, sourceHistory, onChunk, undefined, scope)
     if (result.autoMemoryUpdate) await this.persistAutoMemory(id, result.autoMemoryUpdate)
     if (result.archiveHistory) {
-      await this.stateStore.archiveActiveHistory(id)
+      await this.stateStore.archiveActiveHistory(scope)
     }
-    const contextMessages = await this.stateStore.appendHistory(id, [
+    const contextMessages = await this.stateStore.appendHistory(scope, [
       { role: 'user', content: result.input },
       { role: 'assistant', content: result.output },
     ])
-    const conversationTokens = await this.stateStore.addConversationTokens(id, result.tokenMetrics, result.summaryTokenMetrics?.totalTokens ?? 0, result.strategyTokenMetrics, result.memoryClassifierTokenMetrics)
-    const tokenHistory = await this.stateStore.getTokenHistory(id)
+    const conversationTokens = await this.stateStore.addConversationTokens(scope, result.tokenMetrics, result.summaryTokenMetrics?.totalTokens ?? 0, result.strategyTokenMetrics, result.memoryClassifierTokenMetrics)
+    const tokenHistory = await this.stateStore.getTokenHistory(scope)
     return { ...result, contextMessages, conversationTokens, tokenHistory }
+  }
+
+  private async applyTaskDecision(id: string, input: string, decision?: TaskDecision) {
+    const agent = this.get(id)
+    const state = agent.config.taskState
+    if (!state || !decision) return undefined
+    const applied = applyTaskDecision(state, decision, input)
+    this.register(id, normalizeAgentConfig({ ...agent.config, taskState: applied.state }, this.defaultDeepSeekModel), this.createdAt.get(id) ?? new Date().toISOString())
+    await this.persistAgents()
+    return applied
   }
 
   async runEphemeral(input: string, config: AgentConfig, history: AgentMessage[], useContextStrategies = true) {
@@ -916,6 +1101,39 @@ export function createAgentRouter(service: AgentService): Router {
     }
   })
 
+  router.get('/:agentId/task-state', async (request, response) => {
+    try {
+      response.json(await service.getTaskState(request.params.agentId))
+    } catch (error) {
+      sendAgentError(response, error)
+    }
+  })
+
+  router.post('/:agentId/task-state', async (request, response) => {
+    try {
+      response.json(await service.transitionTaskState(request.params.agentId, request.body))
+    } catch (error) {
+      sendAgentError(response, error)
+    }
+  })
+
+  router.get('/:agentId/task-state/history', async (request, response) => {
+    try {
+      const messages = await service.getTaskHistory(request.params.agentId)
+      response.json({ agentId: request.params.agentId, messages, count: messages.length })
+    } catch (error) {
+      sendAgentError(response, error)
+    }
+  })
+
+  router.delete('/:agentId/task-state', async (request, response) => {
+    try {
+      response.json(await service.resetTask(request.params.agentId))
+    } catch (error) {
+      sendAgentError(response, error)
+    }
+  })
+
   router.get('/:agentId/history', async (request, response) => {
     try {
       const messages = await service.getHistory(request.params.agentId)
@@ -952,6 +1170,23 @@ export function createAgentRouter(service: AgentService): Router {
       response.json(result)
     } catch (error) {
       sendAgentError(response, error)
+    }
+  })
+
+  router.post('/:agentId/task-run-events', async (request, response) => {
+    response.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8')
+    response.setHeader('Cache-Control', 'no-cache')
+    response.setHeader('X-Accel-Buffering', 'no')
+    response.flushHeaders()
+    const emit = (payload: Record<string, unknown>) => response.write(`${JSON.stringify(payload)}\n`)
+    try {
+      const runRequest = parseRunRequest(request)
+      const result = await service.run(request.params.agentId, runRequest.input, runRequest.history, (event) => emit({ type: 'message', ...event }))
+      emit({ type: 'done', taskState: result.taskState, taskNotice: result.taskNotice })
+    } catch (error) {
+      emit({ type: 'error', error: error instanceof Error ? error.message : 'Не удалось выполнить задачу.' })
+    } finally {
+      response.end()
     }
   })
 
@@ -1044,9 +1279,10 @@ function buildMessages(config: AgentConfig, history: AgentMessage[], input: stri
   ]
 }
 
-function withPersonalization(config: AgentConfig, memoryPrompt?: string): AgentConfig {
+function withRuntimeContext(config: AgentConfig, memoryPrompt?: string): AgentConfig {
   const personalization = personalizationPrompt(config.personalization)
-  const systemPrompt = [config.systemPrompt, personalization, memoryPrompt].filter(Boolean).join('\n\n')
+  const taskState = taskStatePrompt(config.taskState)
+  const systemPrompt = [config.systemPrompt, personalization, taskState, memoryPrompt].filter(Boolean).join('\n\n')
   return systemPrompt ? { ...config, systemPrompt } : config
 }
 
@@ -1138,6 +1374,8 @@ function normalizeAgentConfig(value: unknown, defaultDeepSeekModel: string) {
     contextStrategy: normalizeContextStrategy(input.contextStrategy) ?? normalizeLegacySummaryStrategy(input.contextCompression),
     memoryLayers: normalizeMemoryLayers(input.memoryLayers),
     personalization: normalizePersonalization(input.personalization),
+    taskState: normalizeTaskState(input.taskState),
+    taskMachine: input.taskMachine === true ? true : undefined,
   }
 
   return removeUndefined(config)
@@ -1255,6 +1493,22 @@ function normalizePersonalization(value: unknown): AgentPersonalizationConfig | 
     ? value.activeProfileId
     : profiles?.[0]?.id
   return removeUndefined({ activeProfileId, profiles, globalLongTerm })
+}
+
+function normalizeTaskState(value: unknown): AgentTaskState | undefined {
+  if (!isRecord(value)) return undefined
+  const task = readString(value.task, 4_000)
+  const currentStep = readString(value.currentStep, 2_000)
+  const expectedAction = readString(value.expectedAction, 2_000)
+  const stage = value.stage === 'planning' || value.stage === 'execution' || value.stage === 'validation' || value.stage === 'done' ? value.stage : undefined
+  if (!task || !currentStep || !expectedAction || !stage) return undefined
+  const status = value.status === 'paused' ? 'paused' as const : 'active' as const
+  const id = typeof value.id === 'string' && /^task-[a-zA-Z0-9_-]{1,100}$/.test(value.id) ? value.id : `task-${globalThis.crypto.randomUUID()}`
+  const completedSteps = Array.isArray(value.completedSteps)
+    ? value.completedSteps.filter((item): item is string => typeof item === 'string').map((item) => item.trim()).filter(Boolean).slice(-50)
+    : []
+  const updatedAt = typeof value.updatedAt === 'string' && !Number.isNaN(Date.parse(value.updatedAt)) ? value.updatedAt : new Date().toISOString()
+  return { id, task, stage, status, currentStep, expectedAction, expectedActor: actorForStage(stage), completedSteps, updatedAt }
 }
 
 function normalizeAgentId(value: unknown) {
