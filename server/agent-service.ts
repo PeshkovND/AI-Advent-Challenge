@@ -7,8 +7,8 @@ import { personalizationPrompt } from './agent-personalization'
 import type { AgentPersonalizationConfig } from './agent-personalization'
 import { activeInvariants, blockedInvariantMessage, invariantCheckInput, invariantCheckSystemPrompt, invariantsPrompt, parseInvariantVerdict, repairInvariantPrompt } from './agent-invariants'
 import type { AgentInvariantsConfig, InvariantCheckInfo, InvariantVerdict } from './agent-invariants'
-import { actorForStage, advanceTaskState, applyTaskDecision, isPlanApproved, isResultApproved, newTaskState, parseTaskDecision, returnTaskToExecution, taskScopeId, taskStatePrompt } from './task-state'
-import type { AgentTaskState, TaskDecision } from './task-state'
+import { actorForStage, applyTaskDecision, newTaskState, parseTaskDecision, parseTaskInputInterpretation, taskInputIntentInput, taskInputIntentSystemPrompt, taskScopeId, taskStatePrompt } from './task-state'
+import type { AgentTaskState, TaskDecision, TaskInputInterpretation, TaskTransitionAuthorization } from './task-state'
 
 export type AgentProvider = 'deepseek' | 'huggingface' | 'openrouter'
 export type AgentMessageRole = 'system' | 'user' | 'assistant'
@@ -460,6 +460,41 @@ export class Agent {
     return this.checkInvariants('input', validatedInput)
   }
 
+  async classifyTaskInput(input: string): Promise<TaskInputInterpretation> {
+    const state = this.config.taskState
+    if (!state) return { intent: 'other' }
+    const classifierConfig: Required<Pick<AgentConfig, 'provider' | 'model'>> & AgentConfig = { provider: this.config.provider, model: this.config.model, temperature: 0, maxTokens: 400, outputPolicy: { format: 'json' } }
+    try {
+      const completion = await this.client.complete([
+        { role: 'system', content: taskInputIntentSystemPrompt },
+        { role: 'user', content: taskInputIntentInput(state, validateInput(input, this.config.inputPolicy)) },
+      ], toLlmOptions(classifierConfig))
+      return parseTaskInputInterpretation(completion.content) ?? { intent: 'other' }
+    } catch {
+      // Failing closed means a classifier outage can never advance the task.
+      return { intent: 'other' }
+    }
+  }
+
+  /**
+   * The model may suggest a state change, but it never gets to narrate an
+   * impossible one. Validate its structured decision before the answer is
+   * stored in memory, passed to a context strategy, or emitted to the UI.
+   */
+  private resolveTaskOutput(rawOutput: string, input: string) {
+    const taskDecision = this.config.taskMachine ? parseTaskDecision(rawOutput) : undefined
+    const output = taskDecision?.answer ?? applyOutputPolicy(rawOutput, this.config.outputPolicy)
+    const state = this.config.taskState
+    if (!taskDecision || !state) return { output, taskDecision }
+
+    const transition = applyTaskDecision(state, taskDecision)
+    if (!transition.notice) return { output, taskDecision }
+    return {
+      output: blockedTaskTransitionMessage(transition.notice, state),
+      taskDecision: undefined,
+    }
+  }
+
   private async checkInvariants(kind: 'input' | 'output', text: string) {
     const items = activeInvariants(this.config.invariants)
     if (!items.length) return { enabled: false as const }
@@ -477,7 +512,7 @@ export class Agent {
     }
   }
 
-  async run(input: string, history: AgentMessage[] = [], summary?: string, contextId = this.id, signal?: AbortSignal): Promise<AgentRunResult> {
+  async run(input: string, history: AgentMessage[] = [], summary?: string, contextId = this.id, signal?: AbortSignal, runtimeInstruction?: string): Promise<AgentRunResult> {
     const validatedInput = validateInput(input, this.config.inputPolicy)
     const startedAt = Date.now()
     const preflight = await this.checkInvariants('input', validatedInput)
@@ -490,11 +525,10 @@ export class Agent {
       : { config: this.config, history }
     const memory = this.memory ? await this.memory.prepare(prepared.history, validatedInput, { history, summary: prepared.summary ?? summary }) : undefined
     const effectiveConfig = withRuntimeContext(prepared.config, memory?.systemPrompt)
-    const messages = buildMessages(effectiveConfig, memory?.history ?? prepared.history, validatedInput, prepared.summary ?? summary)
+    const messages = buildMessages(effectiveConfig, memory?.history ?? prepared.history, validatedInput, prepared.summary ?? summary, runtimeInstruction)
     let completion = await this.client.complete(messages, toLlmOptions(this.config), signal)
     let rawOutput = completion.content
-    let taskDecision = this.config.taskMachine ? parseTaskDecision(rawOutput) : undefined
-    let output = taskDecision?.answer ?? applyOutputPolicy(rawOutput, this.config.outputPolicy)
+    let { output, taskDecision } = this.resolveTaskOutput(rawOutput, validatedInput)
     let tokenMetrics = sumTokenMetrics(preflight.tokenMetrics, createTokenMetrics(this.config, validatedInput, completion))
     let attempts = 0
     const violatedIds = new Set<string>()
@@ -506,8 +540,9 @@ export class Agent {
       const repairMessages: AgentMessage[] = [...messages, { role: 'system', content: repairInvariantPrompt(activeInvariants(this.config.invariants), postCheck.verdict) }]
       completion = await this.client.complete(repairMessages, toLlmOptions(this.config), signal)
       rawOutput = completion.content
-      taskDecision = this.config.taskMachine ? parseTaskDecision(rawOutput) : undefined
-      output = taskDecision?.answer ?? applyOutputPolicy(rawOutput, this.config.outputPolicy)
+      const repairedTaskOutput = this.resolveTaskOutput(rawOutput, validatedInput)
+      output = repairedTaskOutput.output
+      taskDecision = repairedTaskOutput.taskDecision
       tokenMetrics = sumTokenMetrics(tokenMetrics, createTokenMetrics(this.config, validatedInput, completion))
       const nextCheck = await this.checkInvariants('output', output)
       tokenMetrics = sumTokenMetrics(tokenMetrics, nextCheck.tokenMetrics)
@@ -862,16 +897,6 @@ export class AgentService {
         const expectedAction = readString(body.expectedAction, 2_000)
         if (!currentStep || !expectedAction) throw new AgentError('Укажите текущий шаг и ожидаемое действие.')
         next = { ...current, currentStep, expectedAction, updatedAt: new Date().toISOString() }
-      } else if (action === 'advance') {
-        const currentStep = readString(body.currentStep, 2_000)
-        const expectedAction = readString(body.expectedAction, 2_000)
-        if (!currentStep || !expectedAction) throw new AgentError('Для следующего этапа укажите текущий шаг и ожидаемое действие.')
-        try { next = advanceTaskState(current, { currentStep, expectedAction }) } catch (error) { throw new AgentError(error instanceof Error ? error.message : 'Не удалось сменить этап.') }
-      } else if (action === 'return-to-execution') {
-        const currentStep = readString(body.currentStep, 2_000)
-        const expectedAction = readString(body.expectedAction, 2_000)
-        if (!currentStep || !expectedAction) throw new AgentError('Для возврата на доработку укажите текущий шаг и ожидаемое действие.')
-        try { next = returnTaskToExecution(current, { currentStep, expectedAction }) } catch (error) { throw new AgentError(error instanceof Error ? error.message : 'Не удалось вернуть задачу на доработку.') }
       } else throw new AgentError('Неизвестное действие состояния задачи.')
     }
     if (action === 'start' && current) {
@@ -918,15 +943,28 @@ export class AgentService {
     // silently move validation back into execution.
     const inputGuard = initialState?.stage === 'validation' ? await agent.inspectInputInvariants(input) : undefined
     const invariantBlocked = inputGuard?.enabled === true && (!inputGuard.verdict || inputGuard.verdict.verdict === 'conflict')
+    const inputIntent: TaskInputInterpretation = !invariantBlocked && !isInternalContinuation
+      ? await agent.classifyTaskInput(input)
+      : { intent: 'other' as const }
     const userTransition = invariantBlocked
       ? undefined
-      : initialState?.stage === 'planning' && isPlanApproved(input)
+      : initialState?.stage === 'planning' && inputIntent.intent === 'approve_plan'
         ? { answer: '', nextStage: 'execution' as const, currentStep: 'Выполнить согласованный план и подготовить результат.', expectedAction: 'Агент выполняет работу и передаёт готовый результат на проверку.' }
         : initialState?.stage === 'validation'
-          ? isResultApproved(input)
+          ? inputIntent.intent === 'approve_result'
             ? { answer: '', nextStage: 'done' as const, currentStep: 'Результат принят пользователем.', expectedAction: 'Задача завершена.' }
-            : { answer: '', nextStage: 'execution' as const, currentStep: `Исправить замечание пользователя: ${input}`.slice(0, 2_000), expectedAction: 'Агент вносит правки и передаёт обновлённый результат на проверку.' }
+            : inputIntent.intent === 'request_revision'
+              ? { answer: '', nextStage: 'execution' as const, currentStep: `Исправить замечание пользователя: ${input}`.slice(0, 2_000), expectedAction: 'Агент вносит правки и передаёт обновлённый результат на проверку.' }
+              : undefined
           : undefined
+    const requestedStageConflict = Boolean(initialState && inputIntent.requestedStage && inputIntent.requestedStage !== initialState.stage && inputIntent.requestedStage !== userTransition?.nextStage)
+    const bypassDecision = initialState && (inputIntent.intent === 'attempt_bypass' || requestedStageConflict)
+      ? {
+          answer: '',
+          currentStep: initialState.stage === 'planning' ? 'Составить и согласовать план работы.' : initialState.currentStep,
+          expectedAction: initialState.stage === 'planning' ? 'Попросить агента подготовить план, затем явно подтвердить его.' : initialState.expectedAction,
+        }
+      : undefined
     // Подтверждения и замечания на этапах, где ожидается пользователь, — это
     // команды state machine. Не отправляем их сначала в модель: иначе она
     // успевает выдать промежуточный ответ, а затем execution выдаёт второй.
@@ -964,8 +1002,25 @@ export class AgentService {
           durationMs: 0,
           tokenMetrics: { inputTokens: 0, promptTokens: 0, completionTokens: 0, totalTokens: 0 },
         }
-      : await agent.run(input, sourceHistory, undefined, scope)
-    let taskUpdate = await this.applyTaskDecision(id, input, userTransition ?? result.taskDecision)
+      : bypassDecision
+        ? {
+            agentId: agent.id,
+            input: validateInput(input, agent.config.inputPolicy),
+            output: requestedStageConflict && inputIntent.requestedStage ? blockedRequestedStageMessage(initialState!, inputIntent.requestedStage) : blockedLifecycleBypassMessage(initialState!),
+            provider: agent.config.provider,
+            model: agent.config.model,
+            durationMs: 0,
+            tokenMetrics: { inputTokens: 0, promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+          }
+      : await agent.run(input, sourceHistory, undefined, scope, undefined, inputIntent.intent === 'request_plan_revision'
+        ? 'Пользователь запросил правки к плану. Верни полный обновлённый план целиком: включи все прежние релевантные пункты и внесённые изменения. Не ограничивайся описанием правок, не начинай execution и в конце попроси утвердить обновлённый план.'
+        : undefined)
+    const authorization: TaskTransitionAuthorization = {
+      planApproved: inputIntent.intent === 'approve_plan',
+      resultApproved: inputIntent.intent === 'approve_result',
+      revisionRequested: inputIntent.intent === 'request_revision',
+    }
+    let taskUpdate = await this.applyTaskDecision(id, userTransition ?? bypassDecision ?? result.taskDecision, authorization)
     if (result.autoMemoryUpdate) await this.persistAutoMemory(id, result.autoMemoryUpdate)
     if (result.archiveHistory) {
       await this.stateStore.archiveActiveHistory(scope)
@@ -999,7 +1054,7 @@ export class AgentService {
               expectedAction: 'Пользователь корректирует требование в рамках активных инвариантов, затем подтверждает обновлённый план.',
             }
           : continuation.taskDecision ?? { answer: '', nextStage: 'validation' as const, currentStep: 'Проверить готовый результат.', expectedAction: 'Пользователь проверяет результат: принимает его или указывает правки.' }
-        const continuationUpdate = await this.applyTaskDecision(id, continuationInput, completionDecision)
+        const continuationUpdate = await this.applyTaskDecision(id, completionDecision)
         if (continuation.autoMemoryUpdate) await this.persistAutoMemory(id, continuation.autoMemoryUpdate)
         if (continuation.archiveHistory) await this.stateStore.archiveActiveHistory(scope)
         contextMessages = await this.stateStore.appendHistory(scope, [{ role: 'assistant', content: continuation.output }])
@@ -1047,11 +1102,11 @@ export class AgentService {
     return { ...result, contextMessages, conversationTokens, tokenHistory }
   }
 
-  private async applyTaskDecision(id: string, input: string, decision?: TaskDecision) {
+  private async applyTaskDecision(id: string, decision?: TaskDecision, authorization?: TaskTransitionAuthorization) {
     const agent = this.get(id)
     const state = agent.config.taskState
     if (!state || !decision) return undefined
-    const applied = applyTaskDecision(state, decision, input)
+    const applied = applyTaskDecision(state, decision, authorization)
     this.register(id, normalizeAgentConfig({ ...agent.config, taskState: applied.state }, this.defaultDeepSeekModel), this.createdAt.get(id) ?? new Date().toISOString())
     await this.persistAgents()
     return applied
@@ -1439,13 +1494,14 @@ function estimateTokens(value: string) {
   return normalized ? Math.max(1, Math.ceil(normalized.length / 3)) : 0
 }
 
-function buildMessages(config: AgentConfig, history: AgentMessage[], input: string, summary?: string): AgentMessage[] {
+function buildMessages(config: AgentConfig, history: AgentMessage[], input: string, summary?: string, runtimeInstruction?: string): AgentMessage[] {
   return [
     ...(config.systemPrompt ? [{ role: 'system' as const, content: config.systemPrompt }] : []),
     ...(summary ? [{
       role: 'system' as const,
       content: `Сжатое резюме ранней части диалога. Используй его как контекст, но не упоминай сжатие без необходимости.\n\n${summary}`,
     }] : []),
+    ...(runtimeInstruction ? [{ role: 'system' as const, content: runtimeInstruction }] : []),
     ...history,
     { role: 'user' as const, content: input },
   ]
@@ -1457,6 +1513,25 @@ function withRuntimeContext(config: AgentConfig, memoryPrompt?: string): AgentCo
   const taskState = taskStatePrompt(config.taskState)
   const systemPrompt = [config.systemPrompt, personalization, invariants, taskState, memoryPrompt].filter(Boolean).join('\n\n')
   return systemPrompt ? { ...config, systemPrompt } : config
+}
+
+function blockedTaskTransitionMessage(notice: string, state: AgentTaskState) {
+  return `Автомат не изменил этап: ${notice} Текущий этап остаётся ${state.stage}. ${state.expectedAction}`
+}
+
+function blockedLifecycleBypassMessage(state: AgentTaskState) {
+  const reason = state.stage === 'planning'
+    ? 'Нельзя перейти к выполнению без утверждённого плана.'
+    : state.stage === 'validation'
+      ? 'Нельзя завершить задачу или пропустить проверку результата на этапе validation.'
+      : state.stage === 'execution'
+        ? 'Нельзя пропустить текущий этап выполнения задачи.'
+        : 'Завершённая задача не допускает дальнейших переходов.'
+  return `${reason} Задача остаётся на этапе ${state.stage}. Следующее допустимое действие: ${state.expectedAction}`
+}
+
+function blockedRequestedStageMessage(state: AgentTaskState, requestedStage: AgentTaskState['stage']) {
+  return `Переход ${state.stage} → ${requestedStage} запрещён. Задача остаётся на этапе ${state.stage}. Следующее допустимое действие: ${state.expectedAction}`
 }
 
 function formatMessagesForSummary(messages: AgentMessage[]) {

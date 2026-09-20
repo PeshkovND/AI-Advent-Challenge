@@ -21,6 +21,20 @@ export type TaskDecision = {
   expectedAction?: string
 }
 
+export type TaskInputIntent = 'approve_plan' | 'request_plan_revision' | 'approve_result' | 'request_revision' | 'attempt_bypass' | 'other'
+
+export type TaskInputInterpretation = {
+  intent: TaskInputIntent
+  requestedStage?: TaskStage
+  reason?: string
+}
+
+export type TaskTransitionAuthorization = {
+  planApproved?: boolean
+  resultApproved?: boolean
+  revisionRequested?: boolean
+}
+
 export const taskStages: TaskStage[] = ['planning', 'execution', 'validation', 'done']
 const transitions: Record<TaskStage, TaskStage[]> = {
   planning: ['execution'],
@@ -51,7 +65,7 @@ export function taskStatePrompt(state?: AgentTaskState) {
 Продолжай только с текущего шага и не повторяй завершённые объяснения. Верни ТОЛЬКО JSON без Markdown:
 {"answer":"ответ пользователю","nextStage":"planning | execution | validation | done либо пустая строка","currentStep":"актуальный шаг","expectedAction":"что ожидается дальше"}
 
-Правила ролей: на planning пользователь утверждает план или даёт правки; на execution работаешь только ты и не просишь пользователя подтвердить промежуточный результат; когда результат готов, сам предложи переход execution → validation; на validation пользователь принимает результат (validation → done) либо указывает ошибку (validation → execution). Для planning → execution нужен явный текст пользователя, подтверждающий план. При необходимости пересмотреть план во время execution предлагай execution → planning. Если предлагаешь переход на другой незавершённый этап, в поле answer дай только короткое сообщение о начале нового этапа. Сервер затем сам вызовет тебя для выполнения первого шага и покажет его отдельным сообщением. На внутреннее сообщение с префиксом «ВНУТРЕННЕЕ ПРОДОЛЖЕНИЕ» сразу выполни текущий шаг, продвигай execution до готового результата и переводи его в validation; не обещай работу на потом. Когда переводишь задачу из execution в validation, поле answer обязано содержать полное самостоятельное решение целиком с учётом всех прошлых правок — не список изменений, не выдержки и не обещание выдать результат позднее. Код сервера проверит каждый переход.`
+Правила ролей: на planning пользователь утверждает план или даёт правки; если пользователь изменяет требования, ограничения, стек или любую часть плана, верни ПОЛНУЮ обновлённую версию плана целиком с учётом всех прежних пунктов и новых правок — не перечисление отличий. Затем попроси явно утвердить именно обновлённый план. На execution работаешь только ты и не просишь пользователя подтвердить промежуточный результат; когда результат готов, сам предложи переход execution → validation; на validation пользователь принимает результат (validation → done) либо указывает ошибку (validation → execution). Для planning → execution нужен явный текст пользователя, подтверждающий план. При необходимости пересмотреть план во время execution предлагай execution → planning. Если предлагаешь переход на другой незавершённый этап, в поле answer дай только короткое сообщение о начале нового этапа. Сервер затем сам вызовет тебя для выполнения первого шага и покажет его отдельным сообщением. На внутреннее сообщение с префиксом «ВНУТРЕННЕЕ ПРОДОЛЖЕНИЕ» сразу выполни текущий шаг, продвигай execution до готового результата и переводи его в validation; не обещай работу на потом. Когда переводишь задачу из execution в validation, поле answer обязано содержать полное самостоятельное решение целиком с учётом всех прошлых правок — не список изменений, не выдержки и не обещание выдать результат позднее. Код сервера проверит каждый переход.`
 }
 
 export function parseTaskDecision(output: string): TaskDecision | undefined {
@@ -104,34 +118,54 @@ function jsonObjectsFrom(source: string) {
   return objects
 }
 
-export function applyTaskDecision(state: AgentTaskState, decision: TaskDecision, userInput: string): { state: AgentTaskState; notice?: string } {
+export function applyTaskDecision(state: AgentTaskState, decision: TaskDecision, authorization: TaskTransitionAuthorization = {}): { state: AgentTaskState; notice?: string } {
   const currentStep = decision.currentStep ?? state.currentStep
   const expectedAction = decision.expectedAction ?? state.expectedAction
   let next = { ...state, currentStep, expectedAction, expectedActor: actorForStage(state.stage), updatedAt: new Date().toISOString() }
   if (!decision.nextStage || decision.nextStage === state.stage) return { state: next }
   if (state.status === 'paused') return { state, notice: 'Задача на паузе: предложение модели не применено.' }
   if (!transitions[state.stage].includes(decision.nextStage)) return { state, notice: `Переход ${state.stage} → ${decision.nextStage} запрещён.` }
-  if (state.stage === 'planning' && decision.nextStage === 'execution' && !isPlanApproved(userInput)) return { state, notice: 'Переход planning → execution ожидает явного утверждения плана.' }
+  if (state.stage === 'planning' && decision.nextStage === 'execution' && !authorization.planApproved) return { state, notice: 'Переход planning → execution ожидает семантически подтверждённого утверждения плана.' }
+  if (state.stage === 'validation' && decision.nextStage === 'execution' && !authorization.revisionRequested) return { state, notice: 'Переход validation → execution ожидает семантически распознанного запроса на доработку.' }
+  if (state.stage === 'validation' && decision.nextStage === 'done' && !authorization.resultApproved) return { state, notice: 'Переход validation → done ожидает семантически подтверждённого принятия результата.' }
   next = { ...next, stage: decision.nextStage, expectedActor: actorForStage(decision.nextStage), completedSteps: [...state.completedSteps, state.currentStep].slice(-50) }
   return { state: next }
 }
 
-export function advanceTaskState(state: AgentTaskState, details: Pick<AgentTaskState, 'currentStep' | 'expectedAction'>): AgentTaskState {
-  const target = taskStages[taskStages.indexOf(state.stage) + 1]
-  if (!target) throw new Error('Задача уже завершена: дальнейших этапов нет.')
-  const result = applyTaskDecision(state, { answer: 'manual', nextStage: target, ...details }, state.stage === 'planning' ? 'План утверждаю' : '')
-  if (result.notice) throw new Error(result.notice)
-  return result.state
+export const taskInputIntentSystemPrompt = `Ты классифицируешь намерение пользователя для автомата задачи. Работай с сообщениями на любом языке. Верни ТОЛЬКО JSON: {"intent":"approve_plan | request_plan_revision | approve_result | request_revision | attempt_bypass | other","requestedStage":"planning | execution | validation | done | null","reason":"кратко"}.
+
+approve_plan — пользователь недвусмысленно принимает уже подготовленный план и разрешает начать выполнение.
+request_plan_revision — пользователь на этапе planning меняет требования, ограничения, стек, целевую платформу или просит изменить план, но не утверждает его.
+approve_result — пользователь недвусмысленно принимает результат на этапе validation и хочет завершить задачу.
+request_revision — пользователь на этапе validation просит исправить или изменить результат.
+attempt_bypass — пользователь требует пропустить обязательный текущий этап: начать execution без принятого плана, завершить без validation, либо перейти через иной обязательный этап.
+other — вопрос, уточнение, просьба подготовить план или любое неоднозначное сообщение.
+
+requestedStage — этап, который пользователь явно просит сделать текущим или на который просит перейти; иначе null. Распознавай названия этапов и их смысловые аналоги на любом языке, например «планирование», «вернуться к плану» = planning. Если пользователь явно называет этап, обязательно заполни requestedStage.
+
+Не считай подтверждением простое упоминание слов «план», «подтверждение» или «готово». При сомнении выбирай other.`
+
+export function taskInputIntentInput(state: AgentTaskState, input: string) {
+  return `Состояние задачи:\nэтап: ${state.stage}\nтекущий шаг: ${state.currentStep}\nожидаемое действие: ${state.expectedAction}\n\nСообщение пользователя:\n${input}`
 }
 
-export function returnTaskToExecution(state: AgentTaskState, details: Pick<AgentTaskState, 'currentStep' | 'expectedAction'>): AgentTaskState {
-  const result = applyTaskDecision(state, { answer: 'manual', nextStage: 'execution', ...details }, '')
-  if (result.notice) throw new Error(result.notice)
-  return result.state
+export function parseTaskInputInterpretation(output: string): TaskInputInterpretation | undefined {
+  const source = output.trim().replace(/^```json\s*|^```|```$/gim, '').trim()
+  for (const candidate of [source, ...jsonObjectsFrom(source).reverse()]) {
+    try {
+      const parsed: unknown = JSON.parse(candidate)
+      if (!isRecord(parsed) || !isTaskInputIntent(parsed.intent)) continue
+      return {
+        intent: parsed.intent,
+        ...(isTaskStage(parsed.requestedStage) ? { requestedStage: parsed.requestedStage } : {}),
+        ...(typeof parsed.reason === 'string' && parsed.reason.trim() ? { reason: parsed.reason.trim().slice(0, 500) } : {}),
+      }
+    } catch { /* Try the next JSON fragment. */ }
+  }
+  return undefined
 }
 
-export function isPlanApproved(value: string) { return /(?:утверждаю|подтверждаю|согласовано|утверждено|план подходит|всё ок|все ок|приступай)/i.test(value) }
-export function isResultApproved(value: string) { return /(?:принимаю|принять|подтверждаю|подтвердить|утверждаю|утвердить|всё верно|все верно|результат подходит|работа готова|согласен)/i.test(value) }
 export function actorForStage(stage: TaskStage): TaskActor { return stage === 'execution' ? 'agent' : 'user' }
 function isTaskStage(value: unknown): value is TaskStage { return value === 'planning' || value === 'execution' || value === 'validation' || value === 'done' }
+function isTaskInputIntent(value: unknown): value is TaskInputIntent { return value === 'approve_plan' || value === 'request_plan_revision' || value === 'approve_result' || value === 'request_revision' || value === 'attempt_bypass' || value === 'other' }
 function isRecord(value: unknown): value is Record<string, unknown> { return typeof value === 'object' && value !== null }
