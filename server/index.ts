@@ -1,6 +1,9 @@
 import 'dotenv/config'
+import './network-config'
 import express, { Response } from 'express'
+import { fileURLToPath } from 'node:url'
 import { AgentError, AgentService, createAgentRouter } from './agent-service'
+import { McpToolRuntime } from './mcp-tool-runtime'
 import { isContextDemoScenario, prepareContextDemo, resetContextDemo } from './context-demo'
 import { CONTEXT_COMPARISON_SUMMARIZE_AFTER_MESSAGES, contextComparisonDefaultInput, contextComparisonHistory } from './context-comparison'
 import { ContextStrategiesService } from './context-strategies'
@@ -109,11 +112,22 @@ const apiKey = process.env.DEEPSEEK_API_KEY?.trim()
 const huggingFaceApiKey = process.env.HUGGINGFACE_API_KEY?.trim()
 const openRouterApiKey = process.env.OPENROUTER_API_KEY?.trim()
 const model = process.env.DEEPSEEK_MODEL?.trim() || 'deepseek-v4-flash'
+const calendarMcpServerPath = fileURLToPath(new URL('./yandex-calendar-mcp-server.ts', import.meta.url))
+const mcpRuntime = new McpToolRuntime({
+  deepSeekApiKey: apiKey,
+  huggingFaceApiKey,
+  openRouterApiKey,
+  model,
+  servers: {
+    'yandex-calendar': { command: process.execPath, args: ['--import', 'tsx', calendarMcpServerPath] },
+  },
+})
 const agentService = new AgentService({
   deepSeekApiKey: apiKey,
   huggingFaceApiKey,
   openRouterApiKey,
   defaultDeepSeekModel: model,
+  mcpRuntime,
 })
 const contextStrategiesService = new ContextStrategiesService(agentService, model)
 agentService.setContextStrategiesService(contextStrategiesService)

@@ -684,6 +684,17 @@ code { padding: 2px 4px; color: #5d60e6; background: #f0f0ff; border-radius: 4px
 .clear-context-button:disabled { color: #b3b6c1; cursor: not-allowed; }
 .agent-answer .reasoning-content { min-height: 0; padding: 15px; font-size: 12px; }
 .agent-empty { display: flex; min-height: 175px; align-items: center; justify-content: center; gap: 9px; padding: 20px; color: #a0a5b5; font-size: 11px; text-align: center; }
+.calendar-chat-panel { display: grid; gap: 16px; max-width: 980px; margin: 28px auto 0; padding: 24px; background: #fff; border: 1px solid #e7e9f0; border-radius: 16px; box-shadow: 0 5px 17px #27304b05; }
+.calendar-chat-header h1 { margin: 0; color: #252837; font-size: 24px; letter-spacing: -.04em; }
+.calendar-chat-header p { margin: 6px 0 0; color: #858a9c; font-size: 12px; }
+.calendar-chat-messages { display: grid; align-content: start; gap: 9px; max-height: 460px; overflow: auto; padding: 3px; }
+.calendar-chat-message { max-width: 82%; padding: 10px 12px; color: #5f6576; background: #f8f8fc; border: 1px solid #eceef4; border-radius: 10px; font-size: 11px; line-height: 1.5; }
+.calendar-chat-message.user { justify-self: end; color: #4e4c78; background: #f2f1ff; border-color: #dfdcff; }
+.calendar-chat-message small { display: block; margin-bottom: 4px; color: #9297a8; font-size: 8px; font-weight: 800; text-transform: uppercase; }
+.calendar-chat-message p { margin: 0; }
+.calendar-chat-message p + p { margin-top: 7px; }
+.calendar-chat-composer { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 9px; align-items: end; }
+.calendar-chat-composer textarea { width: 100%; box-sizing: border-box; resize: vertical; padding: 10px; color: #555a6b; background: #fbfbfd; border: 1px solid #e2e4ec; border-radius: 8px; font: inherit; font-size: 11px; line-height: 1.45; }
 .agent-list-section { margin-top: 27px; }
 .agent-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 17px; }
 .agent-list-item { display: flex; align-items: center; min-width: 0; padding: 0; color: #626777; background: #fff; border: 1px solid #e9ebf2; border-radius: 11px; text-align: left; transition: .2s; }
@@ -738,6 +749,8 @@ code { padding: 2px 4px; color: #5d60e6; background: #f0f0ff; border-radius: 4px
   .compression-comparison-setup, .compression-result-grid { grid-template-columns: 1fr; }
   .compression-comparison-setup { display: grid; }
   .strategy-overview-grid, .strategy-turn-results, .branching-workbench { grid-template-columns: 1fr; }
+  .calendar-chat-composer { grid-template-columns: 1fr; }
+  .calendar-chat-composer .compare-button { justify-content: center; }
   .strategy-controls-panel { align-items: start; flex-direction: column; }
   .strategy-controls-panel > p { text-align: left; }
   .strategy-branch-actions { justify-content: flex-start; }

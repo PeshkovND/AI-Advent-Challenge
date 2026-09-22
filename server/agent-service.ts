@@ -7,6 +7,7 @@ import { personalizationPrompt } from './agent-personalization'
 import type { AgentPersonalizationConfig } from './agent-personalization'
 import { activeInvariants, blockedInvariantMessage, invariantCheckInput, invariantCheckSystemPrompt, invariantsPrompt, parseInvariantVerdict, repairInvariantPrompt } from './agent-invariants'
 import type { AgentInvariantsConfig, InvariantCheckInfo, InvariantVerdict } from './agent-invariants'
+import type { McpToolRuntime, McpToolCall } from './mcp-tool-runtime'
 import { actorForStage, applyTaskDecision, newTaskState, parseTaskDecision, parseTaskInputInterpretation, taskInputIntentInput, taskInputIntentSystemPrompt, taskScopeId, taskStatePrompt } from './task-state'
 import type { AgentTaskState, TaskDecision, TaskInputInterpretation, TaskTransitionAuthorization } from './task-state'
 
@@ -67,6 +68,8 @@ export type AgentConfig = {
   invariants?: AgentInvariantsConfig
   taskState?: AgentTaskState
   taskMachine?: boolean
+  /** MCP capabilities are selected by server-side ids; clients never provide commands or credentials. */
+  mcp?: { enabled: boolean; servers: string[] }
   /**
    * Optional context policy used by the Day 10 strategy demo. The policy is
    * part of the agent configuration so the Agent, rather than the storage
@@ -136,6 +139,7 @@ export type AgentRunResult = {
   taskState?: AgentTaskState
   taskNotice?: string
   invariantCheck?: InvariantCheckInfo
+  mcpToolCalls?: McpToolCall[]
 }
 
 export type AgentTaskRunEvent = {
@@ -176,12 +180,14 @@ type AgentRecord = {
 type AgentState = {
   agents: AgentRecord[]
   histories: Record<string, AgentMessage[]>
+  /** Last successful MCP receipts, kept separately from conversational text. */
+  mcpContexts: Record<string, McpToolCall[]>
   conversationTokens: Record<string, number>
   tokenHistory: Record<string, AgentTokenUsagePoint[]>
 }
 
 class AgentStateStore {
-  private state: AgentState = { agents: [], histories: {}, conversationTokens: {}, tokenHistory: {} }
+  private state: AgentState = { agents: [], histories: {}, mcpContexts: {}, conversationTokens: {}, tokenHistory: {} }
   private writeQueue: Promise<void> = Promise.resolve()
   readonly ready: Promise<void>
 
@@ -212,6 +218,19 @@ class AgentStateStore {
     this.state.histories[agentId] = nextHistory
     await this.persist()
     return this.state.histories[agentId].length
+  }
+
+  async getMcpContext(agentId: string) {
+    await this.ready
+    return (this.state.mcpContexts[agentId] ?? []).map((call) => ({ ...call, arguments: { ...call.arguments } }))
+  }
+
+  async replaceMcpContext(agentId: string, calls: McpToolCall[]) {
+    await this.ready
+    const successful = calls.filter((call) => !call.isError).slice(-4)
+    if (successful.length) this.state.mcpContexts[agentId] = successful
+    else delete this.state.mcpContexts[agentId]
+    await this.persist()
   }
 
   async archiveActiveHistory(agentId: string) {
@@ -259,6 +278,7 @@ class AgentStateStore {
     await this.ready
     this.state.agents = this.state.agents.filter((agent) => agent.id !== agentId)
     delete this.state.histories[agentId]
+    delete this.state.mcpContexts[agentId]
     delete this.state.conversationTokens[agentId]
     delete this.state.tokenHistory[agentId]
     await this.persist()
@@ -267,6 +287,7 @@ class AgentStateStore {
   async clearHistory(agentId: string) {
     await this.ready
     delete this.state.histories[agentId]
+    delete this.state.mcpContexts[agentId]
     delete this.state.conversationTokens[agentId]
     delete this.state.tokenHistory[agentId]
     await this.persist()
@@ -281,6 +302,7 @@ class AgentStateStore {
         this.state = {
           agents: Array.isArray(parsed.agents) ? parsed.agents.filter(isAgentRecord) : [],
           histories: isRecord(parsed.histories) ? Object.fromEntries(Object.entries(parsed.histories).map(([id, messages]) => [id, parseStoredMessages(messages)])) : {},
+          mcpContexts: isRecord(parsed.mcpContexts) ? Object.fromEntries(Object.entries(parsed.mcpContexts).map(([id, calls]) => [id, parseStoredMcpContext(calls)])) : {},
           conversationTokens: isRecord(parsed.conversationTokens)
             ? Object.fromEntries(Object.entries(parsed.conversationTokens).flatMap(([id, tokens]) => typeof tokens === 'number' && Number.isFinite(tokens) && tokens >= 0 ? [[id, Math.floor(tokens)]] : []))
             : {},
@@ -310,6 +332,7 @@ class AgentStateStore {
 type RunRequest = {
   input: string
   history: AgentMessage[]
+  conversationId?: string
 }
 
 export class AgentError extends Error {
@@ -440,6 +463,7 @@ export class Agent {
     readonly config: Required<Pick<AgentConfig, 'provider' | 'model'>> & AgentConfig,
     private readonly client: LlmClient,
     contextStrategies?: ContextStrategiesServiceLike,
+    private readonly mcpRuntime?: McpToolRuntime,
   ) {
     this.contextStrategies = contextStrategies
     if (config.memoryLayers) {
@@ -512,7 +536,7 @@ export class Agent {
     }
   }
 
-  async run(input: string, history: AgentMessage[] = [], summary?: string, contextId = this.id, signal?: AbortSignal, runtimeInstruction?: string): Promise<AgentRunResult> {
+  async run(input: string, history: AgentMessage[] = [], summary?: string, contextId = this.id, signal?: AbortSignal, runtimeInstruction?: string, mcpContext: McpToolCall[] = []): Promise<AgentRunResult> {
     const validatedInput = validateInput(input, this.config.inputPolicy)
     const startedAt = Date.now()
     const preflight = await this.checkInvariants('input', validatedInput)
@@ -526,7 +550,18 @@ export class Agent {
     const memory = this.memory ? await this.memory.prepare(prepared.history, validatedInput, { history, summary: prepared.summary ?? summary }) : undefined
     const effectiveConfig = withRuntimeContext(prepared.config, memory?.systemPrompt)
     const messages = buildMessages(effectiveConfig, memory?.history ?? prepared.history, validatedInput, prepared.summary ?? summary, runtimeInstruction)
-    let completion = await this.client.complete(messages, toLlmOptions(this.config), signal)
+    const mcpResult = this.config.mcp?.enabled
+      ? await this.mcpRuntime?.run({
+        // This is the same prepared context used by the normal Agent path.
+        // McpToolRuntime is an execution adapter, not a second agent.
+        messages,
+        verifiedToolContext: mcpContext,
+      }, { provider: this.config.provider, model: this.config.model, temperature: this.config.temperature, maxTokens: this.config.maxTokens, servers: this.config.mcp.servers })
+      : undefined
+    if (this.config.mcp?.enabled && !mcpResult) throw new AgentError('MCP включён в конфигурации агента, но MCP runtime не настроен.', 503)
+    let completion = mcpResult
+      ? { content: mcpResult.output, tokens: mcpResult.tokens, promptTokens: mcpResult.promptTokens, totalTokens: mcpResult.totalTokens }
+      : await this.client.complete(messages, toLlmOptions(this.config), signal)
     let rawOutput = completion.content
     let { output, taskDecision } = this.resolveTaskOutput(rawOutput, validatedInput)
     let tokenMetrics = sumTokenMetrics(preflight.tokenMetrics, createTokenMetrics(this.config, validatedInput, completion))
@@ -585,6 +620,7 @@ export class Agent {
       ...(prepared.strategyError ? { strategyError: prepared.strategyError } : {}),
       ...(taskDecision ? { taskDecision } : {}),
       ...(invariantCheck ? { invariantCheck } : {}),
+      ...(mcpResult?.toolCalls.length ? { mcpToolCalls: mcpResult.toolCalls } : {}),
     }
   }
 
@@ -611,9 +647,9 @@ export class Agent {
     }
   }
 
-  async stream(input: string, history: AgentMessage[], onChunk: (content: string) => void, summary?: string, contextId = this.id): Promise<AgentRunResult> {
-    if (activeInvariants(this.config.invariants).length) {
-      const result = await this.run(input, history, summary, contextId)
+  async stream(input: string, history: AgentMessage[], onChunk: (content: string) => void, summary?: string, contextId = this.id, mcpContext: McpToolCall[] = []): Promise<AgentRunResult> {
+    if (activeInvariants(this.config.invariants).length || this.config.mcp?.enabled) {
+      const result = await this.run(input, history, summary, contextId, undefined, undefined, mcpContext)
       onChunk(result.output)
       return result
     }
@@ -672,12 +708,14 @@ export class AgentService {
   private readonly defaultDeepSeekModel: string
   private readonly stateStore: AgentStateStore
   private contextStrategies?: ContextStrategiesServiceLike
+  private readonly mcpRuntime?: McpToolRuntime
   private readonly activeTaskRuns = new Map<string, AbortController>()
   readonly ready: Promise<void>
 
-  constructor(options: AgentServiceOptions) {
+  constructor(options: AgentServiceOptions & { mcpRuntime?: McpToolRuntime }) {
     this.client = new LlmClient(options)
     this.defaultDeepSeekModel = options.defaultDeepSeekModel
+    this.mcpRuntime = options.mcpRuntime
     this.stateStore = new AgentStateStore()
     const defaultConfig = normalizeAgentConfig({
       name: 'Основной агент',
@@ -911,7 +949,7 @@ export class AgentService {
     return this.get(id).config.taskState!
   }
 
-  async run(id: string, input: string, providedHistory: AgentMessage[] = [], onTaskEvent?: (event: AgentTaskRunEvent) => void) {
+  async run(id: string, input: string, providedHistory: AgentMessage[] = [], onTaskEvent?: (event: AgentTaskRunEvent) => void, conversationId?: string) {
     await this.ready
     let agent = this.get(id)
     if (agent.config.taskMachine && !agent.config.taskState) {
@@ -931,8 +969,9 @@ export class AgentService {
       agent = this.get(id)
     }
     if (agent.config.taskState?.status === 'paused') throw new AgentError('Задача на паузе. Продолжите её перед новым сообщением.', 409)
-    const scope = agent.config.taskState ? taskScopeId(id, agent.config.taskState) : id
+    const scope = agent.config.taskState ? taskScopeId(id, agent.config.taskState) : conversationId ? conversationScopeId(id, conversationId) : id
     const storedHistory = await this.stateStore.getHistory(scope)
+    const mcpContext = await this.stateStore.getMcpContext(scope)
     const activeHistory = storedHistory.filter((message) => !message.archived)
     const sourceHistory = activeHistory.length > 0 ? activeHistory : providedHistory
     const initialState = agent.config.taskState
@@ -1014,7 +1053,7 @@ export class AgentService {
           }
       : await agent.run(input, sourceHistory, undefined, scope, undefined, inputIntent.intent === 'request_plan_revision'
         ? 'Пользователь запросил правки к плану. Верни полный обновлённый план целиком: включи все прежние релевантные пункты и внесённые изменения. Не ограничивайся описанием правок, не начинай execution и в конце попроси утвердить обновлённый план.'
-        : undefined)
+        : undefined, mcpContext)
     const authorization: TaskTransitionAuthorization = {
       planApproved: inputIntent.intent === 'approve_plan',
       resultApproved: inputIntent.intent === 'approve_result',
@@ -1022,6 +1061,7 @@ export class AgentService {
     }
     let taskUpdate = await this.applyTaskDecision(id, userTransition ?? bypassDecision ?? result.taskDecision, authorization)
     if (result.autoMemoryUpdate) await this.persistAutoMemory(id, result.autoMemoryUpdate)
+    if (result.mcpToolCalls?.length) await this.stateStore.replaceMcpContext(scope, result.mcpToolCalls)
     if (result.archiveHistory) {
       await this.stateStore.archiveActiveHistory(scope)
     }
@@ -1041,11 +1081,12 @@ export class AgentService {
       const beforeContinuation = taskUpdate.state
       const continuationAgent = this.get(id)
       const continuationHistory = (await this.stateStore.getHistory(scope)).filter((message) => !message.archived)
+      const continuationMcpContext = await this.stateStore.getMcpContext(scope)
       const continuationInput = `ВНУТРЕННЕЕ ПРОДОЛЖЕНИЕ: выполни шаг «${beforeContinuation.currentStep}» на этапе execution. Не жди подтверждения пользователя. Если результат задачи готов, сам переведи её в validation и покажи пользователю полное самостоятельное решение с учётом всех правок; не ограничивайся списком изменённых мест. Иначе опиши выполненную часть и следующий конкретный шаг execution.`
       const controller = new AbortController()
       this.activeTaskRuns.set(scope, controller)
       try {
-        const continuation = await continuationAgent.run(continuationInput, continuationHistory, undefined, scope, controller.signal)
+        const continuation = await continuationAgent.run(continuationInput, continuationHistory, undefined, scope, controller.signal, undefined, continuationMcpContext)
         const completionDecision = continuation.invariantCheck?.status === 'blocked'
           ? {
               answer: '',
@@ -1056,6 +1097,7 @@ export class AgentService {
           : continuation.taskDecision ?? { answer: '', nextStage: 'validation' as const, currentStep: 'Проверить готовый результат.', expectedAction: 'Пользователь проверяет результат: принимает его или указывает правки.' }
         const continuationUpdate = await this.applyTaskDecision(id, completionDecision)
         if (continuation.autoMemoryUpdate) await this.persistAutoMemory(id, continuation.autoMemoryUpdate)
+        if (continuation.mcpToolCalls?.length) await this.stateStore.replaceMcpContext(scope, continuation.mcpToolCalls)
         if (continuation.archiveHistory) await this.stateStore.archiveActiveHistory(scope)
         contextMessages = await this.stateStore.appendHistory(scope, [{ role: 'assistant', content: continuation.output }])
         conversationTokens = await this.stateStore.addConversationTokens(scope, continuation.tokenMetrics, continuation.summaryTokenMetrics?.totalTokens ?? 0, continuation.strategyTokenMetrics, continuation.memoryClassifierTokenMetrics)
@@ -1080,16 +1122,18 @@ export class AgentService {
     return { ...result, contextMessages, conversationTokens, tokenHistory, ...(taskUpdate?.state ? { taskState: taskUpdate.state } : {}), ...(taskUpdate?.notice ? { taskNotice: taskUpdate.notice } : {}) }
   }
 
-  async stream(id: string, input: string, providedHistory: AgentMessage[], onChunk: (content: string) => void) {
+  async stream(id: string, input: string, providedHistory: AgentMessage[], onChunk: (content: string) => void, conversationId?: string) {
     await this.ready
     const agent = this.get(id)
     if (agent.config.taskState?.status === 'paused') throw new AgentError('Задача на паузе. Продолжите её перед новым сообщением.', 409)
-    const scope = agent.config.taskState ? taskScopeId(id, agent.config.taskState) : id
+    const scope = agent.config.taskState ? taskScopeId(id, agent.config.taskState) : conversationId ? conversationScopeId(id, conversationId) : id
     const storedHistory = await this.stateStore.getHistory(scope)
+    const mcpContext = await this.stateStore.getMcpContext(scope)
     const activeHistory = storedHistory.filter((message) => !message.archived)
     const sourceHistory = activeHistory.length > 0 ? activeHistory : providedHistory
-    const result = await agent.stream(input, sourceHistory, onChunk, undefined, scope)
+    const result = await agent.stream(input, sourceHistory, onChunk, undefined, scope, mcpContext)
     if (result.autoMemoryUpdate) await this.persistAutoMemory(id, result.autoMemoryUpdate)
+    if (result.mcpToolCalls?.length) await this.stateStore.replaceMcpContext(scope, result.mcpToolCalls)
     if (result.archiveHistory) {
       await this.stateStore.archiveActiveHistory(scope)
     }
@@ -1168,7 +1212,7 @@ export class AgentService {
   }
 
   private register(id: string, config: Required<Pick<AgentConfig, 'provider' | 'model'>> & AgentConfig, createdAt: string) {
-    this.agents.set(id, new Agent(id, config, this.client, this.contextStrategies))
+    this.agents.set(id, new Agent(id, config, this.client, this.contextStrategies, this.mcpRuntime))
     this.createdAt.set(id, createdAt)
   }
 
@@ -1384,7 +1428,7 @@ export function createAgentRouter(service: AgentService): Router {
   router.post('/:agentId/run', async (request, response) => {
     try {
       const runRequest = parseRunRequest(request)
-      const result = await service.run(request.params.agentId, runRequest.input, runRequest.history)
+      const result = await service.run(request.params.agentId, runRequest.input, runRequest.history, undefined, runRequest.conversationId)
       response.json(result)
     } catch (error) {
       sendAgentError(response, error)
@@ -1399,7 +1443,7 @@ export function createAgentRouter(service: AgentService): Router {
     const emit = (payload: Record<string, unknown>) => response.write(`${JSON.stringify(payload)}\n`)
     try {
       const runRequest = parseRunRequest(request)
-      const result = await service.run(request.params.agentId, runRequest.input, runRequest.history, (event) => emit({ type: 'message', ...event }))
+      const result = await service.run(request.params.agentId, runRequest.input, runRequest.history, (event) => emit({ type: 'message', ...event }), runRequest.conversationId)
       emit({ type: 'done', taskState: result.taskState, taskNotice: result.taskNotice })
     } catch (error) {
       emit({ type: 'error', error: error instanceof Error ? error.message : 'Не удалось выполнить задачу.' })
@@ -1428,7 +1472,7 @@ export function createAgentRouter(service: AgentService): Router {
 
       const result = await service.stream(request.params.agentId, runRequest.input, runRequest.history, (content) => {
         response.write(`data: ${JSON.stringify({ content })}\n\n`)
-      })
+      }, runRequest.conversationId)
       response.write(`data: ${JSON.stringify({ done: true, result })}\n\n`)
       response.write('data: [DONE]\n\n')
       response.end()
@@ -1452,7 +1496,19 @@ function parseRunRequest(request: Request): RunRequest {
   }
 
   const history = body.history === undefined ? [] : parseHistory(body.history)
-  return { input: body.input, history }
+  return { input: body.input, history, conversationId: parseConversationId(body.conversationId) }
+}
+
+function parseConversationId(value: unknown) {
+  if (value === undefined) return undefined
+  if (typeof value !== 'string' || !/^[a-zA-Z0-9_-]{1,120}$/.test(value)) {
+    throw new AgentError('conversationId должен содержать от 1 до 120 букв, цифр, дефисов или подчёркиваний.')
+  }
+  return value
+}
+
+function conversationScopeId(agentId: string, conversationId: string) {
+  return `${agentId}::conversation::${conversationId}`
 }
 
 function parseHistory(value: unknown): AgentMessage[] {
@@ -1625,9 +1681,16 @@ function normalizeAgentConfig(value: unknown, defaultDeepSeekModel: string) {
     invariants: normalizeInvariants(input.invariants),
     taskState: normalizeTaskState(input.taskState),
     taskMachine: input.taskMachine === true ? true : undefined,
+    mcp: normalizeMcpConfig(input.mcp),
   }
 
   return removeUndefined(config)
+}
+
+function normalizeMcpConfig(value: unknown): AgentConfig['mcp'] | undefined {
+  if (!isRecord(value) || value.enabled !== true) return undefined
+  const servers = readStringArray(value.servers, 16, 120)
+  return servers.length ? { enabled: true, servers } : undefined
 }
 
 function normalizeInputPolicy(value: unknown) {
@@ -1831,6 +1894,20 @@ function parseStoredMessages(value: unknown): AgentMessage[] {
     && ['system', 'user', 'assistant'].includes(String(item.role))
     && typeof item.content === 'string')
     .map((item) => ({ role: item.role, content: item.content, ...(item.archived === true ? { archived: true } : {}) }))
+}
+
+function parseStoredMcpContext(value: unknown): McpToolCall[] {
+  if (!Array.isArray(value)) return []
+  return value.flatMap((item) => {
+    if (!isRecord(item) || typeof item.name !== 'string' || typeof item.serverId !== 'string' || !isRecord(item.arguments) || item.isError !== false) return []
+    return [{
+      name: item.name.slice(0, 200),
+      serverId: item.serverId.slice(0, 200),
+      arguments: item.arguments,
+      result: item.result,
+      isError: false,
+    }]
+  }).slice(-4)
 }
 
 function parseStoredTokenHistory(value: unknown): AgentTokenUsagePoint[] {

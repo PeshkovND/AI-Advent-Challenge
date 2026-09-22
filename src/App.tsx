@@ -5,13 +5,14 @@ import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
 
 type MessageRole = 'user' | 'assistant'
-type Page = 'chat' | 'compare' | 'reasoning' | 'temperature' | 'models' | 'agents' | 'context-demo' | 'context-comparison' | 'context-strategies' | 'context-branching' | 'memory-layers' | 'personalization' | 'task-state'
+type Page = 'chat' | 'compare' | 'reasoning' | 'temperature' | 'models' | 'agents' | 'context-demo' | 'context-comparison' | 'context-strategies' | 'context-branching' | 'memory-layers' | 'personalization' | 'task-state' | 'calendar-mcp'
 
 type ChatMessage = {
   id: string
   role: MessageRole
   content: string
 }
+type McpToolTrace = { name: string; isError: boolean }
 type StopSequenceField = { id: string; value: string }
 type PromptMessage = { role: 'system' | 'user'; content: string }
 
@@ -78,6 +79,7 @@ type AgentConfig = {
   invariants?: { enabled?: boolean; items?: AgentInvariant[] }
   taskState?: AgentTaskState
   taskMachine?: boolean
+  mcp?: { enabled: boolean; servers: string[] }
 }
 type AgentInvariant = { id: string; title: string; rule: string }
 type InvariantField = AgentInvariant
@@ -142,6 +144,14 @@ type AgentStrategyContext = {
 }
 type AgentStrategyRunResult = { output: string; tokenMetrics: AgentTokenMetrics; strategyTokenMetrics?: AgentTokenMetrics; strategyError?: string }
 type AgentStrategyHistory = { messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>; tokenHistory?: AgentTokenUsagePoint[] }
+const calendarDemoAgentId = 'day17-mcp-agent'
+const calendarDemoAgentConfig: AgentConfig = {
+  name: 'Day 17 · MCP Calendar',
+  provider: 'deepseek',
+  model: 'deepseek-v4-flash',
+  systemPrompt: 'Ты полезный универсальный помощник. Отвечай по-русски, а при необходимости самостоятельно используй доступные MCP-инструменты.',
+  mcp: { enabled: true, servers: ['yandex-calendar'] },
+}
 
 const agentModelOptions: Record<AgentProvider, AgentModelOption[]> = {
   deepseek: [
@@ -289,6 +299,9 @@ function App() {
           <button className={`page-nav-button ${activePage === 'task-state' ? 'active' : ''}`} onClick={() => setActivePage('task-state')}>
             <span>⑬</span> Состояние задачи
           </button>
+          <button className={`page-nav-button ${activePage === 'calendar-mcp' ? 'active' : ''}`} onClick={() => setActivePage('calendar-mcp')}>
+            <span>▣</span> Календарь
+          </button>
         </nav>
 
         <div className="sidebar-bottom">
@@ -298,10 +311,73 @@ function App() {
       </aside>
 
       <main className="day-main">
-        {activePage === 'chat' ? <ChatPage /> : activePage === 'compare' ? <ComparePage /> : activePage === 'reasoning' ? <ReasoningPage /> : activePage === 'temperature' ? <TemperaturePage /> : activePage === 'models' ? <ModelsPage /> : activePage === 'agents' ? <AgentsPage /> : activePage === 'context-demo' ? <ContextDemoPage /> : activePage === 'context-comparison' ? <ContextCompressionComparisonPage /> : activePage === 'context-strategies' ? <ContextStrategiesPage /> : activePage === 'context-branching' ? <ContextBranchingPage /> : activePage === 'memory-layers' ? <MemoryLayersPage /> : activePage === 'personalization' ? <PersonalizationPage /> : <TaskStatePage />}
+        {activePage === 'chat' ? <ChatPage /> : activePage === 'compare' ? <ComparePage /> : activePage === 'reasoning' ? <ReasoningPage /> : activePage === 'temperature' ? <TemperaturePage /> : activePage === 'models' ? <ModelsPage /> : activePage === 'agents' ? <AgentsPage /> : activePage === 'context-demo' ? <ContextDemoPage /> : activePage === 'context-comparison' ? <ContextCompressionComparisonPage /> : activePage === 'context-strategies' ? <ContextStrategiesPage /> : activePage === 'context-branching' ? <ContextBranchingPage /> : activePage === 'memory-layers' ? <MemoryLayersPage /> : activePage === 'personalization' ? <PersonalizationPage /> : activePage === 'task-state' ? <TaskStatePage /> : <CalendarMcpPage />}
       </main>
     </div>
   )
+}
+
+function CalendarAgentChat() {
+  const [messages, setMessages] = useState<ChatMessage[]>([{ id: 'calendar-welcome', role: 'assistant', content: 'Привет! Я отвечаю на обычные вопросы и умею работать с вашим Яндекс Календарём. Например: «Какие у меня события на этой неделе?»' }])
+  const conversationId = useRef(crypto.randomUUID())
+  const [input, setInput] = useState('')
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function sendMessage(event: FormEvent) {
+    event.preventDefault()
+    const content = input.trim()
+    if (!content || isLoading) return
+    const nextMessages = [...messages, { id: crypto.randomUUID(), role: 'user' as const, content }]
+    setMessages(nextMessages)
+    setInput('')
+    setError(null)
+    setIsLoading(true)
+    try {
+      const response = await fetch(`/api/agents/${calendarDemoAgentId}/run`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ input: content, conversationId: conversationId.current }) })
+      const data = await response.json() as { output?: string; mcpToolCalls?: McpToolTrace[] } & ApiError
+      const output = data.output
+      if (!response.ok || !output) throw new Error(data.error || 'Агент не смог подготовить ответ.')
+      const trace = data.mcpToolCalls?.length
+        ? `\n\n---\n*MCP: ${data.mcpToolCalls.map((tool) => `\`${tool.name}\` ${tool.isError ? '✗' : '✓'}`).join(' · ')}*`
+        : ''
+      setMessages((current) => [...current, { id: crypto.randomUUID(), role: 'assistant', content: `${output}${trace}` }])
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : 'Не удалось отправить сообщение.')
+    } finally { setIsLoading(false) }
+  }
+
+  return <section className="calendar-chat-panel">
+    <header className="calendar-chat-header"><h1>Календарь</h1><p>Спросите о событиях или попросите создать, изменить либо удалить их.</p></header>
+    <div className="calendar-chat-messages">{messages.map((message) => <div key={message.id} className={`calendar-chat-message ${message.role}`}><small>{message.role === 'user' ? 'Вы' : 'Агент календаря'}</small><MarkdownContent content={message.content} /></div>)}{isLoading && <div className="calendar-chat-message assistant"><small>Агент календаря</small>Думаю</div>}</div>
+    {error && <div className="error-message" role="alert">{error}</div>}
+    <form className="calendar-chat-composer" onSubmit={sendMessage}><textarea value={input} onChange={(event) => setInput(event.target.value)} placeholder="Например: Добавь встречу завтра в 15:00" rows={2} /><button className="compare-button" type="submit" disabled={isLoading || !input.trim()}>Отправить <span>→</span></button></form>
+  </section>
+}
+
+function CalendarMcpPage() {
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    async function prepareDemo() {
+      const existing = await fetch(`/api/agents/${calendarDemoAgentId}`)
+      if (existing.status === 404) {
+        const created = await fetch('/api/agents', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: calendarDemoAgentId, config: calendarDemoAgentConfig }) })
+        if (!created.ok) {
+          const data = await created.json() as ApiError
+          throw new Error(data.error || 'Не удалось создать демонстрационного MCP-агента.')
+        }
+      } else if (!existing.ok) {
+        const data = await existing.json() as ApiError
+        throw new Error(data.error || 'Не удалось проверить демонстрационного агента.')
+      }
+    }
+    void prepareDemo().catch((loadError: unknown) => setError(loadError instanceof Error ? loadError.message : 'Не удалось подготовить MCP-демонстрацию.'))
+  }, [])
+  return <div className="page-view calendar-mcp-page">
+    {error && <div className="error-message" role="alert">{error}</div>}
+    <CalendarAgentChat />
+  </div>
 }
 
 function ChatPage() {
@@ -562,6 +638,7 @@ function AgentsPage() {
   const [initialFacts, setInitialFacts] = useState('')
   const [invariantsEnabled, setInvariantsEnabled] = useState(false)
   const [invariantFields, setInvariantFields] = useState<InvariantField[]>([])
+  const [mcpEnabled, setMcpEnabled] = useState(false)
   const [input, setInput] = useState('')
   const [answer, setAnswer] = useState('')
   const [runMeta, setRunMeta] = useState<{ durationMs?: number; tokens?: number; conversationTokens?: number; tokenMetrics?: AgentTokenMetrics; invariantCheck?: InvariantCheckInfo } | null>(null)
@@ -691,6 +768,7 @@ function AgentsPage() {
           ...(parsedFacts ? { facts: parsedFacts } : {}),
         } : undefined,
         invariants: invariantsEnabled ? { enabled: true, items: invariantItems } : undefined,
+        mcp: mcpEnabled ? { enabled: true, servers: ['yandex-calendar'] } : undefined,
       }
       const response = await fetch('/api/agents', {
         method: 'POST',
@@ -711,6 +789,7 @@ function AgentsPage() {
       setInitialFacts('')
       setInvariantsEnabled(false)
       setInvariantFields([])
+      setMcpEnabled(false)
       setError(null)
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : 'Не удалось создать агента.')
@@ -794,6 +873,7 @@ function AgentsPage() {
               <label>Модель<select value={model} onChange={(event) => setModel(event.target.value)}>{agentModelOptions[provider].map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}</select></label>
             </div>
             <label>Системный промпт<textarea value={systemPrompt} onChange={(event) => setSystemPrompt(event.target.value)} placeholder="Например: отвечай кратко и с примерами..." rows={3} /></label>
+            <div className="invariant-editor"><div className="agent-field-heading"><span>MCP-инструменты</span><label className="invariant-toggle"><input type="checkbox" checked={mcpEnabled} onChange={(event) => setMcpEnabled(event.target.checked)} /> Включить Яндекс Календарь</label></div><p>Агент сам выбирает MCP-инструменты через нативный tool calling. В конфигурацию сохраняется только серверный id, без команд и секретов. Выбранная модель должна поддерживать function calling.</p></div>
             <div className="invariant-editor"><div className="agent-field-heading"><span>Инварианты</span><label className="invariant-toggle"><input type="checkbox" checked={invariantsEnabled} onChange={(event) => setInvariantsEnabled(event.target.checked)} /> Включить</label></div><p>Жёсткие правила, которые агент не имеет права нарушать.</p>{invariantsEnabled && <div className="invariant-list">{invariantFields.map((item, index) => <div className="invariant-row" key={item.id}><input value={item.title} onChange={(event) => setInvariantFields((current) => current.map((entry) => entry.id === item.id ? { ...entry, title: event.target.value } : entry))} placeholder={`Правило ${index + 1}, например: Стек`} aria-label={`Название инварианта ${index + 1}`} /><textarea value={item.rule} onChange={(event) => setInvariantFields((current) => current.map((entry) => entry.id === item.id ? { ...entry, rule: event.target.value } : entry))} placeholder="Например: Использовать только SwiftUI и iOS 16+." rows={2} aria-label={`Описание инварианта ${index + 1}`} /><button className="stop-remove" type="button" onClick={() => setInvariantFields((current) => current.filter((entry) => entry.id !== item.id))} aria-label={`Удалить инвариант ${index + 1}`}>×</button></div>)}<button className="stop-add" type="button" onClick={() => setInvariantFields((current) => [...current, createInvariantField()])}>＋ Добавить инвариант</button></div>}</div>
             <div className="agent-form-row">
               <label>Температура<input type="number" min="0" max="2" step="0.1" value={temperature} onChange={(event) => setTemperature(event.target.value)} /></label>
@@ -835,7 +915,7 @@ function AgentConfigDetails({ config }: { config: AgentConfig }) {
   const strategy = config.contextStrategy
   const strategyLabel = strategy?.strategy === 'sliding' ? `Sliding Window · N=${strategy.windowSize ?? '—'}` : strategy?.strategy === 'facts' ? `Sticky Facts · N=${strategy.windowSize ?? '—'}` : strategy?.strategy === 'branching' ? 'Branching' : strategy?.strategy === 'summary' ? `Summary · N=${strategy.summarizeAfterMessages ?? 10}` : 'не задана'
   const invariants = config.invariants?.enabled ? config.invariants.items ?? [] : []
-  return <div className="agent-config-details"><div className="agent-config-details-heading"><span>Параметры выбранного агента</span><small>Текущая конфигурация</small></div><div className="agent-config-details-grid"><div><small>Название</small><strong>{config.name || 'не задано'}</strong></div><div><small>Temperature</small><strong>{config.temperature ?? 'по умолчанию'}</strong></div><div><small>Максимум токенов ответа</small><strong>{config.maxTokens ?? 'без лимита'}</strong></div><div><small>Стратегия контекста</small><strong>{strategyLabel}</strong></div><div><small>Формат ответа</small><strong>{outputFormat}</strong></div><div><small>Лимит входа</small><strong>{config.inputPolicy?.maxCharacters ? `${config.inputPolicy.maxCharacters} символов` : 'без лимита'}</strong></div><div><small>Stop-последовательности</small><strong>{stopSequences}</strong></div><div><small>Инварианты</small><strong>{invariants.length ? `${invariants.length} активн.` : 'не заданы'}</strong></div><div className="agent-config-details-wide"><small>Системный промпт</small><strong>{config.systemPrompt || 'не задан'}</strong></div>{invariants.length > 0 && <div className="agent-config-details-wide"><small>Жёсткие правила</small><strong>{invariants.map((item) => `${item.title}: ${item.rule}`).join(' · ')}</strong></div>}</div></div>
+  return <div className="agent-config-details"><div className="agent-config-details-heading"><span>Параметры выбранного агента</span><small>Текущая конфигурация</small></div><div className="agent-config-details-grid"><div><small>Название</small><strong>{config.name || 'не задано'}</strong></div><div><small>Temperature</small><strong>{config.temperature ?? 'по умолчанию'}</strong></div><div><small>Максимум токенов ответа</small><strong>{config.maxTokens ?? 'без лимита'}</strong></div><div><small>Стратегия контекста</small><strong>{strategyLabel}</strong></div><div><small>Формат ответа</small><strong>{outputFormat}</strong></div><div><small>Лимит входа</small><strong>{config.inputPolicy?.maxCharacters ? `${config.inputPolicy.maxCharacters} символов` : 'без лимита'}</strong></div><div><small>Stop-последовательности</small><strong>{stopSequences}</strong></div><div><small>Инварианты</small><strong>{invariants.length ? `${invariants.length} активн.` : 'не заданы'}</strong></div><div><small>MCP</small><strong>{config.mcp?.enabled ? config.mcp.servers.join(' · ') : 'выключен'}</strong></div><div className="agent-config-details-wide"><small>Системный промпт</small><strong>{config.systemPrompt || 'не задан'}</strong></div>{invariants.length > 0 && <div className="agent-config-details-wide"><small>Жёсткие правила</small><strong>{invariants.map((item) => `${item.title}: ${item.rule}`).join(' · ')}</strong></div>}</div></div>
 }
 
 function AgentTokenMetricsView({ metrics, conversationTokens }: { metrics: AgentTokenMetrics; conversationTokens?: number }) {

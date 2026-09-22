@@ -8,6 +8,7 @@
     "dev:server": "tsx watch server/index.ts",
     "agents:cli": "tsx server/agent-cli.ts",
     "mcp:demo": "tsx server/mcp-client.ts",
+    "test:mcp:e2e": "tsx server/calendar-mcp-e2e.ts",
     "build": "vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit"
