@@ -11,6 +11,8 @@
     "agents:cli": "tsx server/agent-cli.ts",
     "mcp:demo": "tsx server/mcp-client.ts",
     "test:mcp:e2e": "tsx server/calendar-mcp-e2e.ts",
+    "test:mcp:pipeline:e2e": "tsx server/calendar-pipeline-e2e.ts",
+    "test:calendar:slots": "tsx --test server/calendar-slots.test.ts server/calendar-pipeline-mcp.test.ts",
     "test:scheduler:smoke": "tsx server/scheduler-smoke.ts",
     "test:scheduler:local": "tsx --test --test-concurrency=1 server/scheduler-local.test.ts",
     "build": "vite build",

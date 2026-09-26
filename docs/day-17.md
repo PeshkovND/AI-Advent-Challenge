@@ -1,9 +1,10 @@
 # День 17 — MCP и Яндекс Календарь
 
-`server/yandex-calendar-mcp-server.ts` реализует MCP-сервер над CalDAV-интерфейсом Яндекс Календаря. Он регистрирует четыре инструмента:
+`server/yandex-calendar-mcp-server.ts` реализует MCP-сервер над CalDAV-интерфейсом Яндекс Календаря. Он регистрирует пять инструментов:
 
 - `create_calendar_event` — создаёт событие;
 - `get_calendar_events` — читает события в заданном временном диапазоне;
+- `find_free_calendar_slots` — вычисляет свободные интервалы из результатов чтения;
 - `update_calendar_event` — заменяет поля события по UID;
 - `delete_calendar_event` — удаляет событие по UID.
 

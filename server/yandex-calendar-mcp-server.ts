@@ -5,6 +5,7 @@ import { serveStdio } from '@modelcontextprotocol/server/stdio'
 import { randomUUID } from 'node:crypto'
 import { Agent as HttpsAgent, request as httpsRequest } from 'node:https'
 import { z } from 'zod'
+import { findFreeCalendarSlots } from './calendar-slots'
 
 const defaultCalendar = 'events-default'
 const caldavBaseUrl = (process.env.YANDEX_CALDAV_URL?.trim() || 'https://caldav.yandex.ru').replace(/\/$/, '')
@@ -96,6 +97,18 @@ function parseEvent(ics: string, calendar: string): CalendarEvent | undefined {
 }
 const eventShape = z.object({ uid: z.string(), title: z.string(), startsAt: z.string(), endsAt: z.string(), calendar: z.string(), description: z.string().optional(), location: z.string().optional(), etag: z.string().optional() })
 const eventInput = { title: z.string().min(1).max(500).describe('Название события'), startsAt: z.string().datetime({ offset: true }).describe('Начало в ISO 8601, например 2026-09-23T10:00:00+06:00'), endsAt: z.string().datetime({ offset: true }).describe('Конец в ISO 8601'), description: z.string().max(5000).optional().describe('Описание'), location: z.string().max(500).optional().describe('Место'), calendar: z.string().min(1).default(defaultCalendar).describe('CalDAV-календарь; events-default — основной') }
+const freeSlotShape = z.object({ startsAt: z.string(), endsAt: z.string() })
+const freeSlotInput = z.object({
+  events: z.array(eventShape).max(500).describe('События из результата get_calendar_events текущего хода'),
+  from: z.string().datetime({ offset: true }).describe('Начало периода поиска в ISO 8601'),
+  to: z.string().datetime({ offset: true }).describe('Конец периода поиска в ISO 8601'),
+  durationMinutes: z.number().int().min(15).max(720).describe('Нужная длительность события в минутах'),
+  workdayStart: z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/).default('09:00').describe('Начало рабочего дня в формате HH:MM'),
+  workdayEnd: z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/).default('18:00').describe('Конец рабочего дня в формате HH:MM'),
+  timezone: z.string().min(1).max(100).describe('IANA-часовой пояс, например Asia/Omsk'),
+  weekdays: z.array(z.number().int().min(0).max(6)).min(1).max(7).default([1, 2, 3, 4, 5]).describe('Дни недели: 0 — воскресенье, 1 — понедельник'),
+  limit: z.number().int().min(1).max(20).default(5).describe('Максимальное число подходящих окон'),
+}).refine(({ from, to }) => new Date(to) > new Date(from), { message: 'to должно быть позже from' })
 function toolError(error: unknown) { return { content: [{ type: 'text' as const, text: error instanceof Error ? error.message : 'Не удалось выполнить запрос к календарю.' }], isError: true } }
 
 function createCalendarServer() {
@@ -117,6 +130,18 @@ function createCalendarServer() {
         return event ? [{ ...event, ...(etag ? { etag } : {}) }] : []
       })
       return { content: [{ type: 'text', text: `Найдено событий: ${events.length}.` }], structuredContent: { events } }
+    } catch (error) { return toolError(error) }
+  })
+  server.registerTool('find_free_calendar_slots', {
+    title: 'Найти свободные окна в календаре',
+    description: 'Детерминированно вычисляет свободные рабочие интервалы из событий, полученных через get_calendar_events. Для цепочки сначала прочитай события, затем передай их в events этого инструмента.',
+    inputSchema: freeSlotInput,
+    outputSchema: z.object({ slots: z.array(freeSlotShape) }),
+    annotations: { readOnlyHint: true },
+  }, async (input) => {
+    try {
+      const slots = findFreeCalendarSlots({ ...input, timeZone: input.timezone })
+      return { content: [{ type: 'text', text: `Найдено свободных окон: ${slots.length}.` }], structuredContent: { slots } }
     } catch (error) { return toolError(error) }
   })
   server.registerTool('update_calendar_event', { title: 'Изменить событие Яндекс Календаря', description: 'Полностью обновляет поля события по UID. Передавайте etag из чтения, чтобы не затереть параллельные изменения.', inputSchema: z.object({ uid: z.string().uuid().describe('UID события'), ...eventInput, etag: z.string().optional().describe('Текущий ETag события') }).refine(({ startsAt, endsAt }) => new Date(endsAt) > new Date(startsAt), { message: 'endsAt должно быть позже startsAt' }), outputSchema: z.object({ event: eventShape }) }, async ({ etag, ...event }) => {

@@ -336,7 +336,7 @@ function App() {
 }
 
 function CalendarAgentChat() {
-  const [messages, setMessages] = useState<ChatMessage[]>([{ id: 'calendar-welcome', role: 'assistant', content: 'Привет! Я отвечаю на обычные вопросы и умею работать с вашим Яндекс Календарём. Например: «Какие у меня события на этой неделе?»' }])
+  const [messages, setMessages] = useState<ChatMessage[]>([{ id: 'calendar-welcome', role: 'assistant', content: 'Привет! Я отвечаю на обычные вопросы и умею работать с вашим Яндекс Календарём. Например: «Найди свободный час на следующей неделе и создай встречу». ' }])
   const conversationId = useRef(crypto.randomUUID())
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
@@ -357,7 +357,7 @@ function CalendarAgentChat() {
       const output = data.output
       if (!response.ok || !output) throw new Error(data.error || 'Агент не смог подготовить ответ.')
       const trace = data.mcpToolCalls?.length
-        ? `\n\n---\n*MCP: ${data.mcpToolCalls.map((tool) => `\`${tool.name}\` ${tool.isError ? '✗' : '✓'}`).join(' · ')}*`
+        ? `\n\n---\n*MCP-цепочка: ${data.mcpToolCalls.map((tool, index) => `${index + 1}. \`${tool.name}\` ${tool.isError ? '✗' : '✓'}`).join(' → ')}*`
         : ''
       setMessages((current) => [...current, { id: crypto.randomUUID(), role: 'assistant', content: `${output}${trace}` }])
     } catch (requestError) {
@@ -369,7 +369,7 @@ function CalendarAgentChat() {
     <header className="calendar-chat-header"><h1>Календарь</h1><p>Спросите о событиях или попросите создать, изменить либо удалить их.</p></header>
     <div className="calendar-chat-messages">{messages.map((message) => <div key={message.id} className={`calendar-chat-message ${message.role}`}><small>{message.role === 'user' ? 'Вы' : 'Агент календаря'}</small><MarkdownContent content={message.content} /></div>)}{isLoading && <div className="calendar-chat-message assistant"><small>Агент календаря</small>Думаю</div>}</div>
     {error && <div className="error-message" role="alert">{error}</div>}
-    <form className="calendar-chat-composer" onSubmit={sendMessage}><textarea value={input} onChange={(event) => setInput(event.target.value)} onKeyDown={submitTextareaOnEnter} placeholder="Например: Добавь встречу завтра в 15:00" rows={2} /><button className="compare-button" type="submit" disabled={isLoading || !input.trim()}>Отправить <span>→</span></button></form>
+    <form className="calendar-chat-composer" onSubmit={sendMessage}><textarea value={input} onChange={(event) => setInput(event.target.value)} onKeyDown={submitTextareaOnEnter} placeholder="Например: Найди свободный час на следующей неделе и создай встречу" rows={2} /><button className="compare-button" type="submit" disabled={isLoading || !input.trim()}>Отправить <span>→</span></button></form>
   </section>
 }
 
@@ -426,7 +426,7 @@ function SchedulerAssistantChat({ onTasksChanged }: { onTasksChanged: () => void
       const response = await fetch(`/api/agents/${calendarDemoAgentId}/run`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ input: content, conversationId: conversationId.current, clientContext: browserTimeZoneContext() }) })
       const data = await response.json() as { output?: string; mcpToolCalls?: McpToolTrace[] } & ApiError
       if (!response.ok || !data.output) throw new Error(data.error || 'Агент не смог подготовить ответ.')
-      const trace = data.mcpToolCalls?.length ? `\n\n*MCP: ${data.mcpToolCalls.map((tool) => `\`${tool.name}\` ${tool.isError ? '✗' : '✓'}`).join(' · ')}*` : ''
+      const trace = data.mcpToolCalls?.length ? `\n\n*MCP-цепочка: ${data.mcpToolCalls.map((tool, index) => `${index + 1}. \`${tool.name}\` ${tool.isError ? '✗' : '✓'}`).join(' → ')}*` : ''
       setMessages((current) => [...current, { id: crypto.randomUUID(), role: 'assistant', content: `${data.output}${trace}` }])
       onTasksChanged()
     } catch (requestError) {
