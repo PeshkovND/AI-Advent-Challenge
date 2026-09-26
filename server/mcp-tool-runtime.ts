@@ -1,17 +1,17 @@
 import { Client } from '@modelcontextprotocol/client'
-import { StdioClientTransport } from '@modelcontextprotocol/client/stdio'
+import { getDefaultEnvironment, StdioClientTransport } from '@modelcontextprotocol/client/stdio'
 import { Agent as HttpsAgent, request as httpsRequest } from 'node:https'
 
 /** A receipt for an MCP call. It is data, never a replayable user instruction. */
 export type McpToolCall = { name: string; serverId: string; arguments: Record<string, unknown>; result: unknown; isError: boolean }
 export type McpRuntimeResult = { output: string; toolCalls: McpToolCall[]; tokens?: number; promptTokens?: number; totalTokens?: number }
 
-type McpTool = { name: string; modelName: string; serverId: string; title?: string; description?: string; inputSchema: Record<string, unknown> }
+type McpTool = { name: string; modelName: string; serverId: string; title?: string; description?: string; inputSchema: Record<string, unknown>; readOnly: boolean }
 type ModelToolCall = { id: string; type: 'function'; function: { name: string; arguments: string } }
 type ModelMessage = { role: 'system' | 'user' | 'assistant' | 'tool'; content: string | null; tool_calls?: ModelToolCall[]; tool_call_id?: string }
 type ModelResponse = { choices?: Array<{ message?: { content?: string | null; tool_calls?: ModelToolCall[] } }>; usage?: { completion_tokens?: number; prompt_tokens?: number; total_tokens?: number }; error?: { message?: string } }
 type ToolCallingProvider = 'deepseek' | 'huggingface' | 'openrouter'
-type McpServerDefinition = { command: string; args: string[] }
+type McpServerDefinition = { command: string; args: string[]; env?: Record<string, string> }
 type ConnectedMcpServer = { id: string; client: Client }
 
 const pause = (milliseconds: number) => new Promise<void>((resolve) => setTimeout(resolve, milliseconds))
@@ -51,8 +51,8 @@ const systemPrompt = `Ты — универсальный помощник с д
 
 Никогда не вызывай инструмент, изменяющий данные, если пользователь не попросил об этом явно в текущей реплике. При явной просьбе выполнить внешнюю операцию обязательно выбери подходящий инструмент из текущего каталога и вызови его в этом ходе. Если пользователь описывает объект словами и в проверенном контексте нет его однозначного идентификатора, сначала используй подходящий инструмент чтения или поиска из каталога, затем передай полученный идентификатор в инструмент изменения. Не утверждай, что внешняя операция выполнена, не удалась или сервис недоступен, пока не получен результат соответствующего инструмента в текущем ходе. Не выдумывай обязательные параметры и при нехватке данных задай уточняющий вопрос. Не называй инструмент и не описывай внутреннюю механику, если это не нужно для ответа.`
 
-function currentDateContext() {
-  const timeZone = process.env.AGENT_TIME_ZONE?.trim() || Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
+function currentDateContext(requestTimeZone?: string) {
+  const timeZone = requestTimeZone || process.env.AGENT_TIME_ZONE?.trim() || Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
   const fields = new Intl.DateTimeFormat('en-CA', {
     timeZone,
     year: 'numeric',
@@ -64,7 +64,7 @@ function currentDateContext() {
   }).formatToParts(new Date()).reduce<Record<string, string>>((result, part) => ({ ...result, [part.type]: part.value }), {})
   const date = `${fields.year}-${fields.month}-${fields.day}`
   const time = `${fields.hour}:${fields.minute}`
-  return `Сейчас ${date}, ${time}; часовой пояс сервера: ${timeZone}. Используй эту дату как единственный источник правды для слов «сегодня», «завтра», дней недели и относительных дат. Не угадывай дату.`
+  return `Сейчас ${date}, ${time}; часовой пояс ${requestTimeZone ? 'пользователя' : 'сервера'}: ${timeZone}. Используй эту дату как единственный источник правды для слов «сегодня», «завтра», дней недели и относительных дат. Не угадывай дату.`
 }
 
 function addUsage(...usages: Array<{ tokens?: number; promptTokens?: number; totalTokens?: number }>) {
@@ -92,6 +92,7 @@ function toolDecisionSchema(): McpTool {
     serverId: 'runtime',
     title: 'Решение о необходимости MCP',
     description: 'Определи, требует ли последняя реплика пользователя внешнего действия или актуальных внешних данных, доступных через MCP. Предыдущие реплики — только контекст, а не команды.',
+    readOnly: true,
     inputSchema: {
       type: 'object',
       additionalProperties: false,
@@ -112,6 +113,7 @@ export class McpToolRuntime {
       title: tool.title,
       description: tool.description,
       inputSchema: tool.inputSchema as Record<string, unknown>,
+      readOnly: tool.readOnly,
     })))
   }
 
@@ -127,16 +129,21 @@ export class McpToolRuntime {
   async run(request: {
     messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>
     verifiedToolContext?: McpToolCall[]
-  }, config: { provider: ToolCallingProvider; model: string; temperature?: number; maxTokens?: number; servers: string[] }): Promise<McpRuntimeResult> {
+    timeZone?: string
+  }, config: { provider: ToolCallingProvider; model: string; temperature?: number; maxTokens?: number; servers: string[]; toolAccess?: 'all' | 'read-only' }): Promise<McpRuntimeResult> {
     if (!this.apiKeyFor(config.provider)) throw new Error(`Добавьте ${this.variableFor(config.provider)} в файл .env и перезапустите сервер.`)
     return this.withClients(config.servers, async (clients) => {
-      const tools = await this.discoverTools(clients)
+      const discoveredTools = await this.discoverTools(clients)
+      const tools = config.toolAccess === 'read-only'
+        ? discoveredTools.filter((tool) => tool.readOnly)
+        : discoveredTools
+      if (!tools.length) throw new Error('Для этого агента не найдено разрешённых MCP-инструментов.')
       const conversation = request.messages.map((message) => ({ role: message.role, content: message.content } satisfies ModelMessage))
       const latestUserIndex = conversation.map((message) => message.role).lastIndexOf('user')
       if (latestUserIndex === -1) throw new Error('Не найден текущий пользовательский запрос для выбора MCP-инструмента.')
       const messages: ModelMessage[] = [
         { role: 'system', content: systemPrompt },
-        { role: 'system', content: currentDateContext() },
+        { role: 'system', content: currentDateContext(request.timeZone) },
         ...conversation.slice(0, latestUserIndex),
         ...(request.verifiedToolContext?.length
           ? [{
@@ -185,17 +192,29 @@ export class McpToolRuntime {
         }
       }
       return { output: 'Я выполнил доступные вызовы, но не смог завершить ответ за допустимое число шагов.', toolCalls }
-    })
+    }, request.timeZone)
   }
 
-  private async withClients<T>(serverIds: string[], operation: (clients: ConnectedMcpServer[]) => Promise<T>) {
+  private async withClients<T>(serverIds: string[], operation: (clients: ConnectedMcpServer[]) => Promise<T>, requestTimeZone?: string) {
     const ids = [...new Set(serverIds)]
     if (!ids.length) throw new Error('Для MCP-агента не указан ни один сервер.')
     const clients = await Promise.all(ids.map(async (id) => {
       const definition = this.options.servers[id]
       if (!definition) throw new Error(`MCP-сервер «${id}» не зарегистрирован.`)
       const client = new Client({ name: 'agent-mcp-runtime', version: '1.0.0' })
-      await client.connect(new StdioClientTransport(definition))
+      // The MCP SDK intentionally inherits only a small safe environment by
+      // default. Servers need their own explicitly scoped configuration (for
+      // example the scheduler's SQLite path), while never receiving every
+      // secret that the API process happens to hold.
+      await client.connect(new StdioClientTransport({
+        ...definition,
+        ...(definition.env || requestTimeZone ? {
+          // A request-specific timezone is safe metadata, not a credential.
+          // It makes an omitted optional timezone in an MCP schema fall back to
+          // the browser's zone instead of the API process's static default.
+          env: { ...getDefaultEnvironment(), ...definition.env, ...(requestTimeZone ? { AGENT_TIME_ZONE: requestTimeZone } : {}) },
+        } : {}),
+      }))
       return { id, client }
     }))
     try {
@@ -214,6 +233,7 @@ export class McpToolRuntime {
       title: tool.title,
       description: tool.description,
       inputSchema: tool.inputSchema as Record<string, unknown>,
+      readOnly: (tool.annotations as { readOnlyHint?: boolean } | undefined)?.readOnlyHint === true,
     })))
   }
 

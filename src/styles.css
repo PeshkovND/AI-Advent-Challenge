@@ -695,6 +695,30 @@ code { padding: 2px 4px; color: #5d60e6; background: #f0f0ff; border-radius: 4px
 .calendar-chat-message p + p { margin-top: 7px; }
 .calendar-chat-composer { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 9px; align-items: end; }
 .calendar-chat-composer textarea { width: 100%; box-sizing: border-box; resize: vertical; padding: 10px; color: #555a6b; background: #fbfbfd; border: 1px solid #e2e4ec; border-radius: 8px; font: inherit; font-size: 11px; line-height: 1.45; }
+.scheduler-page { max-width: 980px; margin: 28px auto 0; display: grid; gap: 16px; }
+.scheduler-page-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; }
+.scheduler-page-header h1 { margin: 5px 0 4px; color: #252837; font-size: 28px; letter-spacing: -.045em; }
+.scheduler-page-header p { margin: 0; color: #858a9c; font-size: 13px; }
+.scheduler-heartbeat { flex: 0 0 auto; padding: 9px 11px; border: 1px solid #e7e9f0; border-radius: 9px; color: #858a9c; background: #fff; font-size: 11px; font-weight: 700; }
+.scheduler-heartbeat.online { color: #28785c; }
+.scheduler-heartbeat.online::before { content: '●'; margin-right: 6px; color: #41c589; }
+.scheduler-chat, .scheduler-dashboard { display: grid; gap: 12px; padding: 18px; border: 1px solid #e7e9f0; border-radius: 14px; background: #fff; box-shadow: 0 5px 17px #27304b05; }
+.scheduler-chat-messages { display: grid; justify-items: start; align-content: start; gap: 9px; }
+.scheduler-dashboard > header, .scheduler-job > header, .scheduler-job > footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.scheduler-dashboard h2, .scheduler-job h3 { margin: 0; color: #303344; }
+.scheduler-dashboard h2 { font-size: 17px; }
+.scheduler-jobs { display: grid; gap: 10px; }
+.scheduler-job { display: grid; gap: 10px; padding: 14px; border: 1px solid #e7e9f0; border-radius: 10px; background: #fcfcfe; }
+.scheduler-job h3 { font-size: 14px; }
+.scheduler-job header p, .scheduler-instruction, .scheduler-run p { margin: 3px 0 0; color: #777d8f; font-size: 11px; line-height: 1.45; }
+.scheduler-instruction { white-space: pre-wrap; }
+.scheduler-status { padding: 4px 7px; border-radius: 999px; background: #eef0f6; color: #697084; font-size: 9px; font-weight: 800; text-transform: uppercase; }
+.scheduler-status.success { color: #28785c; background: #e6f8ef; }.scheduler-status.error { color: #ad5261; background: #fff0f2; }.scheduler-status.running { color: #6366d9; background: #efefff; }.scheduler-status.skipped { color: #917633; background: #fff8df; }
+.scheduler-summary { padding: 10px; border-left: 3px solid #8a86f5; border-radius: 5px; background: #f6f5ff; color: #555a6b; font-size: 11px; line-height: 1.45; }
+.scheduler-summary small { display: block; margin-bottom: 4px; color: #7773d1; font-size: 9px; font-weight: 800; text-transform: uppercase; }
+.scheduler-summary p { margin: 0; }.scheduler-summary p + p { margin-top: 6px; }
+.scheduler-run-error { margin: 0; color: #b35764; font-size: 11px; }.scheduler-log { color: #6e7486; font-size: 11px; }.scheduler-log summary { cursor: pointer; font-weight: 700; }.scheduler-run { display: grid; gap: 3px; padding: 8px 0; border-bottom: 1px solid #eef0f4; }.scheduler-run:last-child { border-bottom: 0; }.scheduler-run strong { color: #45495b; text-transform: uppercase; font-size: 9px; }.scheduler-run span, .scheduler-run small { color: #9095a5; font-size: 10px; }.scheduler-run small { display: block; }.scheduler-empty { margin: 0; color: #858a9c; font-size: 12px; }
+.secondary-button, .danger-button { padding: 7px 10px; border: 1px solid #dfe2ea; border-radius: 7px; background: #fff; color: #555a6b; font: inherit; font-size: 11px; font-weight: 700; cursor: pointer; }.danger-button { color: #b35764; border-color: #f0d8dd; }.secondary-button:disabled, .danger-button:disabled { opacity: .55; cursor: wait; }
 .agent-list-section { margin-top: 27px; }
 .agent-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 17px; }
 .agent-list-item { display: flex; align-items: center; min-width: 0; padding: 0; color: #626777; background: #fff; border: 1px solid #e9ebf2; border-radius: 11px; text-align: left; transition: .2s; }

@@ -1,9 +1,15 @@
 import 'dotenv/config'
 import './network-config'
 import express, { Response } from 'express'
+import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { AgentError, AgentService, createAgentRouter } from './agent-service'
+import { ensureCalendarAgent } from './calendar-agent'
 import { McpToolRuntime } from './mcp-tool-runtime'
+import { createScheduledTaskExecutor, ensureScheduledAgent } from './scheduled-agent-executor'
+import { SchedulerStore } from './scheduler-store'
+import { getDefaultSchedulerTimeZone } from './scheduler-timezone'
+import { SchedulerWorker } from './scheduler-worker'
 import { isContextDemoScenario, prepareContextDemo, resetContextDemo } from './context-demo'
 import { CONTEXT_COMPARISON_SUMMARIZE_AFTER_MESSAGES, contextComparisonDefaultInput, contextComparisonHistory } from './context-comparison'
 import { ContextStrategiesService } from './context-strategies'
@@ -113,13 +119,27 @@ const huggingFaceApiKey = process.env.HUGGINGFACE_API_KEY?.trim()
 const openRouterApiKey = process.env.OPENROUTER_API_KEY?.trim()
 const model = process.env.DEEPSEEK_MODEL?.trim() || 'deepseek-v4-flash'
 const calendarMcpServerPath = fileURLToPath(new URL('./yandex-calendar-mcp-server.ts', import.meta.url))
+const schedulerMcpServerPath = fileURLToPath(new URL('./scheduler-mcp-server.ts', import.meta.url))
+const mcpEnvironment = (keys: string[]) => Object.fromEntries(keys.flatMap((key) => {
+  const value = process.env[key]
+  return value === undefined ? [] : [[key, value]]
+}))
 const mcpRuntime = new McpToolRuntime({
   deepSeekApiKey: apiKey,
   huggingFaceApiKey,
   openRouterApiKey,
   model,
   servers: {
-    'yandex-calendar': { command: process.execPath, args: ['--import', 'tsx', calendarMcpServerPath] },
+    'yandex-calendar': {
+      command: process.execPath,
+      args: ['--import', 'tsx', calendarMcpServerPath],
+      env: mcpEnvironment(['YANDEX_CALDAV_EMAIL', 'YANDEX_CALDAV_APP_PASSWORD', 'YANDEX_CALDAV_OAUTH_TOKEN', 'YANDEX_CALDAV_URL', 'AGENT_TIME_ZONE']),
+    },
+    scheduler: {
+      command: process.execPath,
+      args: ['--import', 'tsx', schedulerMcpServerPath],
+      env: mcpEnvironment(['SCHEDULER_DB_PATH', 'AGENT_TIME_ZONE']),
+    },
   },
 })
 const agentService = new AgentService({
@@ -131,6 +151,8 @@ const agentService = new AgentService({
 })
 const contextStrategiesService = new ContextStrategiesService(agentService, model)
 agentService.setContextStrategiesService(contextStrategiesService)
+const schedulerStore = new SchedulerStore()
+const schedulerWorker = new SchedulerWorker(schedulerStore, createScheduledTaskExecutor(agentService))
 
 const CONTEXT_DEMO_AGENT_ID = 'context-demo'
 const CONTEXT_DEMO_MODEL = 'liquid/lfm-2.5-2.6b:free'
@@ -212,6 +234,34 @@ const modelDefinitions: ModelDefinition[] = [
 
 app.use(express.json({ limit: '1mb' }))
 app.use('/api/agents', createAgentRouter(agentService))
+
+app.get('/api/scheduler/jobs', (_request, response) => {
+  const jobs = schedulerStore.listJobs().map((job) => {
+    const runs = schedulerStore.getRuns(job.id, 10)
+    return { ...job, latestRun: runs[0], runs: runs.map((run) => ({ ...run, events: schedulerStore.getEvents(run.id) })) }
+  })
+  response.json({ jobs, worker: schedulerStore.workerState(), defaultTimeZone: getDefaultSchedulerTimeZone() })
+})
+
+app.post('/api/scheduler/jobs/:jobId/run', (request, response) => {
+  try {
+    response.status(202).json({ run: schedulerStore.enqueueManualRun(request.params.jobId) })
+  } catch (error) {
+    sendSchedulerError(response, error)
+  }
+})
+
+app.delete('/api/scheduler/jobs/:jobId', (request, response) => {
+  try {
+    if (!schedulerStore.deleteJob(request.params.jobId)) {
+      response.status(404).json({ error: 'Задание не найдено.' })
+      return
+    }
+    response.status(204).send()
+  } catch (error) {
+    sendSchedulerError(response, error)
+  }
+})
 
 app.get('/api/context-comparison', (_request, response) => {
   response.json({
@@ -358,7 +408,7 @@ app.post('/api/context-demo/:scenario', async (request, response) => {
 })
 
 app.get('/api/health', (_request, response) => {
-  response.json({ ok: true, configured: Boolean(apiKey), model, agents: agentService.count })
+  response.json({ ok: true, configured: Boolean(apiKey), model, agents: agentService.count, schedulerWorker: schedulerStore.workerState() })
 })
 
 app.post('/api/compare', async (request, response) => {
@@ -740,10 +790,39 @@ function sendContextDemoError(response: Response, error: unknown) {
   })
 }
 
-app.listen(port, () => {
-  console.log(`API server is running at http://localhost:${port}`)
+function sendSchedulerError(response: Response, error: unknown) {
+  response.status(400).json({ error: error instanceof Error ? error.message : 'Не удалось выполнить операцию планировщика.' })
+}
+
+if (process.env.NODE_ENV === 'production') {
+  const staticDirectory = resolve(process.cwd(), 'dist')
+  app.use(express.static(staticDirectory))
+  app.get(/.*/, (_request, response) => response.sendFile(resolve(staticDirectory, 'index.html')))
+}
+
+await ensureScheduledAgent(agentService)
+await ensureCalendarAgent(agentService)
+
+const httpServer = app.listen(port, '127.0.0.1', () => {
+  schedulerWorker.start()
+  const address = httpServer.address()
+  console.log(`Приложение и планировщик запущены: http://127.0.0.1:${typeof address === 'object' && address ? address.port : port}`)
   console.log(`DeepSeek model: ${model}`)
 })
+
+// Stop polling first, then let the current background run persist its result.
+let shuttingDown = false
+const shutdown = async () => {
+  if (shuttingDown) return
+  shuttingDown = true
+  httpServer.closeIdleConnections()
+  httpServer.closeAllConnections()
+  await new Promise<void>((resolve) => httpServer.close(() => resolve()))
+  await schedulerWorker.stop()
+  process.exit(0)
+}
+process.once('SIGINT', () => void shutdown())
+process.once('SIGTERM', () => void shutdown())
 
 function isChatMessageArray(value: unknown): value is ChatMessage[] {
   return (

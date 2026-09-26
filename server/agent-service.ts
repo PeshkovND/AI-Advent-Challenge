@@ -69,7 +69,7 @@ export type AgentConfig = {
   taskState?: AgentTaskState
   taskMachine?: boolean
   /** MCP capabilities are selected by server-side ids; clients never provide commands or credentials. */
-  mcp?: { enabled: boolean; servers: string[] }
+  mcp?: { enabled: boolean; servers: string[]; toolAccess?: 'all' | 'read-only' }
   /**
    * Optional context policy used by the Day 10 strategy demo. The policy is
    * part of the agent configuration so the Agent, rather than the storage
@@ -333,6 +333,12 @@ type RunRequest = {
   input: string
   history: AgentMessage[]
   conversationId?: string
+  clientContext?: AgentRuntimeContext
+}
+
+/** Safe, request-scoped facts supplied by the client; never arbitrary prompt text. */
+export type AgentRuntimeContext = {
+  timeZone?: string
 }
 
 export class AgentError extends Error {
@@ -536,7 +542,7 @@ export class Agent {
     }
   }
 
-  async run(input: string, history: AgentMessage[] = [], summary?: string, contextId = this.id, signal?: AbortSignal, runtimeInstruction?: string, mcpContext: McpToolCall[] = []): Promise<AgentRunResult> {
+  async run(input: string, history: AgentMessage[] = [], summary?: string, contextId = this.id, signal?: AbortSignal, runtimeInstruction?: string, mcpContext: McpToolCall[] = [], clientContext?: AgentRuntimeContext): Promise<AgentRunResult> {
     const validatedInput = validateInput(input, this.config.inputPolicy)
     const startedAt = Date.now()
     const preflight = await this.checkInvariants('input', validatedInput)
@@ -556,7 +562,8 @@ export class Agent {
         // McpToolRuntime is an execution adapter, not a second agent.
         messages,
         verifiedToolContext: mcpContext,
-      }, { provider: this.config.provider, model: this.config.model, temperature: this.config.temperature, maxTokens: this.config.maxTokens, servers: this.config.mcp.servers })
+        timeZone: clientContext?.timeZone,
+      }, { provider: this.config.provider, model: this.config.model, temperature: this.config.temperature, maxTokens: this.config.maxTokens, servers: this.config.mcp.servers, toolAccess: this.config.mcp.toolAccess })
       : undefined
     if (this.config.mcp?.enabled && !mcpResult) throw new AgentError('MCP включён в конфигурации агента, но MCP runtime не настроен.', 503)
     let completion = mcpResult
@@ -647,9 +654,9 @@ export class Agent {
     }
   }
 
-  async stream(input: string, history: AgentMessage[], onChunk: (content: string) => void, summary?: string, contextId = this.id, mcpContext: McpToolCall[] = []): Promise<AgentRunResult> {
+  async stream(input: string, history: AgentMessage[], onChunk: (content: string) => void, summary?: string, contextId = this.id, mcpContext: McpToolCall[] = [], clientContext?: AgentRuntimeContext): Promise<AgentRunResult> {
     if (activeInvariants(this.config.invariants).length || this.config.mcp?.enabled) {
-      const result = await this.run(input, history, summary, contextId, undefined, undefined, mcpContext)
+      const result = await this.run(input, history, summary, contextId, undefined, runtimeContextInstruction(clientContext), mcpContext, clientContext)
       onChunk(result.output)
       return result
     }
@@ -949,7 +956,7 @@ export class AgentService {
     return this.get(id).config.taskState!
   }
 
-  async run(id: string, input: string, providedHistory: AgentMessage[] = [], onTaskEvent?: (event: AgentTaskRunEvent) => void, conversationId?: string) {
+  async run(id: string, input: string, providedHistory: AgentMessage[] = [], onTaskEvent?: (event: AgentTaskRunEvent) => void, conversationId?: string, clientContext?: AgentRuntimeContext) {
     await this.ready
     let agent = this.get(id)
     if (agent.config.taskMachine && !agent.config.taskState) {
@@ -1051,9 +1058,12 @@ export class AgentService {
             durationMs: 0,
             tokenMetrics: { inputTokens: 0, promptTokens: 0, completionTokens: 0, totalTokens: 0 },
           }
-      : await agent.run(input, sourceHistory, undefined, scope, undefined, inputIntent.intent === 'request_plan_revision'
-        ? 'Пользователь запросил правки к плану. Верни полный обновлённый план целиком: включи все прежние релевантные пункты и внесённые изменения. Не ограничивайся описанием правок, не начинай execution и в конце попроси утвердить обновлённый план.'
-        : undefined, mcpContext)
+      : await agent.run(input, sourceHistory, undefined, scope, undefined, [
+        runtimeContextInstruction(clientContext),
+        inputIntent.intent === 'request_plan_revision'
+          ? 'Пользователь запросил правки к плану. Верни полный обновлённый план целиком: включи все прежние релевантные пункты и внесённые изменения. Не ограничивайся описанием правок, не начинай execution и в конце попроси утвердить обновлённый план.'
+          : undefined,
+      ].filter(Boolean).join('\n\n') || undefined, mcpContext, clientContext)
     const authorization: TaskTransitionAuthorization = {
       planApproved: inputIntent.intent === 'approve_plan',
       resultApproved: inputIntent.intent === 'approve_result',
@@ -1086,7 +1096,7 @@ export class AgentService {
       const controller = new AbortController()
       this.activeTaskRuns.set(scope, controller)
       try {
-        const continuation = await continuationAgent.run(continuationInput, continuationHistory, undefined, scope, controller.signal, undefined, continuationMcpContext)
+        const continuation = await continuationAgent.run(continuationInput, continuationHistory, undefined, scope, controller.signal, runtimeContextInstruction(clientContext), continuationMcpContext, clientContext)
         const completionDecision = continuation.invariantCheck?.status === 'blocked'
           ? {
               answer: '',
@@ -1122,7 +1132,7 @@ export class AgentService {
     return { ...result, contextMessages, conversationTokens, tokenHistory, ...(taskUpdate?.state ? { taskState: taskUpdate.state } : {}), ...(taskUpdate?.notice ? { taskNotice: taskUpdate.notice } : {}) }
   }
 
-  async stream(id: string, input: string, providedHistory: AgentMessage[], onChunk: (content: string) => void, conversationId?: string) {
+  async stream(id: string, input: string, providedHistory: AgentMessage[], onChunk: (content: string) => void, conversationId?: string, clientContext?: AgentRuntimeContext) {
     await this.ready
     const agent = this.get(id)
     if (agent.config.taskState?.status === 'paused') throw new AgentError('Задача на паузе. Продолжите её перед новым сообщением.', 409)
@@ -1131,7 +1141,7 @@ export class AgentService {
     const mcpContext = await this.stateStore.getMcpContext(scope)
     const activeHistory = storedHistory.filter((message) => !message.archived)
     const sourceHistory = activeHistory.length > 0 ? activeHistory : providedHistory
-    const result = await agent.stream(input, sourceHistory, onChunk, undefined, scope, mcpContext)
+    const result = await agent.stream(input, sourceHistory, onChunk, undefined, scope, mcpContext, clientContext)
     if (result.autoMemoryUpdate) await this.persistAutoMemory(id, result.autoMemoryUpdate)
     if (result.mcpToolCalls?.length) await this.stateStore.replaceMcpContext(scope, result.mcpToolCalls)
     if (result.archiveHistory) {
@@ -1428,7 +1438,7 @@ export function createAgentRouter(service: AgentService): Router {
   router.post('/:agentId/run', async (request, response) => {
     try {
       const runRequest = parseRunRequest(request)
-      const result = await service.run(request.params.agentId, runRequest.input, runRequest.history, undefined, runRequest.conversationId)
+      const result = await service.run(request.params.agentId, runRequest.input, runRequest.history, undefined, runRequest.conversationId, runRequest.clientContext)
       response.json(result)
     } catch (error) {
       sendAgentError(response, error)
@@ -1443,7 +1453,7 @@ export function createAgentRouter(service: AgentService): Router {
     const emit = (payload: Record<string, unknown>) => response.write(`${JSON.stringify(payload)}\n`)
     try {
       const runRequest = parseRunRequest(request)
-      const result = await service.run(request.params.agentId, runRequest.input, runRequest.history, (event) => emit({ type: 'message', ...event }), runRequest.conversationId)
+      const result = await service.run(request.params.agentId, runRequest.input, runRequest.history, (event) => emit({ type: 'message', ...event }), runRequest.conversationId, runRequest.clientContext)
       emit({ type: 'done', taskState: result.taskState, taskNotice: result.taskNotice })
     } catch (error) {
       emit({ type: 'error', error: error instanceof Error ? error.message : 'Не удалось выполнить задачу.' })
@@ -1472,7 +1482,7 @@ export function createAgentRouter(service: AgentService): Router {
 
       const result = await service.stream(request.params.agentId, runRequest.input, runRequest.history, (content) => {
         response.write(`data: ${JSON.stringify({ content })}\n\n`)
-      }, runRequest.conversationId)
+      }, runRequest.conversationId, runRequest.clientContext)
       response.write(`data: ${JSON.stringify({ done: true, result })}\n\n`)
       response.write('data: [DONE]\n\n')
       response.end()
@@ -1496,7 +1506,28 @@ function parseRunRequest(request: Request): RunRequest {
   }
 
   const history = body.history === undefined ? [] : parseHistory(body.history)
-  return { input: body.input, history, conversationId: parseConversationId(body.conversationId) }
+  return { input: body.input, history, conversationId: parseConversationId(body.conversationId), clientContext: parseClientContext(body.clientContext) }
+}
+
+function parseClientContext(value: unknown): AgentRuntimeContext | undefined {
+  if (value === undefined) return undefined
+  if (!isRecord(value)) throw new AgentError('clientContext должен быть объектом.')
+  if (value.timeZone === undefined) return undefined
+  if (typeof value.timeZone !== 'string' || value.timeZone.length > 100 || !value.timeZone.trim()) {
+    throw new AgentError('clientContext.timeZone должен быть непустым IANA-часовым поясом.')
+  }
+  const timeZone = value.timeZone.trim()
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone }).format()
+  } catch {
+    throw new AgentError('clientContext.timeZone должен быть корректным IANA-часовым поясом, например Asia/Omsk.')
+  }
+  return { timeZone }
+}
+
+function runtimeContextInstruction(context?: AgentRuntimeContext) {
+  if (!context?.timeZone) return undefined
+  return `Контекст текущего запроса: браузер пользователя сообщил часовой пояс ${context.timeZone}. Используй его как пояс по умолчанию для относительных дат («сегодня», «завтра», ближайшая пятница) и для новой периодической задачи. Если пользователь в текущей реплике явно назвал другой город или часовой пояс, его указание имеет приоритет. Всегда сохраняй для новой задачи IANA-идентификатор выбранного пояса и называй его в ответе.`
 }
 
 function parseConversationId(value: unknown) {
@@ -1690,7 +1721,8 @@ function normalizeAgentConfig(value: unknown, defaultDeepSeekModel: string) {
 function normalizeMcpConfig(value: unknown): AgentConfig['mcp'] | undefined {
   if (!isRecord(value) || value.enabled !== true) return undefined
   const servers = readStringArray(value.servers, 16, 120)
-  return servers.length ? { enabled: true, servers } : undefined
+  if (!servers.length) return undefined
+  return { enabled: true, servers, ...(value.toolAccess === 'read-only' ? { toolAccess: 'read-only' as const } : {}) }
 }
 
 function normalizeInputPolicy(value: unknown) {

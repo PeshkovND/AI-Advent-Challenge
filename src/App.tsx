@@ -5,7 +5,7 @@ import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
 
 type MessageRole = 'user' | 'assistant'
-type Page = 'chat' | 'compare' | 'reasoning' | 'temperature' | 'models' | 'agents' | 'context-demo' | 'context-comparison' | 'context-strategies' | 'context-branching' | 'memory-layers' | 'personalization' | 'task-state' | 'calendar-mcp'
+type Page = 'chat' | 'compare' | 'reasoning' | 'temperature' | 'models' | 'agents' | 'context-demo' | 'context-comparison' | 'context-strategies' | 'context-branching' | 'memory-layers' | 'personalization' | 'task-state' | 'calendar-mcp' | 'scheduler'
 
 type ChatMessage = {
   id: string
@@ -13,6 +13,10 @@ type ChatMessage = {
   content: string
 }
 type McpToolTrace = { name: string; isError: boolean }
+type SchedulerEvent = { id: string; createdAt: string; stage: string; message: string }
+type SchedulerRun = { id: string; trigger: 'scheduled' | 'manual'; status: 'queued' | 'running' | 'success' | 'skipped' | 'error'; startedAt?: string; finishedAt?: string; decisionReason?: string; summary?: string; error?: string; events?: SchedulerEvent[] }
+type SchedulerJob = { id: string; name: string; cron: string; timezone: string; instructionText: string; enabled: boolean; nextRunAt: string; lastRunAt?: string; latestRun?: SchedulerRun; runs: SchedulerRun[] }
+type SchedulerState = { jobs: SchedulerJob[]; worker?: { last_heartbeat_at?: string; active_jobs_count?: number }; defaultTimeZone?: string }
 type StopSequenceField = { id: string; value: string }
 type PromptMessage = { role: 'system' | 'user'; content: string }
 
@@ -63,6 +67,17 @@ type ModelSide = {
 }
 type ModelsResult = { prompt: string; results: ModelSide[] }
 type ApiError = { error?: string }
+
+function browserTimeZoneContext() {
+  const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone
+  return timeZone ? { timeZone } : undefined
+}
+
+function submitTextareaOnEnter(event: KeyboardEvent<HTMLTextAreaElement>) {
+  if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing) return
+  event.preventDefault()
+  event.currentTarget.form?.requestSubmit()
+}
 type AgentProvider = 'deepseek' | 'huggingface' | 'openrouter'
 type AgentConfig = {
   name?: string
@@ -79,7 +94,7 @@ type AgentConfig = {
   invariants?: { enabled?: boolean; items?: AgentInvariant[] }
   taskState?: AgentTaskState
   taskMachine?: boolean
-  mcp?: { enabled: boolean; servers: string[] }
+  mcp?: { enabled: boolean; servers: string[]; toolAccess?: 'all' | 'read-only' }
 }
 type AgentInvariant = { id: string; title: string; rule: string }
 type InvariantField = AgentInvariant
@@ -146,11 +161,11 @@ type AgentStrategyRunResult = { output: string; tokenMetrics: AgentTokenMetrics;
 type AgentStrategyHistory = { messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>; tokenHistory?: AgentTokenUsagePoint[] }
 const calendarDemoAgentId = 'day17-mcp-agent'
 const calendarDemoAgentConfig: AgentConfig = {
-  name: 'Day 17 · MCP Calendar',
+  name: 'Универсальный агент календаря и расписаний',
   provider: 'deepseek',
   model: 'deepseek-v4-flash',
-  systemPrompt: 'Ты полезный универсальный помощник. Отвечай по-русски, а при необходимости самостоятельно используй доступные MCP-инструменты.',
-  mcp: { enabled: true, servers: ['yandex-calendar'] },
+  systemPrompt: 'Ты полезный универсальный помощник календаря и расписаний. Отвечай по-русски, а при необходимости самостоятельно используй доступные MCP-инструменты.',
+  mcp: { enabled: true, servers: ['yandex-calendar', 'scheduler'] },
 }
 
 const agentModelOptions: Record<AgentProvider, AgentModelOption[]> = {
@@ -302,6 +317,9 @@ function App() {
           <button className={`page-nav-button ${activePage === 'calendar-mcp' ? 'active' : ''}`} onClick={() => setActivePage('calendar-mcp')}>
             <span>▣</span> Календарь
           </button>
+          <button className={`page-nav-button ${activePage === 'scheduler' ? 'active' : ''}`} onClick={() => setActivePage('scheduler')}>
+            <span>⑱</span> Сводки
+          </button>
         </nav>
 
         <div className="sidebar-bottom">
@@ -311,7 +329,7 @@ function App() {
       </aside>
 
       <main className="day-main">
-        {activePage === 'chat' ? <ChatPage /> : activePage === 'compare' ? <ComparePage /> : activePage === 'reasoning' ? <ReasoningPage /> : activePage === 'temperature' ? <TemperaturePage /> : activePage === 'models' ? <ModelsPage /> : activePage === 'agents' ? <AgentsPage /> : activePage === 'context-demo' ? <ContextDemoPage /> : activePage === 'context-comparison' ? <ContextCompressionComparisonPage /> : activePage === 'context-strategies' ? <ContextStrategiesPage /> : activePage === 'context-branching' ? <ContextBranchingPage /> : activePage === 'memory-layers' ? <MemoryLayersPage /> : activePage === 'personalization' ? <PersonalizationPage /> : activePage === 'task-state' ? <TaskStatePage /> : <CalendarMcpPage />}
+        {activePage === 'chat' ? <ChatPage /> : activePage === 'compare' ? <ComparePage /> : activePage === 'reasoning' ? <ReasoningPage /> : activePage === 'temperature' ? <TemperaturePage /> : activePage === 'models' ? <ModelsPage /> : activePage === 'agents' ? <AgentsPage /> : activePage === 'context-demo' ? <ContextDemoPage /> : activePage === 'context-comparison' ? <ContextCompressionComparisonPage /> : activePage === 'context-strategies' ? <ContextStrategiesPage /> : activePage === 'context-branching' ? <ContextBranchingPage /> : activePage === 'memory-layers' ? <MemoryLayersPage /> : activePage === 'personalization' ? <PersonalizationPage /> : activePage === 'task-state' ? <TaskStatePage /> : activePage === 'calendar-mcp' ? <CalendarMcpPage /> : <SchedulerPage />}
       </main>
     </div>
   )
@@ -334,7 +352,7 @@ function CalendarAgentChat() {
     setError(null)
     setIsLoading(true)
     try {
-      const response = await fetch(`/api/agents/${calendarDemoAgentId}/run`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ input: content, conversationId: conversationId.current }) })
+      const response = await fetch(`/api/agents/${calendarDemoAgentId}/run`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ input: content, conversationId: conversationId.current, clientContext: browserTimeZoneContext() }) })
       const data = await response.json() as { output?: string; mcpToolCalls?: McpToolTrace[] } & ApiError
       const output = data.output
       if (!response.ok || !output) throw new Error(data.error || 'Агент не смог подготовить ответ.')
@@ -351,7 +369,7 @@ function CalendarAgentChat() {
     <header className="calendar-chat-header"><h1>Календарь</h1><p>Спросите о событиях или попросите создать, изменить либо удалить их.</p></header>
     <div className="calendar-chat-messages">{messages.map((message) => <div key={message.id} className={`calendar-chat-message ${message.role}`}><small>{message.role === 'user' ? 'Вы' : 'Агент календаря'}</small><MarkdownContent content={message.content} /></div>)}{isLoading && <div className="calendar-chat-message assistant"><small>Агент календаря</small>Думаю</div>}</div>
     {error && <div className="error-message" role="alert">{error}</div>}
-    <form className="calendar-chat-composer" onSubmit={sendMessage}><textarea value={input} onChange={(event) => setInput(event.target.value)} placeholder="Например: Добавь встречу завтра в 15:00" rows={2} /><button className="compare-button" type="submit" disabled={isLoading || !input.trim()}>Отправить <span>→</span></button></form>
+    <form className="calendar-chat-composer" onSubmit={sendMessage}><textarea value={input} onChange={(event) => setInput(event.target.value)} onKeyDown={submitTextareaOnEnter} placeholder="Например: Добавь встречу завтра в 15:00" rows={2} /><button className="compare-button" type="submit" disabled={isLoading || !input.trim()}>Отправить <span>→</span></button></form>
   </section>
 }
 
@@ -377,6 +395,121 @@ function CalendarMcpPage() {
   return <div className="page-view calendar-mcp-page">
     {error && <div className="error-message" role="alert">{error}</div>}
     <CalendarAgentChat />
+  </div>
+}
+
+function formatScheduleTime(value?: string, timeZone?: string) {
+  if (!value) return '—'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  try {
+    return new Intl.DateTimeFormat('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone, timeZoneName: 'short' }).format(date)
+  } catch { return value }
+}
+
+function SchedulerAssistantChat({ onTasksChanged }: { onTasksChanged: () => void }) {
+  const [messages, setMessages] = useState<ChatMessage[]>([{ id: 'scheduler-welcome', role: 'assistant', content: 'Я работаю и с календарём, и с расписаниями. Могу создать событие, показать планы или настроить регулярную сводку.' }])
+  const conversationId = useRef(crypto.randomUUID())
+  const [input, setInput] = useState('')
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function sendMessage(event: FormEvent) {
+    event.preventDefault()
+    const content = input.trim()
+    if (!content || isLoading) return
+    setMessages((current) => [...current, { id: crypto.randomUUID(), role: 'user', content }])
+    setInput('')
+    setError(null)
+    setIsLoading(true)
+    try {
+      const response = await fetch(`/api/agents/${calendarDemoAgentId}/run`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ input: content, conversationId: conversationId.current, clientContext: browserTimeZoneContext() }) })
+      const data = await response.json() as { output?: string; mcpToolCalls?: McpToolTrace[] } & ApiError
+      if (!response.ok || !data.output) throw new Error(data.error || 'Агент не смог подготовить ответ.')
+      const trace = data.mcpToolCalls?.length ? `\n\n*MCP: ${data.mcpToolCalls.map((tool) => `\`${tool.name}\` ${tool.isError ? '✗' : '✓'}`).join(' · ')}*` : ''
+      setMessages((current) => [...current, { id: crypto.randomUUID(), role: 'assistant', content: `${data.output}${trace}` }])
+      onTasksChanged()
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : 'Не удалось отправить сообщение.')
+    } finally { setIsLoading(false) }
+  }
+
+  return <section className="scheduler-chat">
+    <div className="scheduler-chat-messages">{messages.map((message) => <div key={message.id} className={`calendar-chat-message ${message.role}`}><small>{message.role === 'user' ? 'Вы' : 'Агент календаря и расписаний'}</small><MarkdownContent content={message.content} /></div>)}{isLoading && <div className="calendar-chat-message assistant"><small>Агент календаря и расписаний</small>Думаю</div>}</div>
+    {error && <div className="error-message" role="alert">{error}</div>}
+    <form className="calendar-chat-composer" onSubmit={sendMessage}><textarea value={input} onChange={(event) => setInput(event.target.value)} onKeyDown={submitTextareaOnEnter} placeholder="Например: Создай встречу завтра в 15:00 или ежедневную сводку в 9:00" rows={2} /><button className="compare-button" type="submit" disabled={isLoading || !input.trim()}>Отправить <span>→</span></button></form>
+  </section>
+}
+
+function SchedulerPage() {
+  const [state, setState] = useState<SchedulerState>({ jobs: [] })
+  const [error, setError] = useState<string | null>(null)
+  const [busyJobId, setBusyJobId] = useState<string | null>(null)
+
+  const load = async () => {
+    try {
+      const response = await fetch('/api/scheduler/jobs')
+      const data = await response.json() as SchedulerState & ApiError
+      if (!response.ok) throw new Error(data.error || 'Не удалось получить задачи.')
+      setState(data)
+      setError(null)
+    } catch (loadError) { setError(loadError instanceof Error ? loadError.message : 'Не удалось получить задачи.') }
+  }
+
+  useEffect(() => {
+    void load()
+    const timer = window.setInterval(() => void load(), 5_000)
+    return () => window.clearInterval(timer)
+  }, [])
+
+  async function runNow(jobId: string) {
+    setBusyJobId(jobId)
+    try {
+      const response = await fetch(`/api/scheduler/jobs/${jobId}/run`, { method: 'POST' })
+      const data = await response.json().catch(() => ({})) as ApiError
+      if (!response.ok) throw new Error(data.error || 'Не удалось поставить запуск в очередь.')
+      await load()
+    } catch (runError) { setError(runError instanceof Error ? runError.message : 'Не удалось поставить запуск в очередь.') } finally { setBusyJobId(null) }
+  }
+
+  async function remove(job: SchedulerJob) {
+    if (!window.confirm(`Удалить задачу «${job.name}» и её журнал запусков?`)) return
+    setBusyJobId(job.id)
+    try {
+      const response = await fetch(`/api/scheduler/jobs/${job.id}`, { method: 'DELETE' })
+      if (!response.ok) {
+        const data = await response.json() as ApiError
+        throw new Error(data.error || 'Не удалось удалить задачу.')
+      }
+      await load()
+    } catch (removeError) { setError(removeError instanceof Error ? removeError.message : 'Не удалось удалить задачу.') } finally { setBusyJobId(null) }
+  }
+
+  const lastHeartbeat = state.worker?.last_heartbeat_at
+  const workerOnline = !error && Boolean(lastHeartbeat && Date.now() - Date.parse(lastHeartbeat) < 90_000)
+
+  return <div className="page-view scheduler-page">
+    <header className="scheduler-page-header">
+      <div><span className="eyebrow">ДЕНЬ 18 · ПЛАНИРОВЩИК</span><h1>Календарь и сводки</h1><p>Создавайте события и регулярные сводки в одном чате. Новые задачи используют часовой пояс браузера; пояс из сообщения имеет приоритет.</p></div>
+      <div className={`scheduler-heartbeat ${workerOnline ? 'online' : ''}`}>{workerOnline ? 'Планировщик работает' : 'Нет связи с планировщиком'}</div>
+    </header>
+    <SchedulerAssistantChat onTasksChanged={() => void load()} />
+    {error && <div className="error-message" role="alert">{error}</div>}
+    <section className="scheduler-dashboard">
+      <header><h2>Задачи</h2><button className="secondary-button" type="button" onClick={() => void load()}>Обновить</button></header>
+      {state.jobs.length === 0 ? <p className="scheduler-empty">Задач пока нет. Создайте первую в чате выше.</p> : <div className="scheduler-jobs">
+        {state.jobs.map((job) => <article className="scheduler-job" key={job.id}>
+          <header><div><h3>{job.name}</h3><p>Следующий запуск: {formatScheduleTime(job.nextRunAt, job.timezone)} · {job.timezone}</p></div><span className={`scheduler-status ${job.latestRun?.status ?? 'queued'}`}>{job.latestRun ? job.latestRun.status : 'ожидает'}</span></header>
+          <p className="scheduler-instruction">{job.instructionText}</p>
+          {job.latestRun?.summary && <div className="scheduler-summary"><small>Последняя сводка</small><MarkdownContent content={job.latestRun.summary} /></div>}
+          {job.latestRun?.error && <p className="scheduler-run-error">{job.latestRun.error}</p>}
+          <footer><button className="secondary-button" type="button" disabled={busyJobId === job.id} onClick={() => void runNow(job.id)}>Запустить сейчас</button><button className="danger-button" type="button" disabled={busyJobId === job.id} onClick={() => void remove(job)}>Удалить</button></footer>
+          {job.runs.length > 0 && <details className="scheduler-log"><summary>Журнал запусков ({job.runs.length})</summary>
+            {job.runs.map((run) => <div key={run.id} className="scheduler-run"><strong>{run.status}</strong><span>{formatScheduleTime(run.finishedAt ?? run.startedAt, job.timezone)} · {run.trigger === 'manual' ? 'вручную' : 'по расписанию'}</span>{run.decisionReason && <p>{run.decisionReason}</p>}{run.events?.map((event) => <small key={event.id}>{formatScheduleTime(event.createdAt, job.timezone)} · {event.message}</small>)}</div>)}
+          </details>}
+        </article>)}
+      </div>}
+    </section>
   </div>
 }
 
