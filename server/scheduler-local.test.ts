@@ -130,8 +130,11 @@ test('локальное приложение запускает планиро�
     const health = await (await fetch(`${app.url}/api/health`)).json()
     assert.ok(health.schedulerWorker.last_heartbeat_at)
     const assistant = await (await fetch(`${app.url}/api/agents/day17-mcp-agent`)).json()
-    assert.deepEqual(assistant.config.mcp.servers, ['yandex-calendar', 'scheduler'])
+    assert.deepEqual(assistant.config.mcp.servers, ['yandex-calendar', 'scheduler', 'telegram'])
     assert.match(assistant.config.systemPrompt, /серверный пояс по умолчанию: Asia\/Omsk/)
+    const scheduledAssistant = await (await fetch(`${app.url}/api/agents/day18-scheduler-agent`)).json()
+    assert.deepEqual(scheduledAssistant.config.mcp.servers, ['yandex-calendar', 'telegram'])
+    assert.deepEqual(scheduledAssistant.config.mcp.serverToolAccess, { 'yandex-calendar': 'read-only' })
     const state = await (await fetch(`${app.url}/api/scheduler/jobs`)).json()
     assert.equal(state.jobs[0].id, job.id)
     // Missing agent fails locally, proving that the worker executed the queue

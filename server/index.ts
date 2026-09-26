@@ -120,6 +120,7 @@ const openRouterApiKey = process.env.OPENROUTER_API_KEY?.trim()
 const model = process.env.DEEPSEEK_MODEL?.trim() || 'deepseek-v4-flash'
 const calendarMcpServerPath = fileURLToPath(new URL('./yandex-calendar-mcp-server.ts', import.meta.url))
 const schedulerMcpServerPath = fileURLToPath(new URL('./scheduler-mcp-server.ts', import.meta.url))
+const telegramMcpServerPath = fileURLToPath(new URL('./telegram-mcp-server.ts', import.meta.url))
 const mcpEnvironment = (keys: string[]) => Object.fromEntries(keys.flatMap((key) => {
   const value = process.env[key]
   return value === undefined ? [] : [[key, value]]
@@ -139,6 +140,11 @@ const mcpRuntime = new McpToolRuntime({
       command: process.execPath,
       args: ['--import', 'tsx', schedulerMcpServerPath],
       env: mcpEnvironment(['SCHEDULER_DB_PATH', 'AGENT_TIME_ZONE']),
+    },
+    telegram: {
+      command: process.execPath,
+      args: ['--import', 'tsx', telegramMcpServerPath],
+      env: mcpEnvironment(['TELEGRAM_BOT_TOKEN', 'TELEGRAM_CHAT_ID']),
     },
   },
 })

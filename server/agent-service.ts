@@ -69,7 +69,7 @@ export type AgentConfig = {
   taskState?: AgentTaskState
   taskMachine?: boolean
   /** MCP capabilities are selected by server-side ids; clients never provide commands or credentials. */
-  mcp?: { enabled: boolean; servers: string[]; toolAccess?: 'all' | 'read-only' }
+  mcp?: { enabled: boolean; servers: string[]; toolAccess?: 'all' | 'read-only'; serverToolAccess?: Record<string, 'all' | 'read-only'> }
   /**
    * Optional context policy used by the Day 10 strategy demo. The policy is
    * part of the agent configuration so the Agent, rather than the storage
@@ -563,7 +563,7 @@ export class Agent {
         messages,
         verifiedToolContext: mcpContext,
         timeZone: clientContext?.timeZone,
-      }, { provider: this.config.provider, model: this.config.model, temperature: this.config.temperature, maxTokens: this.config.maxTokens, servers: this.config.mcp.servers, toolAccess: this.config.mcp.toolAccess })
+      }, { provider: this.config.provider, model: this.config.model, temperature: this.config.temperature, maxTokens: this.config.maxTokens, servers: this.config.mcp.servers, toolAccess: this.config.mcp.toolAccess, serverToolAccess: this.config.mcp.serverToolAccess })
       : undefined
     if (this.config.mcp?.enabled && !mcpResult) throw new AgentError('MCP включён в конфигурации агента, но MCP runtime не настроен.', 503)
     let completion = mcpResult
@@ -1722,7 +1722,17 @@ function normalizeMcpConfig(value: unknown): AgentConfig['mcp'] | undefined {
   if (!isRecord(value) || value.enabled !== true) return undefined
   const servers = readStringArray(value.servers, 16, 120)
   if (!servers.length) return undefined
-  return { enabled: true, servers, ...(value.toolAccess === 'read-only' ? { toolAccess: 'read-only' as const } : {}) }
+  const serverToolAccess = isRecord(value.serverToolAccess)
+    ? Object.fromEntries(Object.entries(value.serverToolAccess).flatMap(([serverId, access]) => (
+      servers.includes(serverId) && (access === 'all' || access === 'read-only') ? [[serverId, access]] : []
+    ))) as Record<string, 'all' | 'read-only'>
+    : undefined
+  return {
+    enabled: true,
+    servers,
+    ...(value.toolAccess === 'read-only' ? { toolAccess: 'read-only' as const } : {}),
+    ...(serverToolAccess && Object.keys(serverToolAccess).length ? { serverToolAccess } : {}),
+  }
 }
 
 function normalizeInputPolicy(value: unknown) {

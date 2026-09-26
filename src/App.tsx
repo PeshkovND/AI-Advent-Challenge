@@ -12,7 +12,7 @@ type ChatMessage = {
   role: MessageRole
   content: string
 }
-type McpToolTrace = { name: string; isError: boolean }
+type McpToolTrace = { name: string; serverId: string; isError: boolean }
 type SchedulerEvent = { id: string; createdAt: string; stage: string; message: string }
 type SchedulerRun = { id: string; trigger: 'scheduled' | 'manual'; status: 'queued' | 'running' | 'success' | 'skipped' | 'error'; startedAt?: string; finishedAt?: string; decisionReason?: string; summary?: string; error?: string; events?: SchedulerEvent[] }
 type SchedulerJob = { id: string; name: string; cron: string; timezone: string; instructionText: string; enabled: boolean; nextRunAt: string; lastRunAt?: string; latestRun?: SchedulerRun; runs: SchedulerRun[] }
@@ -94,7 +94,7 @@ type AgentConfig = {
   invariants?: { enabled?: boolean; items?: AgentInvariant[] }
   taskState?: AgentTaskState
   taskMachine?: boolean
-  mcp?: { enabled: boolean; servers: string[]; toolAccess?: 'all' | 'read-only' }
+  mcp?: { enabled: boolean; servers: string[]; toolAccess?: 'all' | 'read-only'; serverToolAccess?: Record<string, 'all' | 'read-only'> }
 }
 type AgentInvariant = { id: string; title: string; rule: string }
 type InvariantField = AgentInvariant
@@ -161,11 +161,11 @@ type AgentStrategyRunResult = { output: string; tokenMetrics: AgentTokenMetrics;
 type AgentStrategyHistory = { messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>; tokenHistory?: AgentTokenUsagePoint[] }
 const calendarDemoAgentId = 'day17-mcp-agent'
 const calendarDemoAgentConfig: AgentConfig = {
-  name: 'Универсальный агент календаря и расписаний',
+  name: 'Универсальный агент календаря, расписаний и Telegram',
   provider: 'deepseek',
   model: 'deepseek-v4-flash',
-  systemPrompt: 'Ты полезный универсальный помощник календаря и расписаний. Отвечай по-русски, а при необходимости самостоятельно используй доступные MCP-инструменты.',
-  mcp: { enabled: true, servers: ['yandex-calendar', 'scheduler'] },
+  systemPrompt: 'Ты полезный универсальный помощник календаря, расписаний и Telegram. Отвечай по-русски, а при необходимости самостоятельно используй доступные MCP-инструменты.',
+  mcp: { enabled: true, servers: ['yandex-calendar', 'scheduler', 'telegram'] },
 }
 
 const agentModelOptions: Record<AgentProvider, AgentModelOption[]> = {
@@ -357,7 +357,7 @@ function CalendarAgentChat() {
       const output = data.output
       if (!response.ok || !output) throw new Error(data.error || 'Агент не смог подготовить ответ.')
       const trace = data.mcpToolCalls?.length
-        ? `\n\n---\n*MCP-цепочка: ${data.mcpToolCalls.map((tool, index) => `${index + 1}. \`${tool.name}\` ${tool.isError ? '✗' : '✓'}`).join(' → ')}*`
+        ? `\n\n---\n*MCP-цепочка: ${data.mcpToolCalls.map((tool, index) => `${index + 1}. \`${tool.serverId}.${tool.name}\` ${tool.isError ? '✗' : '✓'}`).join(' → ')}*`
         : ''
       setMessages((current) => [...current, { id: crypto.randomUUID(), role: 'assistant', content: `${output}${trace}` }])
     } catch (requestError) {
@@ -366,7 +366,7 @@ function CalendarAgentChat() {
   }
 
   return <section className="calendar-chat-panel">
-    <header className="calendar-chat-header"><h1>Календарь</h1><p>Спросите о событиях или попросите создать, изменить либо удалить их.</p></header>
+    <header className="calendar-chat-header"><h1>Календарь и Telegram</h1><p>Спросите о событиях, попросите изменить их или прислать сводку в Telegram.</p></header>
     <div className="calendar-chat-messages">{messages.map((message) => <div key={message.id} className={`calendar-chat-message ${message.role}`}><small>{message.role === 'user' ? 'Вы' : 'Агент календаря'}</small><MarkdownContent content={message.content} /></div>)}{isLoading && <div className="calendar-chat-message assistant"><small>Агент календаря</small>Думаю</div>}</div>
     {error && <div className="error-message" role="alert">{error}</div>}
     <form className="calendar-chat-composer" onSubmit={sendMessage}><textarea value={input} onChange={(event) => setInput(event.target.value)} onKeyDown={submitTextareaOnEnter} placeholder="Например: Найди свободный час на следующей неделе и создай встречу" rows={2} /><button className="compare-button" type="submit" disabled={isLoading || !input.trim()}>Отправить <span>→</span></button></form>
@@ -408,7 +408,7 @@ function formatScheduleTime(value?: string, timeZone?: string) {
 }
 
 function SchedulerAssistantChat({ onTasksChanged }: { onTasksChanged: () => void }) {
-  const [messages, setMessages] = useState<ChatMessage[]>([{ id: 'scheduler-welcome', role: 'assistant', content: 'Я работаю и с календарём, и с расписаниями. Могу создать событие, показать планы или настроить регулярную сводку.' }])
+  const [messages, setMessages] = useState<ChatMessage[]>([{ id: 'scheduler-welcome', role: 'assistant', content: 'Я работаю с календарём, расписаниями и Telegram. Могу создать событие, прислать сводку или настроить её регулярную отправку.' }])
   const conversationId = useRef(crypto.randomUUID())
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
@@ -426,7 +426,7 @@ function SchedulerAssistantChat({ onTasksChanged }: { onTasksChanged: () => void
       const response = await fetch(`/api/agents/${calendarDemoAgentId}/run`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ input: content, conversationId: conversationId.current, clientContext: browserTimeZoneContext() }) })
       const data = await response.json() as { output?: string; mcpToolCalls?: McpToolTrace[] } & ApiError
       if (!response.ok || !data.output) throw new Error(data.error || 'Агент не смог подготовить ответ.')
-      const trace = data.mcpToolCalls?.length ? `\n\n*MCP-цепочка: ${data.mcpToolCalls.map((tool, index) => `${index + 1}. \`${tool.name}\` ${tool.isError ? '✗' : '✓'}`).join(' → ')}*` : ''
+      const trace = data.mcpToolCalls?.length ? `\n\n*MCP-цепочка: ${data.mcpToolCalls.map((tool, index) => `${index + 1}. \`${tool.serverId}.${tool.name}\` ${tool.isError ? '✗' : '✓'}`).join(' → ')}*` : ''
       setMessages((current) => [...current, { id: crypto.randomUUID(), role: 'assistant', content: `${data.output}${trace}` }])
       onTasksChanged()
     } catch (requestError) {

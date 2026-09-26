@@ -130,13 +130,13 @@ export class McpToolRuntime {
     messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>
     verifiedToolContext?: McpToolCall[]
     timeZone?: string
-  }, config: { provider: ToolCallingProvider; model: string; temperature?: number; maxTokens?: number; servers: string[]; toolAccess?: 'all' | 'read-only' }): Promise<McpRuntimeResult> {
+  }, config: { provider: ToolCallingProvider; model: string; temperature?: number; maxTokens?: number; servers: string[]; toolAccess?: 'all' | 'read-only'; serverToolAccess?: Record<string, 'all' | 'read-only'> }): Promise<McpRuntimeResult> {
     if (!this.apiKeyFor(config.provider)) throw new Error(`Добавьте ${this.variableFor(config.provider)} в файл .env и перезапустите сервер.`)
     return this.withClients(config.servers, async (clients) => {
       const discoveredTools = await this.discoverTools(clients)
       const tools = config.toolAccess === 'read-only'
         ? discoveredTools.filter((tool) => tool.readOnly)
-        : discoveredTools
+        : discoveredTools.filter((tool) => config.serverToolAccess?.[tool.serverId] !== 'read-only' || tool.readOnly)
       if (!tools.length) throw new Error('Для этого агента не найдено разрешённых MCP-инструментов.')
       const conversation = request.messages.map((message) => ({ role: message.role, content: message.content } satisfies ModelMessage))
       const latestUserIndex = conversation.map((message) => message.role).lastIndexOf('user')

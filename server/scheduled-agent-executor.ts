@@ -11,13 +11,13 @@ const scheduledDecision = z.object({
 })
 
 const scheduledAgentConfig = {
-  name: 'Фоновый агент календарных сводок',
+  name: 'Фоновый агент календарных сводок и Telegram',
   provider: 'deepseek' as const,
-  systemPrompt: `Ты выполняешь фоновые задачи календарных сводок. Работай только с текущей инструкцией worker. Ты можешь читать календарь, но никогда не создавай, не изменяй и не удаляй события. Сначала оцени естественно-языковые условия пользователя. Если запуск сегодня не нужен, верни статус skipped. Если нужен — получи необходимые календарные данные и сформируй сводку.
+  systemPrompt: `Ты выполняешь фоновые задачи календарных сводок. Работай только с текущей инструкцией worker. Ты можешь читать календарь, но никогда не создавай, не изменяй и не удаляй события. Сначала оцени естественно-языковые условия пользователя. Если запуск сегодня не нужен, верни статус skipped. Если нужен — получи необходимые календарные данные и сформируй сводку. Если исходная инструкция явно требует отправить или сохранить сводку в Telegram, после получения календарных данных отправь готовый текст через Telegram MCP. Не отправляй сообщений в Telegram, если пользователь этого не просил.
 
 Верни только JSON без Markdown: {"status":"success"|"skipped","reason":"краткое объяснение","summary":"текст сводки при success"}. Не утверждай, что получил данные календаря, если не было успешного MCP-вызова в этом запуске.`,
   outputPolicy: { format: 'json' as const, maxCharacters: 24_000 },
-  mcp: { enabled: true, servers: ['yandex-calendar'], toolAccess: 'read-only' as const },
+  mcp: { enabled: true, servers: ['yandex-calendar', 'telegram'], serverToolAccess: { 'yandex-calendar': 'read-only' as const } },
 }
 
 export async function ensureScheduledAgent(service: AgentService) {
@@ -25,7 +25,7 @@ export async function ensureScheduledAgent(service: AgentService) {
   const existing = service.list().find((agent) => agent.id === scheduledAgentId)
   if (!existing) {
     await service.create({ id: scheduledAgentId, config: scheduledAgentConfig })
-  } else if (existing.config.mcp?.toolAccess !== 'read-only') {
+  } else {
     await service.update(scheduledAgentId, scheduledAgentConfig)
   }
 }
@@ -66,6 +66,17 @@ function toOutcome(result: Pick<AgentRunResult, 'output' | 'mcpToolCalls'>) {
       status: 'error' as const,
       reason: 'Все MCP-вызовы фоновой задачи завершились ошибкой.',
       error: failedTools.map((call) => call.name).join(', '),
+      toolCalls: result.mcpToolCalls ?? [],
+    }
+  }
+  // Calendar data may be retried inside one agent turn, but a failed delivery
+  // is terminal for a task that explicitly attempted to notify the user.
+  // Persist it as an error instead of presenting a stored summary as sent.
+  if (failedTools.some((call) => call.serverId === 'telegram')) {
+    return {
+      status: 'error' as const,
+      reason: 'Сводка не доставлена в Telegram.',
+      error: failedTools.filter((call) => call.serverId === 'telegram').map((call) => call.name).join(', '),
       toolCalls: result.mcpToolCalls ?? [],
     }
   }
