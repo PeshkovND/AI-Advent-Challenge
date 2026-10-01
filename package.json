@@ -17,6 +17,11 @@
     "test:mcp:orchestration": "tsx --test server/mcp-orchestration.test.ts server/telegram-mcp.test.ts",
     "test:scheduler:smoke": "tsx server/scheduler-smoke.ts",
     "test:scheduler:local": "tsx --test --test-concurrency=1 server/scheduler-local.test.ts",
+    "rag:index": "tsx server/rag-cli.ts index",
+    "rag:stats": "tsx server/rag-cli.ts stats",
+    "rag:search": "tsx server/rag-cli.ts search",
+    "rag:demo": "tsx server/rag-cli.ts demo",
+    "test:rag": "tsx --test server/rag-indexer.test.ts",
     "build": "vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit"

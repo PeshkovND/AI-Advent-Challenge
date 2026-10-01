@@ -1,0 +1,68 @@
+import assert from 'node:assert/strict'
+import { createServer } from 'node:http'
+import { mkdtempSync, rmSync } from 'node:fs'
+import test from 'node:test'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { chunkFixed, chunkStructured, documentFromText, OllamaEmbeddingClient, RagIndexStore } from './rag-indexer'
+
+test('fixed chunks keep required metadata and overlap', () => {
+  const document = documentFromText('docs/example.md', '# Example\n\n' + Array.from({ length: 100 }, (_, index) => `word${index}`).join(' '))
+  const chunks = chunkFixed(document, { chunkSize: 12, overlap: 2 })
+
+  assert.ok(chunks.length > 2)
+  assert.ok(chunks.every((chunk) => chunk.strategy === 'fixed' && chunk.source === 'docs/example.md' && chunk.title === 'Example' && chunk.section && chunk.chunk_id && chunk.characterCount === chunk.text.length))
+  assert.ok(chunks.every((chunk) => (chunk.text.match(/\S+/g) ?? []).length <= 12))
+  const overlapWords = (chunks[0].text.match(/\S+/g) ?? []).slice(-2)
+  assert.ok(overlapWords.every((word) => chunks[1].text.includes(word)))
+})
+
+test('structured chunks preserve Markdown heading as section metadata', () => {
+  const document = documentFromText('docs/rag.md', '# RAG\n\nIntroduction.\n\n## Chunking\n\n' + 'Structured content. '.repeat(20) + '\n\n## Embeddings\n\n' + 'Vector content. '.repeat(20))
+  const chunks = chunkStructured(document, { chunkSize: 12, overlap: 2 })
+
+  assert.ok(chunks.some((chunk) => chunk.section === 'Chunking'))
+  assert.ok(chunks.some((chunk) => chunk.section === 'Embeddings'))
+  assert.ok(chunks.every((chunk) => chunk.strategy === 'structured'))
+})
+
+test('SQLite store saves metadata, vectors and supports cosine search', () => {
+  const directory = mkdtempSync(join(tmpdir(), 'rag-index-'))
+  const store = new RagIndexStore(join(directory, 'index.sqlite'))
+  try {
+  const document = documentFromText('README.md', '# Guide\n\nUseful text about embeddings.')
+    const [chunk] = chunkFixed(document, { chunkSize: 10, overlap: 0 })
+    const run = store.saveIndex([{ ...chunk, embedding: [1, 0, 0] }], 1, 'test-model', ['fixed'])
+    assert.equal(store.latestRun()?.id, run.id)
+    assert.equal(store.latestRun()?.vectorDimensions, 3)
+    const [result] = store.search([1, 0, 0])
+    assert.equal(result.chunk.chunk_id, chunk.chunk_id)
+    assert.equal(result.score, 1)
+  } finally {
+    store.close()
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test('Ollama client accepts a batched API response', async () => {
+  const server = createServer((request, response) => {
+    assert.equal(request.method, 'POST')
+    assert.equal(request.url, '/api/embed')
+    let body = ''
+    request.on('data', (part) => { body += part })
+    request.on('end', () => {
+      assert.deepEqual(JSON.parse(body), { model: 'test-model', input: ['one', 'two'] })
+      response.setHeader('content-type', 'application/json')
+      response.end(JSON.stringify({ embeddings: [[1, 0], [0, 1]] }))
+    })
+  })
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+  const address = server.address()
+  assert.ok(address && typeof address === 'object')
+  try {
+    const client = new OllamaEmbeddingClient(`http://127.0.0.1:${address.port}`, 'test-model')
+    assert.deepEqual(await client.embed(['one', 'two']), [[1, 0], [0, 1]])
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()))
+  }
+})
