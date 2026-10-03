@@ -10,6 +10,7 @@ import type { AgentInvariantsConfig, InvariantCheckInfo, InvariantVerdict } from
 import type { McpToolRuntime, McpToolCall } from './mcp-tool-runtime'
 import { actorForStage, applyTaskDecision, newTaskState, parseTaskDecision, parseTaskInputInterpretation, taskInputIntentInput, taskInputIntentSystemPrompt, taskScopeId, taskStatePrompt } from './task-state'
 import type { AgentTaskState, TaskDecision, TaskInputInterpretation, TaskTransitionAuthorization } from './task-state'
+import { RagRetriever, type RagConfig, type RagSource } from './rag-retrieval'
 
 export type AgentProvider = 'deepseek' | 'huggingface' | 'openrouter'
 export type AgentMessageRole = 'system' | 'user' | 'assistant'
@@ -70,6 +71,7 @@ export type AgentConfig = {
   taskMachine?: boolean
   /** MCP capabilities are selected by server-side ids; clients never provide commands or credentials. */
   mcp?: { enabled: boolean; servers: string[]; toolAccess?: 'all' | 'read-only'; serverToolAccess?: Record<string, 'all' | 'read-only'> }
+  rag?: RagConfig
   /**
    * Optional context policy used by the Day 10 strategy demo. The policy is
    * part of the agent configuration so the Agent, rather than the storage
@@ -140,6 +142,7 @@ export type AgentRunResult = {
   taskNotice?: string
   invariantCheck?: InvariantCheckInfo
   mcpToolCalls?: McpToolCall[]
+  rag?: { indexRunId: string; sources: RagSource[] }
 }
 
 export type AgentTaskRunEvent = {
@@ -186,7 +189,7 @@ type AgentState = {
   tokenHistory: Record<string, AgentTokenUsagePoint[]>
 }
 
-class AgentStateStore {
+export class AgentStateStore {
   private state: AgentState = { agents: [], histories: {}, mcpContexts: {}, conversationTokens: {}, tokenHistory: {} }
   private writeQueue: Promise<void> = Promise.resolve()
   readonly ready: Promise<void>
@@ -277,10 +280,7 @@ class AgentStateStore {
   async removeAgent(agentId: string) {
     await this.ready
     this.state.agents = this.state.agents.filter((agent) => agent.id !== agentId)
-    delete this.state.histories[agentId]
-    delete this.state.mcpContexts[agentId]
-    delete this.state.conversationTokens[agentId]
-    delete this.state.tokenHistory[agentId]
+    this.removeHistoryScopes(agentId)
     await this.persist()
   }
 
@@ -291,6 +291,26 @@ class AgentStateStore {
     delete this.state.conversationTokens[agentId]
     delete this.state.tokenHistory[agentId]
     await this.persist()
+  }
+
+  async clearAllHistory(agentId: string) {
+    await this.ready
+    const clearedScopes = this.removeHistoryScopes(agentId)
+    await this.persist()
+    return clearedScopes
+  }
+
+  private removeHistoryScopes(agentId: string) {
+    const scopes = new Set<string>()
+    for (const records of [this.state.histories, this.state.mcpContexts, this.state.conversationTokens, this.state.tokenHistory]) {
+      for (const scope of Object.keys(records)) {
+        if (scope === agentId || scope.startsWith(`${agentId}::`)) {
+          scopes.add(scope)
+          delete records[scope]
+        }
+      }
+    }
+    return scopes.size
   }
 
   private async load() {
@@ -470,6 +490,7 @@ export class Agent {
     private readonly client: LlmClient,
     contextStrategies?: ContextStrategiesServiceLike,
     private readonly mcpRuntime?: McpToolRuntime,
+    private readonly ragRetriever: RagRetriever = new RagRetriever(),
   ) {
     this.contextStrategies = contextStrategies
     if (config.memoryLayers) {
@@ -555,7 +576,9 @@ export class Agent {
       : { config: this.config, history }
     const memory = this.memory ? await this.memory.prepare(prepared.history, validatedInput, { history, summary: prepared.summary ?? summary }) : undefined
     const effectiveConfig = withRuntimeContext(prepared.config, memory?.systemPrompt)
-    const messages = buildMessages(effectiveConfig, memory?.history ?? prepared.history, validatedInput, prepared.summary ?? summary, runtimeInstruction)
+    const ragContext = this.config.rag?.enabled ? await this.ragRetriever.retrieve(validatedInput, this.config.rag) : undefined
+    const instructions = [runtimeInstruction, ragContext?.instruction].filter(Boolean).join('\n\n') || undefined
+    const messages = buildMessages(effectiveConfig, memory?.history ?? prepared.history, validatedInput, prepared.summary ?? summary, instructions)
     const mcpResult = this.config.mcp?.enabled
       ? await this.mcpRuntime?.run({
         // This is the same prepared context used by the normal Agent path.
@@ -628,6 +651,7 @@ export class Agent {
       ...(taskDecision ? { taskDecision } : {}),
       ...(invariantCheck ? { invariantCheck } : {}),
       ...(mcpResult?.toolCalls.length ? { mcpToolCalls: mcpResult.toolCalls } : {}),
+      ...(ragContext ? { rag: { indexRunId: ragContext.indexRunId, sources: ragContext.sources } } : {}),
     }
   }
 
@@ -666,7 +690,8 @@ export class Agent {
       : { config: this.config, history }
     const memory = this.memory ? await this.memory.prepare(prepared.history, validatedInput, { history, summary: prepared.summary ?? summary }) : undefined
     const effectiveConfig = withRuntimeContext(prepared.config, memory?.systemPrompt)
-    const messages = buildMessages(effectiveConfig, memory?.history ?? prepared.history, validatedInput, prepared.summary ?? summary)
+    const ragContext = this.config.rag?.enabled ? await this.ragRetriever.retrieve(validatedInput, this.config.rag) : undefined
+    const messages = buildMessages(effectiveConfig, memory?.history ?? prepared.history, validatedInput, prepared.summary ?? summary, ragContext?.instruction)
     const startedAt = Date.now()
     let streamedOutput = ''
     let emittedOutput = ''
@@ -703,6 +728,7 @@ export class Agent {
       ...(prepared.strategyTokenMetrics ? { strategyTokenMetrics: prepared.strategyTokenMetrics } : {}),
       ...(prepared.strategyError ? { strategyError: prepared.strategyError } : {}),
       ...(taskDecision ? { taskDecision } : {}),
+      ...(ragContext ? { rag: { indexRunId: ragContext.indexRunId, sources: ragContext.sources } } : {}),
     }
   }
 
@@ -843,6 +869,14 @@ export class AgentService {
     await this.ready
     this.get(id)
     await this.stateStore.clearHistory(id)
+  }
+
+  async clearAllHistory(id: string) {
+    await this.ready
+    this.get(id)
+    const clearedScopes = await this.stateStore.clearAllHistory(id)
+    if (this.contextStrategies?.resetAgentContext) await this.contextStrategies.resetAgentContext(id)
+    return { agentId: id, clearedScopes }
   }
 
   async getContextStrategyState(id: string) {
@@ -1426,6 +1460,14 @@ export function createAgentRouter(service: AgentService): Router {
     }
   })
 
+  router.delete('/:agentId/history/all', async (request, response) => {
+    try {
+      response.json(await service.clearAllHistory(request.params.agentId))
+    } catch (error) {
+      sendAgentError(response, error)
+    }
+  })
+
   router.delete('/:agentId', async (request, response) => {
     try {
       await service.remove(request.params.agentId)
@@ -1713,6 +1755,7 @@ function normalizeAgentConfig(value: unknown, defaultDeepSeekModel: string) {
     taskState: normalizeTaskState(input.taskState),
     taskMachine: input.taskMachine === true ? true : undefined,
     mcp: normalizeMcpConfig(input.mcp),
+    rag: normalizeRagConfig(input.rag),
   }
 
   return removeUndefined(config)
@@ -1733,6 +1776,13 @@ function normalizeMcpConfig(value: unknown): AgentConfig['mcp'] | undefined {
     ...(value.toolAccess === 'read-only' ? { toolAccess: 'read-only' as const } : {}),
     ...(serverToolAccess && Object.keys(serverToolAccess).length ? { serverToolAccess } : {}),
   }
+}
+
+function normalizeRagConfig(value: unknown): RagConfig | undefined {
+  if (!isRecord(value) || value.enabled !== true) return undefined
+  const strategy = value.strategy === 'fixed' ? 'fixed' : 'structured'
+  const topK = readInteger(value.topK, 1, 8) ?? 4
+  return { enabled: true, strategy, topK }
 }
 
 function normalizeInputPolicy(value: unknown) {

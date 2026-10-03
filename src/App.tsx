@@ -3,9 +3,10 @@ import ReactMarkdown from 'react-markdown'
 import rehypeKatex from 'rehype-katex'
 import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
+import RagPage from './RagPage'
 
 type MessageRole = 'user' | 'assistant'
-type Page = 'chat' | 'compare' | 'reasoning' | 'temperature' | 'models' | 'agents' | 'context-demo' | 'context-comparison' | 'context-strategies' | 'context-branching' | 'memory-layers' | 'personalization' | 'task-state' | 'calendar-mcp' | 'scheduler'
+type Page = 'chat' | 'compare' | 'reasoning' | 'temperature' | 'models' | 'agents' | 'rag' | 'context-demo' | 'context-comparison' | 'context-strategies' | 'context-branching' | 'memory-layers' | 'personalization' | 'task-state' | 'calendar-mcp' | 'scheduler'
 
 type ChatMessage = {
   id: string
@@ -95,6 +96,7 @@ type AgentConfig = {
   taskState?: AgentTaskState
   taskMachine?: boolean
   mcp?: { enabled: boolean; servers: string[]; toolAccess?: 'all' | 'read-only'; serverToolAccess?: Record<string, 'all' | 'read-only'> }
+  rag?: { enabled: boolean; strategy: 'fixed' | 'structured'; topK: number }
 }
 type AgentInvariant = { id: string; title: string; rule: string }
 type InvariantField = AgentInvariant
@@ -293,6 +295,9 @@ function App() {
           <button className={`page-nav-button ${activePage === 'agents' ? 'active' : ''}`} onClick={() => setActivePage('agents')}>
             <span>♙</span> Агенты
           </button>
+          <button className={`page-nav-button ${activePage === 'rag' ? 'active' : ''}`} onClick={() => setActivePage('rag')}>
+            <span>⌕</span> RAG
+          </button>
           <button className={`page-nav-button ${activePage === 'context-demo' ? 'active' : ''}`} onClick={() => setActivePage('context-demo')}>
             <span>◫</span> Контекст
           </button>
@@ -329,7 +334,7 @@ function App() {
       </aside>
 
       <main className="day-main">
-        {activePage === 'chat' ? <ChatPage /> : activePage === 'compare' ? <ComparePage /> : activePage === 'reasoning' ? <ReasoningPage /> : activePage === 'temperature' ? <TemperaturePage /> : activePage === 'models' ? <ModelsPage /> : activePage === 'agents' ? <AgentsPage /> : activePage === 'context-demo' ? <ContextDemoPage /> : activePage === 'context-comparison' ? <ContextCompressionComparisonPage /> : activePage === 'context-strategies' ? <ContextStrategiesPage /> : activePage === 'context-branching' ? <ContextBranchingPage /> : activePage === 'memory-layers' ? <MemoryLayersPage /> : activePage === 'personalization' ? <PersonalizationPage /> : activePage === 'task-state' ? <TaskStatePage /> : activePage === 'calendar-mcp' ? <CalendarMcpPage /> : <SchedulerPage />}
+        {activePage === 'chat' ? <ChatPage /> : activePage === 'compare' ? <ComparePage /> : activePage === 'reasoning' ? <ReasoningPage /> : activePage === 'temperature' ? <TemperaturePage /> : activePage === 'models' ? <ModelsPage /> : activePage === 'agents' ? <AgentsPage /> : activePage === 'rag' ? <RagPage /> : activePage === 'context-demo' ? <ContextDemoPage /> : activePage === 'context-comparison' ? <ContextCompressionComparisonPage /> : activePage === 'context-strategies' ? <ContextStrategiesPage /> : activePage === 'context-branching' ? <ContextBranchingPage /> : activePage === 'memory-layers' ? <MemoryLayersPage /> : activePage === 'personalization' ? <PersonalizationPage /> : activePage === 'task-state' ? <TaskStatePage /> : activePage === 'calendar-mcp' ? <CalendarMcpPage /> : <SchedulerPage />}
       </main>
     </div>
   )
@@ -772,6 +777,9 @@ function AgentsPage() {
   const [invariantsEnabled, setInvariantsEnabled] = useState(false)
   const [invariantFields, setInvariantFields] = useState<InvariantField[]>([])
   const [mcpEnabled, setMcpEnabled] = useState(false)
+  const [ragEnabled, setRagEnabled] = useState(false)
+  const [ragStrategy, setRagStrategy] = useState<'fixed' | 'structured'>('structured')
+  const [ragTopK, setRagTopK] = useState('4')
   const [input, setInput] = useState('')
   const [answer, setAnswer] = useState('')
   const [runMeta, setRunMeta] = useState<{ durationMs?: number; tokens?: number; conversationTokens?: number; tokenMetrics?: AgentTokenMetrics; invariantCheck?: InvariantCheckInfo } | null>(null)
@@ -902,6 +910,7 @@ function AgentsPage() {
         } : undefined,
         invariants: invariantsEnabled ? { enabled: true, items: invariantItems } : undefined,
         mcp: mcpEnabled ? { enabled: true, servers: ['yandex-calendar'] } : undefined,
+        rag: ragEnabled ? { enabled: true, strategy: ragStrategy, topK: Math.min(Math.max(Number(ragTopK) || 4, 1), 8) } : undefined,
       }
       const response = await fetch('/api/agents', {
         method: 'POST',
@@ -923,6 +932,7 @@ function AgentsPage() {
       setInvariantsEnabled(false)
       setInvariantFields([])
       setMcpEnabled(false)
+      setRagEnabled(false)
       setError(null)
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : 'Не удалось создать агента.')
@@ -1007,6 +1017,7 @@ function AgentsPage() {
             </div>
             <label>Системный промпт<textarea value={systemPrompt} onChange={(event) => setSystemPrompt(event.target.value)} placeholder="Например: отвечай кратко и с примерами..." rows={3} /></label>
             <div className="invariant-editor"><div className="agent-field-heading"><span>MCP-инструменты</span><label className="invariant-toggle"><input type="checkbox" checked={mcpEnabled} onChange={(event) => setMcpEnabled(event.target.checked)} /> Включить Яндекс Календарь</label></div><p>Агент сам выбирает MCP-инструменты через нативный tool calling. В конфигурацию сохраняется только серверный id, без команд и секретов. Выбранная модель должна поддерживать function calling.</p></div>
+            <div className="invariant-editor"><div className="agent-field-heading"><span>Локальный RAG-индекс</span><label className="invariant-toggle"><input type="checkbox" checked={ragEnabled} onChange={(event) => setRagEnabled(event.target.checked)} /> Включить RAG</label></div><p>Перед ответом агент найдёт релевантные фрагменты в индексе Day 21 и покажет их источники.</p>{ragEnabled && <div className="agent-form-row"><label>Стратегия<select value={ragStrategy} onChange={(event) => setRagStrategy(event.target.value as 'fixed' | 'structured')}><option value="structured">По структуре</option><option value="fixed">По 200 слов</option></select></label><label>Количество чанков<input type="number" min="1" max="8" value={ragTopK} onChange={(event) => setRagTopK(event.target.value)} /></label></div>}</div>
             <div className="invariant-editor"><div className="agent-field-heading"><span>Инварианты</span><label className="invariant-toggle"><input type="checkbox" checked={invariantsEnabled} onChange={(event) => setInvariantsEnabled(event.target.checked)} /> Включить</label></div><p>Жёсткие правила, которые агент не имеет права нарушать.</p>{invariantsEnabled && <div className="invariant-list">{invariantFields.map((item, index) => <div className="invariant-row" key={item.id}><input value={item.title} onChange={(event) => setInvariantFields((current) => current.map((entry) => entry.id === item.id ? { ...entry, title: event.target.value } : entry))} placeholder={`Правило ${index + 1}, например: Стек`} aria-label={`Название инварианта ${index + 1}`} /><textarea value={item.rule} onChange={(event) => setInvariantFields((current) => current.map((entry) => entry.id === item.id ? { ...entry, rule: event.target.value } : entry))} placeholder="Например: Использовать только SwiftUI и iOS 16+." rows={2} aria-label={`Описание инварианта ${index + 1}`} /><button className="stop-remove" type="button" onClick={() => setInvariantFields((current) => current.filter((entry) => entry.id !== item.id))} aria-label={`Удалить инвариант ${index + 1}`}>×</button></div>)}<button className="stop-add" type="button" onClick={() => setInvariantFields((current) => [...current, createInvariantField()])}>＋ Добавить инвариант</button></div>}</div>
             <div className="agent-form-row">
               <label>Температура<input type="number" min="0" max="2" step="0.1" value={temperature} onChange={(event) => setTemperature(event.target.value)} /></label>
@@ -1048,7 +1059,7 @@ function AgentConfigDetails({ config }: { config: AgentConfig }) {
   const strategy = config.contextStrategy
   const strategyLabel = strategy?.strategy === 'sliding' ? `Sliding Window · N=${strategy.windowSize ?? '—'}` : strategy?.strategy === 'facts' ? `Sticky Facts · N=${strategy.windowSize ?? '—'}` : strategy?.strategy === 'branching' ? 'Branching' : strategy?.strategy === 'summary' ? `Summary · N=${strategy.summarizeAfterMessages ?? 10}` : 'не задана'
   const invariants = config.invariants?.enabled ? config.invariants.items ?? [] : []
-  return <div className="agent-config-details"><div className="agent-config-details-heading"><span>Параметры выбранного агента</span><small>Текущая конфигурация</small></div><div className="agent-config-details-grid"><div><small>Название</small><strong>{config.name || 'не задано'}</strong></div><div><small>Temperature</small><strong>{config.temperature ?? 'по умолчанию'}</strong></div><div><small>Максимум токенов ответа</small><strong>{config.maxTokens ?? 'без лимита'}</strong></div><div><small>Стратегия контекста</small><strong>{strategyLabel}</strong></div><div><small>Формат ответа</small><strong>{outputFormat}</strong></div><div><small>Лимит входа</small><strong>{config.inputPolicy?.maxCharacters ? `${config.inputPolicy.maxCharacters} символов` : 'без лимита'}</strong></div><div><small>Stop-последовательности</small><strong>{stopSequences}</strong></div><div><small>Инварианты</small><strong>{invariants.length ? `${invariants.length} активн.` : 'не заданы'}</strong></div><div><small>MCP</small><strong>{config.mcp?.enabled ? config.mcp.servers.join(' · ') : 'выключен'}</strong></div><div className="agent-config-details-wide"><small>Системный промпт</small><strong>{config.systemPrompt || 'не задан'}</strong></div>{invariants.length > 0 && <div className="agent-config-details-wide"><small>Жёсткие правила</small><strong>{invariants.map((item) => `${item.title}: ${item.rule}`).join(' · ')}</strong></div>}</div></div>
+  return <div className="agent-config-details"><div className="agent-config-details-heading"><span>Параметры выбранного агента</span><small>Текущая конфигурация</small></div><div className="agent-config-details-grid"><div><small>Название</small><strong>{config.name || 'не задано'}</strong></div><div><small>Temperature</small><strong>{config.temperature ?? 'по умолчанию'}</strong></div><div><small>Максимум токенов ответа</small><strong>{config.maxTokens ?? 'без лимита'}</strong></div><div><small>Стратегия контекста</small><strong>{strategyLabel}</strong></div><div><small>Формат ответа</small><strong>{outputFormat}</strong></div><div><small>Лимит входа</small><strong>{config.inputPolicy?.maxCharacters ? `${config.inputPolicy.maxCharacters} символов` : 'без лимита'}</strong></div><div><small>Stop-последовательности</small><strong>{stopSequences}</strong></div><div><small>Инварианты</small><strong>{invariants.length ? `${invariants.length} активн.` : 'не заданы'}</strong></div><div><small>MCP</small><strong>{config.mcp?.enabled ? config.mcp.servers.join(' · ') : 'выключен'}</strong></div><div><small>RAG</small><strong>{config.rag?.enabled ? `${config.rag.strategy}, top ${config.rag.topK}` : 'выключен'}</strong></div><div className="agent-config-details-wide"><small>Системный промпт</small><strong>{config.systemPrompt || 'не задан'}</strong></div>{invariants.length > 0 && <div className="agent-config-details-wide"><small>Жёсткие правила</small><strong>{invariants.map((item) => `${item.title}: ${item.rule}`).join(' · ')}</strong></div>}</div></div>
 }
 
 function AgentTokenMetricsView({ metrics, conversationTokens }: { metrics: AgentTokenMetrics; conversationTokens?: number }) {

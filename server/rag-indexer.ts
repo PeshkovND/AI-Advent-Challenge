@@ -5,6 +5,7 @@ import { basename, dirname, extname, relative, resolve } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 
 export type ChunkingStrategy = 'fixed' | 'structured'
+export type EmbeddingProfile = 'plain' | 'nomic-retrieval-v1' | 'nomic-retrieval-metadata-v1'
 
 export type DocumentSection = {
   title: string
@@ -46,6 +47,7 @@ export type RagIndexRun = {
   id: string
   createdAt: string
   model: string
+  embeddingProfile: EmbeddingProfile
   sourceCount: number
   chunkCount: number
   vectorDimensions: number
@@ -58,6 +60,7 @@ export type RagSearchResult = {
 }
 
 const supportedExtensions = new Set(['.md', '.ts', '.tsx', '.js', '.jsx', '.css', '.pdf'])
+const evaluationSources = new Set(['docs/day-22.md', 'src/rag-questions.ts', 'server/rag-check-questions.ts'])
 const defaultChunkSize = 200
 const defaultOverlap = 40
 
@@ -118,7 +121,7 @@ function listFiles(directory: string): string[] {
 /** The default corpus is the course notes and application code already present in this repository. */
 export function collectProjectDocuments(root = process.cwd()) {
   const candidates = [resolve(root, 'README.md'), ...listFiles(resolve(root, 'docs')), ...listFiles(resolve(root, 'server')), ...listFiles(resolve(root, 'src'))]
-  return candidates.filter(existsSync).sort().map((filePath) => readSourceDocument(root, filePath))
+  return candidates.filter((filePath) => existsSync(filePath) && !evaluationSources.has(relative(root, filePath))).sort().map((filePath) => readSourceDocument(root, filePath))
 }
 
 function makeChunk(document: SourceDocument, strategy: ChunkingStrategy, ordinal: number, section: string, text: string) {
@@ -192,10 +195,12 @@ type OllamaEmbedResponse = { embeddings?: unknown }
 export class OllamaEmbeddingClient {
   readonly baseUrl: string
   readonly model: string
+  readonly embeddingProfile: EmbeddingProfile
 
-  constructor(baseUrl = process.env.OLLAMA_BASE_URL?.trim() || 'http://127.0.0.1:11434', model = process.env.OLLAMA_EMBED_MODEL?.trim() || 'nomic-embed-text') {
+  constructor(baseUrl = process.env.OLLAMA_BASE_URL?.trim() || 'http://127.0.0.1:11434', model = process.env.OLLAMA_EMBED_MODEL?.trim() || 'nomic-embed-text-v2-moe') {
     this.baseUrl = baseUrl.replace(/\/$/, '')
     this.model = model
+    this.embeddingProfile = model.startsWith('nomic-embed-text') ? 'nomic-retrieval-metadata-v1' : 'plain'
   }
 
   async embed(texts: string[]) {
@@ -221,11 +226,23 @@ export class OllamaEmbeddingClient {
     return embeddings
   }
 
+  async embedQueries(questions: string[], profile = this.embeddingProfile) {
+    return this.embed(questions.map((question) => profile === 'plain' ? question : `search_query: ${question}`))
+  }
+
+  async embedQuery(question: string, profile = this.embeddingProfile) {
+    return this.embedQueries([question], profile)
+  }
+
   async embedChunks(chunks: DocumentChunk[], batchSize = 24): Promise<EmbeddedChunk[]> {
     const result: EmbeddedChunk[] = []
     for (let index = 0; index < chunks.length; index += batchSize) {
       const batch = chunks.slice(index, index + batchSize)
-      const embeddings = await this.embed(batch.map((chunk) => chunk.text))
+      const embeddings = await this.embed(batch.map((chunk) => {
+        if (this.embeddingProfile === 'plain') return chunk.text
+        if (this.embeddingProfile === 'nomic-retrieval-v1') return `search_document: ${chunk.text}`
+        return `search_document: ${chunk.title}\n${chunk.section}\n${chunk.text}`
+      }))
       result.push(...batch.map((chunk, item) => ({ ...chunk, embedding: embeddings[item] })))
     }
     return result
@@ -246,6 +263,7 @@ export class RagIndexStore {
     this.database.exec(`
       CREATE TABLE IF NOT EXISTS rag_index_runs (
         id TEXT PRIMARY KEY, created_at TEXT NOT NULL, model TEXT NOT NULL,
+        embedding_profile TEXT NOT NULL DEFAULT 'plain',
         source_count INTEGER NOT NULL, chunk_count INTEGER NOT NULL,
         vector_dimensions INTEGER NOT NULL, strategies_json TEXT NOT NULL
       );
@@ -261,19 +279,23 @@ export class RagIndexStore {
       );
       CREATE INDEX IF NOT EXISTS rag_chunks_by_run_strategy ON rag_document_chunks(run_id, strategy);
     `)
+    const columns = this.database.prepare('PRAGMA table_info(rag_index_runs)').all() as { name: string }[]
+    if (!columns.some((column) => column.name === 'embedding_profile')) {
+      this.database.exec("ALTER TABLE rag_index_runs ADD COLUMN embedding_profile TEXT NOT NULL DEFAULT 'plain'")
+    }
   }
 
-  saveIndex(chunks: EmbeddedChunk[], sourceCount: number, model: string, strategies: ChunkingStrategy[]) {
+  saveIndex(chunks: EmbeddedChunk[], sourceCount: number, model: string, strategies: ChunkingStrategy[], embeddingProfile: EmbeddingProfile) {
     if (!chunks.length) throw new Error('Нельзя сохранить пустой индекс.')
     const dimensions = chunks[0].embedding.length
     if (!dimensions || chunks.some((chunk) => chunk.embedding.length !== dimensions)) throw new Error('У всех чанков должна быть одна размерность эмбеддинга.')
-    const run: RagIndexRun = { id: randomUUID(), createdAt: new Date().toISOString(), model, sourceCount, chunkCount: chunks.length, vectorDimensions: dimensions, strategies }
-    const insertRun = this.database.prepare('INSERT INTO rag_index_runs (id, created_at, model, source_count, chunk_count, vector_dimensions, strategies_json) VALUES (?, ?, ?, ?, ?, ?, ?)')
+    const run: RagIndexRun = { id: randomUUID(), createdAt: new Date().toISOString(), model, embeddingProfile, sourceCount, chunkCount: chunks.length, vectorDimensions: dimensions, strategies }
+    const insertRun = this.database.prepare('INSERT INTO rag_index_runs (id, created_at, model, embedding_profile, source_count, chunk_count, vector_dimensions, strategies_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
     const insertChunk = this.database.prepare('INSERT INTO rag_document_chunks (run_id, chunk_id, strategy, source, title, section, ordinal, character_count, content) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
     const insertEmbedding = this.database.prepare('INSERT INTO rag_embeddings (run_id, chunk_id, dimensions, vector_json) VALUES (?, ?, ?, ?)')
     this.database.exec('BEGIN')
     try {
-      insertRun.run(run.id, run.createdAt, run.model, run.sourceCount, run.chunkCount, run.vectorDimensions, JSON.stringify(run.strategies))
+      insertRun.run(run.id, run.createdAt, run.model, run.embeddingProfile, run.sourceCount, run.chunkCount, run.vectorDimensions, JSON.stringify(run.strategies))
       for (const chunk of chunks) {
         insertChunk.run(run.id, chunk.chunk_id, chunk.strategy, chunk.source, chunk.title, chunk.section, chunk.ordinal, chunk.characterCount, chunk.text)
         insertEmbedding.run(run.id, chunk.chunk_id, dimensions, JSON.stringify(chunk.embedding))
@@ -290,7 +312,7 @@ export class RagIndexStore {
     const row = this.database.prepare('SELECT * FROM rag_index_runs ORDER BY created_at DESC LIMIT 1').get() as Record<string, unknown> | undefined
     if (!row) return undefined
     return {
-      id: String(row.id), createdAt: String(row.created_at), model: String(row.model), sourceCount: Number(row.source_count), chunkCount: Number(row.chunk_count), vectorDimensions: Number(row.vector_dimensions), strategies: parseJson(row.strategies_json) as ChunkingStrategy[],
+      id: String(row.id), createdAt: String(row.created_at), model: String(row.model), embeddingProfile: String(row.embedding_profile) as EmbeddingProfile, sourceCount: Number(row.source_count), chunkCount: Number(row.chunk_count), vectorDimensions: Number(row.vector_dimensions), strategies: parseJson(row.strategies_json) as ChunkingStrategy[],
     } satisfies RagIndexRun
   }
 

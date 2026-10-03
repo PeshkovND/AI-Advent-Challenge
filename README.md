@@ -56,6 +56,7 @@ npm run agents:cli -- bulk --config agents-config.example.json
 Композиция MCP-инструментов календаря для поиска свободного окна и создания встречи описана в [`docs/day-19.md`](docs/day-19.md).
 Оркестрация Calendar, Scheduler и Telegram MCP-серверов описана в [`docs/day-20.md`](docs/day-20.md).
 Индексация локального корпуса для RAG, Ollama и сравнение chunking-стратегий описаны в [`docs/day-21.md`](docs/day-21.md).
+Первый RAG-запрос через обычного агента, отдельная страница сравнения и 10 контрольных вопросов описаны в [`docs/day-22.md`](docs/day-22.md).
 
 ## Запуск
 

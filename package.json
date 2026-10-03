@@ -22,6 +22,8 @@
     "rag:search": "tsx server/rag-cli.ts search",
     "rag:demo": "tsx server/rag-cli.ts demo",
     "test:rag": "tsx --test server/rag-indexer.test.ts",
+    "test:rag:agent": "tsx --test server/rag-agent.test.ts",
+    "rag:check-questions": "tsx server/rag-check-questions.ts",
     "build": "vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit"

@@ -1,10 +1,22 @@
 import assert from 'node:assert/strict'
 import { createServer } from 'node:http'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import test from 'node:test'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { chunkFixed, chunkStructured, documentFromText, OllamaEmbeddingClient, RagIndexStore } from './rag-indexer'
+import { DatabaseSync } from 'node:sqlite'
+import { chunkFixed, chunkStructured, collectProjectDocuments, documentFromText, OllamaEmbeddingClient, RagIndexStore } from './rag-indexer'
+
+test('project corpus excludes control questions and their answer key', () => {
+  const directory = mkdtempSync(join(tmpdir(), 'rag-corpus-'))
+  try {
+    for (const folder of ['docs', 'server', 'src']) mkdirSync(join(directory, folder))
+    for (const source of ['docs/day-21.md', 'docs/day-22.md', 'server/rag-check-questions.ts', 'src/rag-questions.ts', 'src/App.tsx']) {
+      writeFileSync(join(directory, source), 'Test document')
+    }
+    assert.deepEqual(collectProjectDocuments(directory).map((document) => document.source), ['docs/day-21.md', 'src/App.tsx'])
+  } finally { rmSync(directory, { recursive: true, force: true }) }
+})
 
 test('fixed chunks keep required metadata and overlap', () => {
   const document = documentFromText('docs/example.md', '# Example\n\n' + Array.from({ length: 100 }, (_, index) => `word${index}`).join(' '))
@@ -32,9 +44,10 @@ test('SQLite store saves metadata, vectors and supports cosine search', () => {
   try {
   const document = documentFromText('README.md', '# Guide\n\nUseful text about embeddings.')
     const [chunk] = chunkFixed(document, { chunkSize: 10, overlap: 0 })
-    const run = store.saveIndex([{ ...chunk, embedding: [1, 0, 0] }], 1, 'test-model', ['fixed'])
+    const run = store.saveIndex([{ ...chunk, embedding: [1, 0, 0] }], 1, 'test-model', ['fixed'], 'plain')
     assert.equal(store.latestRun()?.id, run.id)
     assert.equal(store.latestRun()?.vectorDimensions, 3)
+    assert.equal(store.latestRun()?.embeddingProfile, 'plain')
     const [result] = store.search([1, 0, 0])
     assert.equal(result.chunk.chunk_id, chunk.chunk_id)
     assert.equal(result.score, 1)
@@ -42,6 +55,22 @@ test('SQLite store saves metadata, vectors and supports cosine search', () => {
     store.close()
     rmSync(directory, { recursive: true, force: true })
   }
+})
+
+test('existing indexes are marked plain when embedding profile is added', () => {
+  const directory = mkdtempSync(join(tmpdir(), 'rag-legacy-'))
+  const path = join(directory, 'index.sqlite')
+  const legacy = new DatabaseSync(path)
+  legacy.exec(`CREATE TABLE rag_index_runs (
+    id TEXT PRIMARY KEY, created_at TEXT NOT NULL, model TEXT NOT NULL,
+    source_count INTEGER NOT NULL, chunk_count INTEGER NOT NULL,
+    vector_dimensions INTEGER NOT NULL, strategies_json TEXT NOT NULL
+  );
+  INSERT INTO rag_index_runs VALUES ('old', '2026-01-01T00:00:00.000Z', 'nomic-embed-text', 1, 1, 768, '["fixed"]');`)
+  legacy.close()
+  const store = new RagIndexStore(path)
+  try { assert.equal(store.latestRun()?.embeddingProfile, 'plain') }
+  finally { store.close(); rmSync(directory, { recursive: true, force: true }) }
 })
 
 test('Ollama client accepts a batched API response', async () => {
@@ -62,6 +91,33 @@ test('Ollama client accepts a batched API response', async () => {
   try {
     const client = new OllamaEmbeddingClient(`http://127.0.0.1:${address.port}`, 'test-model')
     assert.deepEqual(await client.embed(['one', 'two']), [[1, 0], [0, 1]])
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()))
+  }
+})
+
+test('Nomic retrieval prefixes documents and questions but preserves legacy plain queries', async () => {
+  const inputs: string[][] = []
+  const server = createServer((request, response) => {
+    let body = ''
+    request.on('data', (part) => { body += part })
+    request.on('end', () => {
+      const payload = JSON.parse(body) as { input: string[] }
+      inputs.push(payload.input)
+      response.setHeader('content-type', 'application/json')
+      response.end(JSON.stringify({ embeddings: payload.input.map(() => [1, 0]) }))
+    })
+  })
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+  const address = server.address()
+  assert.ok(address && typeof address === 'object')
+  try {
+    const client = new OllamaEmbeddingClient(`http://127.0.0.1:${address.port}`, 'nomic-embed-text-v2-moe')
+    const [chunk] = chunkFixed(documentFromText('docs/example.md', '# Example\n\nA useful passage.'))
+    await client.embedQuery('Question?')
+    await client.embedChunks([chunk])
+    await client.embedQueries(['Old question?'], 'plain')
+    assert.deepEqual(inputs, [['search_query: Question?'], [`search_document: ${chunk.title}\n${chunk.section}\n${chunk.text}`], ['Old question?']])
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()))
   }

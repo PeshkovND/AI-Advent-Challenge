@@ -32,7 +32,7 @@ function printHelp() {
   npm run rag:search -- "текст запроса" [--strategy fixed|structured] [--database путь]
   npm run rag:demo
 
-По умолчанию индексируются README.md, docs/, server/ и src/.`)
+По умолчанию индексируются README.md, docs/, server/ и src/, кроме проверочных материалов Day 22.`)
 }
 
 async function index(args: string[]) {
@@ -45,7 +45,7 @@ async function index(args: string[]) {
   const embedded = await ollama.embedChunks(chunks)
   const store = new RagIndexStore(options.database)
   try {
-    const run = store.saveIndex(embedded, documents.length, ollama.model, strategies)
+    const run = store.saveIndex(embedded, documents.length, ollama.model, strategies, ollama.embeddingProfile)
     const byStrategy = Object.fromEntries(strategies.map((strategy) => [strategy, chunks.filter((chunk) => chunk.strategy === strategy).length]))
     console.log(JSON.stringify({ status: 'ok', run, chunksByStrategy: byStrategy }, null, 2))
   } finally { store.close() }
@@ -77,10 +77,11 @@ async function search(args: string[]) {
   const query = queryParts.join(' ')
   if (!query.trim()) throw new Error('Передайте текст запроса после `--`.')
   const options = parseOptions(optionArgs)
-  const ollama = new OllamaEmbeddingClient()
-  const [embedding] = await ollama.embed([query])
   const store = new RagIndexStore(options.database)
   try {
+    const run = store.latestRun()
+    if (!run) throw new Error('Индекс ещё не создан.')
+    const [embedding] = await new OllamaEmbeddingClient(undefined, run.model).embedQuery(query, run.embeddingProfile)
     const strategy = options.strategy === 'all' ? undefined : options.strategy
     console.log(JSON.stringify(store.search(embedding, 5, strategy).map(({ chunk, score }) => ({ score: Number(score.toFixed(4)), metadata: { source: chunk.source, title: chunk.title, section: chunk.section, chunk_id: chunk.chunk_id, strategy: chunk.strategy }, text: chunk.text })), null, 2))
   } finally { store.close() }
