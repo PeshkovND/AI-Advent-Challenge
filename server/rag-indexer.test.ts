@@ -11,7 +11,7 @@ test('project corpus excludes control questions and their answer key', () => {
   const directory = mkdtempSync(join(tmpdir(), 'rag-corpus-'))
   try {
     for (const folder of ['docs', 'server', 'src']) mkdirSync(join(directory, folder))
-    for (const source of ['docs/day-21.md', 'docs/day-22.md', 'server/rag-check-questions.ts', 'src/rag-questions.ts', 'src/App.tsx']) {
+    for (const source of ['docs/day-21.md', 'docs/day-22.md', 'docs/day-23.md', 'server/rag-check-questions.ts', 'server/rag-evaluate.ts', 'server/rag-retrieval.test.ts', 'src/example.spec.tsx', 'src/rag-questions.ts', 'src/rag-day23-questions.ts', 'src/App.tsx']) {
       writeFileSync(join(directory, source), 'Test document')
     }
     assert.deepEqual(collectProjectDocuments(directory).map((document) => document.source), ['docs/day-21.md', 'src/App.tsx'])
@@ -71,6 +71,19 @@ test('existing indexes are marked plain when embedding profile is added', () => 
   const store = new RagIndexStore(path)
   try { assert.equal(store.latestRun()?.embeddingProfile, 'plain') }
   finally { store.close(); rmSync(directory, { recursive: true, force: true }) }
+})
+
+test('pinned search keeps using the selected index after a new run is saved', () => {
+  const directory = mkdtempSync(join(tmpdir(), 'rag-pinned-'))
+  const store = new RagIndexStore(join(directory, 'index.sqlite'))
+  try {
+    const [chunk] = chunkFixed(documentFromText('old.md', 'Old corpus'))
+    const old = store.saveIndex([{ ...chunk, embedding: [1, 0] }], 1, 'old-model', ['fixed'], 'plain')
+    const [next] = chunkFixed(documentFromText('new.md', 'New corpus'))
+    store.saveIndex([{ ...next, embedding: [0, 1, 0] }], 1, 'new-model', ['fixed'], 'plain')
+    assert.equal(store.getRun(old.id)?.model, 'old-model')
+    assert.equal(store.search([1, 0], 4, 'fixed', old.id)[0].chunk.source, 'old.md')
+  } finally { store.close(); rmSync(directory, { recursive: true, force: true }) }
 })
 
 test('Ollama client accepts a batched API response', async () => {

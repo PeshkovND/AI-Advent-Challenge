@@ -10,7 +10,8 @@ import type { AgentInvariantsConfig, InvariantCheckInfo, InvariantVerdict } from
 import type { McpToolRuntime, McpToolCall } from './mcp-tool-runtime'
 import { actorForStage, applyTaskDecision, newTaskState, parseTaskDecision, parseTaskInputInterpretation, taskInputIntentInput, taskInputIntentSystemPrompt, taskScopeId, taskStatePrompt } from './task-state'
 import type { AgentTaskState, TaskDecision, TaskInputInterpretation, TaskTransitionAuthorization } from './task-state'
-import { RagRetriever, type RagConfig, type RagSource } from './rag-retrieval'
+import { RagRetriever, type RagConfig, type RagCompletion } from './rag-retrieval'
+import type { RagResult } from '../src/rag-types'
 
 export type AgentProvider = 'deepseek' | 'huggingface' | 'openrouter'
 export type AgentMessageRole = 'system' | 'user' | 'assistant'
@@ -142,7 +143,7 @@ export type AgentRunResult = {
   taskNotice?: string
   invariantCheck?: InvariantCheckInfo
   mcpToolCalls?: McpToolCall[]
-  rag?: { indexRunId: string; sources: RagSource[] }
+  rag?: RagResult
 }
 
 export type AgentTaskRunEvent = {
@@ -371,7 +372,7 @@ export class AgentError extends Error {
   }
 }
 
-class LlmClient {
+export class LlmClient {
   constructor(private readonly options: AgentServiceOptions) {}
 
   async complete(messages: AgentMessage[], options: LlmOptions, signal?: AbortSignal): Promise<CompletionResult> {
@@ -576,7 +577,7 @@ export class Agent {
       : { config: this.config, history }
     const memory = this.memory ? await this.memory.prepare(prepared.history, validatedInput, { history, summary: prepared.summary ?? summary }) : undefined
     const effectiveConfig = withRuntimeContext(prepared.config, memory?.systemPrompt)
-    const ragContext = this.config.rag?.enabled ? await this.ragRetriever.retrieve(validatedInput, this.config.rag) : undefined
+    const ragContext = this.config.rag?.enabled ? await this.ragRetriever.retrieve(validatedInput, this.config.rag, createRagCompletion(this.client, this.config, signal), signal) : undefined
     const instructions = [runtimeInstruction, ragContext?.instruction].filter(Boolean).join('\n\n') || undefined
     const messages = buildMessages(effectiveConfig, memory?.history ?? prepared.history, validatedInput, prepared.summary ?? summary, instructions)
     const mcpResult = this.config.mcp?.enabled
@@ -594,7 +595,7 @@ export class Agent {
       : await this.client.complete(messages, toLlmOptions(this.config), signal)
     let rawOutput = completion.content
     let { output, taskDecision } = this.resolveTaskOutput(rawOutput, validatedInput)
-    let tokenMetrics = sumTokenMetrics(preflight.tokenMetrics, createTokenMetrics(this.config, validatedInput, completion))
+    let tokenMetrics = sumTokenMetrics(preflight.tokenMetrics, ragContext?.trace?.usage, createTokenMetrics(this.config, validatedInput, completion))
     let attempts = 0
     const violatedIds = new Set<string>()
     let postCheck = await this.checkInvariants('output', output)
@@ -651,7 +652,7 @@ export class Agent {
       ...(taskDecision ? { taskDecision } : {}),
       ...(invariantCheck ? { invariantCheck } : {}),
       ...(mcpResult?.toolCalls.length ? { mcpToolCalls: mcpResult.toolCalls } : {}),
-      ...(ragContext ? { rag: { indexRunId: ragContext.indexRunId, sources: ragContext.sources } } : {}),
+      ...(ragContext ? { rag: { indexRunId: ragContext.indexRunId, sources: ragContext.sources, trace: ragContext.trace } } : {}),
     }
   }
 
@@ -685,14 +686,14 @@ export class Agent {
       return result
     }
     const validatedInput = validateInput(input, this.config.inputPolicy)
+    const startedAt = Date.now()
     const prepared = this.contextStrategies
       ? await this.contextStrategies.prepareAgentContext(contextId, validatedInput, this.config, history)
       : { config: this.config, history }
     const memory = this.memory ? await this.memory.prepare(prepared.history, validatedInput, { history, summary: prepared.summary ?? summary }) : undefined
     const effectiveConfig = withRuntimeContext(prepared.config, memory?.systemPrompt)
-    const ragContext = this.config.rag?.enabled ? await this.ragRetriever.retrieve(validatedInput, this.config.rag) : undefined
+    const ragContext = this.config.rag?.enabled ? await this.ragRetriever.retrieve(validatedInput, this.config.rag, createRagCompletion(this.client, this.config)) : undefined
     const messages = buildMessages(effectiveConfig, memory?.history ?? prepared.history, validatedInput, prepared.summary ?? summary, ragContext?.instruction)
-    const startedAt = Date.now()
     let streamedOutput = ''
     let emittedOutput = ''
 
@@ -706,7 +707,7 @@ export class Agent {
 
     const taskDecision = this.config.taskMachine ? parseTaskDecision(streamedOutput) : undefined
     const output = taskDecision?.answer ?? applyOutputPolicy(streamedOutput, this.config.outputPolicy)
-    const tokenMetrics = createTokenMetrics(this.config, validatedInput, completion)
+    const tokenMetrics = sumTokenMetrics(ragContext?.trace?.usage, createTokenMetrics(this.config, validatedInput, completion))
 
     const contextCommit = this.contextStrategies && this.config.contextStrategy
       ? await this.contextStrategies.recordAgentTurn(contextId, this.config, validatedInput, output, tokenMetrics, prepared)
@@ -719,6 +720,9 @@ export class Agent {
       model: this.config.model,
       durationMs: Date.now() - startedAt,
       tokenMetrics,
+      tokens: tokenMetrics.completionTokens,
+      promptTokens: tokenMetrics.promptTokens,
+      totalTokens: tokenMetrics.totalTokens,
       ...(memory ? { memory: memory.snapshot } : {}),
       ...(memory?.classifierTokenMetrics ? { memoryClassifierTokenMetrics: memory.classifierTokenMetrics } : {}),
       ...(memory?.autoUpdate ? { autoMemoryUpdate: memory.autoUpdate } : {}),
@@ -728,7 +732,7 @@ export class Agent {
       ...(prepared.strategyTokenMetrics ? { strategyTokenMetrics: prepared.strategyTokenMetrics } : {}),
       ...(prepared.strategyError ? { strategyError: prepared.strategyError } : {}),
       ...(taskDecision ? { taskDecision } : {}),
-      ...(ragContext ? { rag: { indexRunId: ragContext.indexRunId, sources: ragContext.sources } } : {}),
+      ...(ragContext ? { rag: { indexRunId: ragContext.indexRunId, sources: ragContext.sources, trace: ragContext.trace } } : {}),
     }
   }
 
@@ -1594,6 +1598,20 @@ function parseHistory(value: unknown): AgentMessage[] {
   })
 }
 
+/** Auxiliary RAG calls share the normal agent provider and credentials; their usage is counted. */
+export function createRagCompletion(client: Pick<LlmClient, 'complete'>, config: AgentConfig, signal?: AbortSignal): RagCompletion {
+  return async (messages, stage) => {
+    const timeout = AbortSignal.timeout(stage === 'rewrite' ? 45_000 : 90_000)
+    const completion = await client.complete(messages, {
+      provider: config.provider ?? 'deepseek', model: config.model ?? 'deepseek-v4-flash',
+      temperature: 0, maxTokens: stage === 'rewrite' ? 400 : 4_096, format: 'json',
+    }, signal ? AbortSignal.any([signal, timeout]) : timeout)
+    // Auxiliary prompts are not a new user message; count their exact API usage only.
+    const usage = createTokenMetrics(config, '', completion)
+    return { content: completion.content, usage }
+  }
+}
+
 function createTokenMetrics(
   config: AgentConfig,
   input: string,
@@ -1778,11 +1796,26 @@ function normalizeMcpConfig(value: unknown): AgentConfig['mcp'] | undefined {
   }
 }
 
-function normalizeRagConfig(value: unknown): RagConfig | undefined {
+export function normalizeRagConfig(value: unknown): RagConfig | undefined {
   if (!isRecord(value) || value.enabled !== true) return undefined
   const strategy = value.strategy === 'fixed' ? 'fixed' : 'structured'
   const topK = readInteger(value.topK, 1, 8) ?? 4
-  return { enabled: true, strategy, topK }
+  const validNumber = (input: unknown, min: number, max: number, integer = false): input is number => typeof input === 'number' && Number.isFinite(input) && input >= min && input <= max && (!integer || Number.isInteger(input))
+  const candidateTopK = validNumber(value.candidateTopK, topK, 30, true) ? value.candidateTopK : undefined
+  if (value.candidateTopK !== undefined && candidateTopK === undefined) throw new AgentError(`candidateTopK должен быть целым числом от topK (${topK}) до 30.`)
+  const minSimilarity = validNumber(value.minSimilarity, -1, 1) ? value.minSimilarity : undefined
+  if (value.minSimilarity !== undefined && minSimilarity === undefined) throw new AgentError('minSimilarity должен быть числом от -1 до 1.')
+  const rerankInput = isRecord(value.rerank) && value.rerank.enabled === true ? value.rerank : undefined
+  const minRelevance = rerankInput?.minRelevance === undefined ? 2 : validNumber(rerankInput.minRelevance, 0, 3, true) ? rerankInput.minRelevance : undefined
+  if (rerankInput && minRelevance === undefined) throw new AgentError('minRelevance должен быть целым числом от 0 до 3.')
+  return {
+    enabled: true, strategy, topK,
+    ...(candidateTopK !== undefined ? { candidateTopK } : {}),
+    ...(minSimilarity !== undefined ? { minSimilarity } : {}),
+    ...(value.queryRewrite === true ? { queryRewrite: true } : {}),
+    ...(rerankInput ? { rerank: { enabled: true, minRelevance: minRelevance! } } : {}),
+    ...(readString(value.indexRunId, 120) ? { indexRunId: readString(value.indexRunId, 120) } : {}),
+  }
 }
 
 function normalizeInputPolicy(value: unknown) {

@@ -60,7 +60,7 @@ export type RagSearchResult = {
 }
 
 const supportedExtensions = new Set(['.md', '.ts', '.tsx', '.js', '.jsx', '.css', '.pdf'])
-const evaluationSources = new Set(['docs/day-22.md', 'src/rag-questions.ts', 'server/rag-check-questions.ts'])
+const evaluationSources = new Set(['docs/day-22.md', 'docs/day-23.md', 'src/rag-questions.ts', 'src/rag-day23-questions.ts', 'server/rag-check-questions.ts', 'server/rag-evaluate.ts'])
 const defaultChunkSize = 200
 const defaultOverlap = 40
 
@@ -121,7 +121,7 @@ function listFiles(directory: string): string[] {
 /** The default corpus is the course notes and application code already present in this repository. */
 export function collectProjectDocuments(root = process.cwd()) {
   const candidates = [resolve(root, 'README.md'), ...listFiles(resolve(root, 'docs')), ...listFiles(resolve(root, 'server')), ...listFiles(resolve(root, 'src'))]
-  return candidates.filter((filePath) => existsSync(filePath) && !evaluationSources.has(relative(root, filePath))).sort().map((filePath) => readSourceDocument(root, filePath))
+  return candidates.filter((filePath) => existsSync(filePath) && !evaluationSources.has(relative(root, filePath)) && !/\.(test|spec)\.[cm]?[jt]sx?$/.test(filePath)).sort().map((filePath) => readSourceDocument(root, filePath))
 }
 
 function makeChunk(document: SourceDocument, strategy: ChunkingStrategy, ordinal: number, section: string, text: string) {
@@ -203,7 +203,7 @@ export class OllamaEmbeddingClient {
     this.embeddingProfile = model.startsWith('nomic-embed-text') ? 'nomic-retrieval-metadata-v1' : 'plain'
   }
 
-  async embed(texts: string[]) {
+  async embed(texts: string[], signal?: AbortSignal) {
     if (texts.length === 0) return []
     let response: Response
     try {
@@ -211,6 +211,7 @@ export class OllamaEmbeddingClient {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ model: this.model, input: texts }),
+        signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(60_000)]) : AbortSignal.timeout(60_000),
       })
     } catch (error) {
       throw new Error(`Ollama недоступен по ${this.baseUrl}. Запустите Ollama и выполните \`ollama pull ${this.model}\`. ${error instanceof Error ? error.message : ''}`.trim())
@@ -226,8 +227,8 @@ export class OllamaEmbeddingClient {
     return embeddings
   }
 
-  async embedQueries(questions: string[], profile = this.embeddingProfile) {
-    return this.embed(questions.map((question) => profile === 'plain' ? question : `search_query: ${question}`))
+  async embedQueries(questions: string[], profile = this.embeddingProfile, signal?: AbortSignal) {
+    return this.embed(questions.map((question) => profile === 'plain' ? question : `search_query: ${question}`), signal)
   }
 
   async embedQuery(question: string, profile = this.embeddingProfile) {
@@ -310,14 +311,22 @@ export class RagIndexStore {
 
   latestRun() {
     const row = this.database.prepare('SELECT * FROM rag_index_runs ORDER BY created_at DESC LIMIT 1').get() as Record<string, unknown> | undefined
+    return this.readRun(row)
+  }
+
+  getRun(id: string) {
+    return this.readRun(this.database.prepare('SELECT * FROM rag_index_runs WHERE id = ?').get(id) as Record<string, unknown> | undefined)
+  }
+
+  private readRun(row: Record<string, unknown> | undefined) {
     if (!row) return undefined
     return {
       id: String(row.id), createdAt: String(row.created_at), model: String(row.model), embeddingProfile: String(row.embedding_profile) as EmbeddingProfile, sourceCount: Number(row.source_count), chunkCount: Number(row.chunk_count), vectorDimensions: Number(row.vector_dimensions), strategies: parseJson(row.strategies_json) as ChunkingStrategy[],
     } satisfies RagIndexRun
   }
 
-  search(queryEmbedding: number[], limit = 5, strategy?: ChunkingStrategy) {
-    const run = this.latestRun()
+  search(queryEmbedding: number[], limit = 5, strategy?: ChunkingStrategy, runId?: string) {
+    const run = runId ? this.getRun(runId) : this.latestRun()
     if (!run) throw new Error('Индекс ещё не создан.')
     if (queryEmbedding.length !== run.vectorDimensions) throw new Error(`Размерность запроса (${queryEmbedding.length}) не совпадает с индексом (${run.vectorDimensions}).`)
     const rows = this.database.prepare(`SELECT chunks.*, embeddings.vector_json FROM rag_document_chunks chunks

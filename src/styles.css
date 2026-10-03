@@ -777,8 +777,16 @@ code { padding: 2px 4px; color: #5d60e6; background: #f0f0ff; border-radius: 4px
 .rag-sources small { overflow-wrap: anywhere; }
 .rag-sources p { max-height: 130px; overflow: auto; margin: 8px 0 0; color: #6c7284; white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; line-height: 1.5; }
 
+.rag-agent-four { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.rag-unified-grid > .rag-expected { grid-column: 1 / -1; }
+.rag-warning { margin: 10px 0; padding: 9px; border-radius: 7px; background: #fff8e8; color: #926a35; font-size: 11px; line-height: 1.5; overflow-wrap: anywhere; }
+.rag-note { overflow-wrap: anywhere; }
+.rag-answer-text pre { max-width: 100%; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
+.rag-answer-text table { display: block; max-width: 100%; overflow-x: auto; }
+
 @media (max-width: 1200px) {
   .rag-comparison-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .rag-agent-four { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 @media (max-width: 840px) {
@@ -790,6 +798,7 @@ code { padding: 2px 4px; color: #5d60e6; background: #f0f0ff; border-radius: 4px
   .agents-layout { grid-template-columns: 1fr; }
   .invariants-layout { grid-template-columns: 1fr; }
   .rag-comparison-grid { grid-template-columns: 1fr; }
+  .rag-agent-four { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 680px) {

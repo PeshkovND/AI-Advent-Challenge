@@ -57,6 +57,7 @@ npm run agents:cli -- bulk --config agents-config.example.json
 Оркестрация Calendar, Scheduler и Telegram MCP-серверов описана в [`docs/day-20.md`](docs/day-20.md).
 Индексация локального корпуса для RAG, Ollama и сравнение chunking-стратегий описаны в [`docs/day-21.md`](docs/day-21.md).
 Первый RAG-запрос через обычного агента, отдельная страница сравнения и 10 контрольных вопросов описаны в [`docs/day-22.md`](docs/day-22.md).
+Query rewrite, LLM-реранкинг, пороги релевантности и улучшенный режим на общей странице «RAG» описаны в [`docs/day-23.md`](docs/day-23.md).
 
 ## Запуск
 

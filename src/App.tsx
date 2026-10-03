@@ -4,6 +4,7 @@ import rehypeKatex from 'rehype-katex'
 import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
 import RagPage from './RagPage'
+import type { RagConfig } from './rag-types'
 
 type MessageRole = 'user' | 'assistant'
 type Page = 'chat' | 'compare' | 'reasoning' | 'temperature' | 'models' | 'agents' | 'rag' | 'context-demo' | 'context-comparison' | 'context-strategies' | 'context-branching' | 'memory-layers' | 'personalization' | 'task-state' | 'calendar-mcp' | 'scheduler'
@@ -96,7 +97,7 @@ type AgentConfig = {
   taskState?: AgentTaskState
   taskMachine?: boolean
   mcp?: { enabled: boolean; servers: string[]; toolAccess?: 'all' | 'read-only'; serverToolAccess?: Record<string, 'all' | 'read-only'> }
-  rag?: { enabled: boolean; strategy: 'fixed' | 'structured'; topK: number }
+  rag?: RagConfig
 }
 type AgentInvariant = { id: string; title: string; rule: string }
 type InvariantField = AgentInvariant
@@ -266,7 +267,11 @@ const createStopSequenceField = (value = ''): StopSequenceField => ({ id: crypto
 const createInvariantField = (): InvariantField => ({ id: `invariant-${crypto.randomUUID()}`, title: '', rule: '' })
 
 function App() {
-  const [activePage, setActivePage] = useState<Page>('chat')
+  const [activePage, setActivePage] = useState<Page>(() => {
+    try { return sessionStorage.getItem('deepchat-rag-open') === 'true' || sessionStorage.getItem('deepchat-day23-open') === 'true' ? 'rag' : 'chat' }
+    catch { return 'chat' }
+  })
+  useEffect(() => { try { sessionStorage.setItem('deepchat-rag-open', String(activePage === 'rag')); sessionStorage.removeItem('deepchat-day23-open') } catch { /* Navigation works without storage. */ } }, [activePage])
 
   return (
     <div className="day-app">
@@ -780,6 +785,11 @@ function AgentsPage() {
   const [ragEnabled, setRagEnabled] = useState(false)
   const [ragStrategy, setRagStrategy] = useState<'fixed' | 'structured'>('structured')
   const [ragTopK, setRagTopK] = useState('4')
+  const [ragCandidateTopK, setRagCandidateTopK] = useState('20')
+  const [ragRewrite, setRagRewrite] = useState(false)
+  const [ragRerank, setRagRerank] = useState(false)
+  const [ragMinRelevance, setRagMinRelevance] = useState('2')
+  const [ragMinSimilarity, setRagMinSimilarity] = useState('')
   const [input, setInput] = useState('')
   const [answer, setAnswer] = useState('')
   const [runMeta, setRunMeta] = useState<{ durationMs?: number; tokens?: number; conversationTokens?: number; tokenMetrics?: AgentTokenMetrics; invariantCheck?: InvariantCheckInfo } | null>(null)
@@ -910,7 +920,13 @@ function AgentsPage() {
         } : undefined,
         invariants: invariantsEnabled ? { enabled: true, items: invariantItems } : undefined,
         mcp: mcpEnabled ? { enabled: true, servers: ['yandex-calendar'] } : undefined,
-        rag: ragEnabled ? { enabled: true, strategy: ragStrategy, topK: Math.min(Math.max(Number(ragTopK) || 4, 1), 8) } : undefined,
+        rag: ragEnabled ? {
+          enabled: true, strategy: ragStrategy, topK: Math.min(Math.max(Number(ragTopK) || 4, 1), 8),
+          candidateTopK: Number(ragCandidateTopK),
+          ...(ragRewrite ? { queryRewrite: true } : {}),
+          ...(ragRerank ? { rerank: { enabled: true, minRelevance: Number(ragMinRelevance) } } : {}),
+          ...(ragMinSimilarity.trim() ? { minSimilarity: Number(ragMinSimilarity) } : {}),
+        } : undefined,
       }
       const response = await fetch('/api/agents', {
         method: 'POST',
@@ -933,6 +949,8 @@ function AgentsPage() {
       setInvariantFields([])
       setMcpEnabled(false)
       setRagEnabled(false)
+      setRagRewrite(false)
+      setRagRerank(false)
       setError(null)
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : 'Не удалось создать агента.')
@@ -1017,7 +1035,17 @@ function AgentsPage() {
             </div>
             <label>Системный промпт<textarea value={systemPrompt} onChange={(event) => setSystemPrompt(event.target.value)} placeholder="Например: отвечай кратко и с примерами..." rows={3} /></label>
             <div className="invariant-editor"><div className="agent-field-heading"><span>MCP-инструменты</span><label className="invariant-toggle"><input type="checkbox" checked={mcpEnabled} onChange={(event) => setMcpEnabled(event.target.checked)} /> Включить Яндекс Календарь</label></div><p>Агент сам выбирает MCP-инструменты через нативный tool calling. В конфигурацию сохраняется только серверный id, без команд и секретов. Выбранная модель должна поддерживать function calling.</p></div>
-            <div className="invariant-editor"><div className="agent-field-heading"><span>Локальный RAG-индекс</span><label className="invariant-toggle"><input type="checkbox" checked={ragEnabled} onChange={(event) => setRagEnabled(event.target.checked)} /> Включить RAG</label></div><p>Перед ответом агент найдёт релевантные фрагменты в индексе Day 21 и покажет их источники.</p>{ragEnabled && <div className="agent-form-row"><label>Стратегия<select value={ragStrategy} onChange={(event) => setRagStrategy(event.target.value as 'fixed' | 'structured')}><option value="structured">По структуре</option><option value="fixed">По 200 слов</option></select></label><label>Количество чанков<input type="number" min="1" max="8" value={ragTopK} onChange={(event) => setRagTopK(event.target.value)} /></label></div>}</div>
+            <div className="invariant-editor">
+              <div className="agent-field-heading"><span>Локальный RAG-индекс</span><label className="invariant-toggle"><input type="checkbox" checked={ragEnabled} onChange={(event) => setRagEnabled(event.target.checked)} /> Включить RAG</label></div>
+              <p>Перед ответом агент найдёт фрагменты в локальном индексе. Rewrite и реранкинг используют дополнительные вызовы той же модели.</p>
+              {ragEnabled && <>
+                <div className="agent-form-row"><label>Стратегия<select value={ragStrategy} onChange={(event) => setRagStrategy(event.target.value as 'fixed' | 'structured')}><option value="structured">По структуре</option><option value="fixed">По 200 слов</option></select></label><label>Чанков для ответа<input type="number" min="1" max="8" value={ragTopK} onChange={(event) => setRagTopK(event.target.value)} /></label></div>
+                <div className="agent-form-row"><label>Кандидатов до отбора<input type="number" min={Number(ragTopK) || 4} max="30" value={ragCandidateTopK} onChange={(event) => setRagCandidateTopK(event.target.value)} /></label><label>Порог cosine · необязательно<input type="number" min="-1" max="1" step="0.05" placeholder="Выключен" value={ragMinSimilarity} onChange={(event) => setRagMinSimilarity(event.target.value)} /></label></div>
+                <label className="invariant-toggle"><input type="checkbox" checked={ragRewrite} onChange={(event) => setRagRewrite(event.target.checked)} /> Query rewrite</label>
+                <label className="invariant-toggle"><input type="checkbox" checked={ragRerank} onChange={(event) => setRagRerank(event.target.checked)} /> Реранкинг и фильтрация</label>
+                {ragRerank && <label>Порог релевантности<select value={ragMinRelevance} onChange={(event) => setRagMinRelevance(event.target.value)}><option value="0">0 · все</option><option value="1">1 · общая тема</option><option value="2">2 · частичный ответ</option><option value="3">3 · прямой ответ</option></select></label>}
+              </>}
+            </div>
             <div className="invariant-editor"><div className="agent-field-heading"><span>Инварианты</span><label className="invariant-toggle"><input type="checkbox" checked={invariantsEnabled} onChange={(event) => setInvariantsEnabled(event.target.checked)} /> Включить</label></div><p>Жёсткие правила, которые агент не имеет права нарушать.</p>{invariantsEnabled && <div className="invariant-list">{invariantFields.map((item, index) => <div className="invariant-row" key={item.id}><input value={item.title} onChange={(event) => setInvariantFields((current) => current.map((entry) => entry.id === item.id ? { ...entry, title: event.target.value } : entry))} placeholder={`Правило ${index + 1}, например: Стек`} aria-label={`Название инварианта ${index + 1}`} /><textarea value={item.rule} onChange={(event) => setInvariantFields((current) => current.map((entry) => entry.id === item.id ? { ...entry, rule: event.target.value } : entry))} placeholder="Например: Использовать только SwiftUI и iOS 16+." rows={2} aria-label={`Описание инварианта ${index + 1}`} /><button className="stop-remove" type="button" onClick={() => setInvariantFields((current) => current.filter((entry) => entry.id !== item.id))} aria-label={`Удалить инвариант ${index + 1}`}>×</button></div>)}<button className="stop-add" type="button" onClick={() => setInvariantFields((current) => [...current, createInvariantField()])}>＋ Добавить инвариант</button></div>}</div>
             <div className="agent-form-row">
               <label>Температура<input type="number" min="0" max="2" step="0.1" value={temperature} onChange={(event) => setTemperature(event.target.value)} /></label>
@@ -1059,12 +1087,14 @@ function AgentConfigDetails({ config }: { config: AgentConfig }) {
   const strategy = config.contextStrategy
   const strategyLabel = strategy?.strategy === 'sliding' ? `Sliding Window · N=${strategy.windowSize ?? '—'}` : strategy?.strategy === 'facts' ? `Sticky Facts · N=${strategy.windowSize ?? '—'}` : strategy?.strategy === 'branching' ? 'Branching' : strategy?.strategy === 'summary' ? `Summary · N=${strategy.summarizeAfterMessages ?? 10}` : 'не задана'
   const invariants = config.invariants?.enabled ? config.invariants.items ?? [] : []
-  return <div className="agent-config-details"><div className="agent-config-details-heading"><span>Параметры выбранного агента</span><small>Текущая конфигурация</small></div><div className="agent-config-details-grid"><div><small>Название</small><strong>{config.name || 'не задано'}</strong></div><div><small>Temperature</small><strong>{config.temperature ?? 'по умолчанию'}</strong></div><div><small>Максимум токенов ответа</small><strong>{config.maxTokens ?? 'без лимита'}</strong></div><div><small>Стратегия контекста</small><strong>{strategyLabel}</strong></div><div><small>Формат ответа</small><strong>{outputFormat}</strong></div><div><small>Лимит входа</small><strong>{config.inputPolicy?.maxCharacters ? `${config.inputPolicy.maxCharacters} символов` : 'без лимита'}</strong></div><div><small>Stop-последовательности</small><strong>{stopSequences}</strong></div><div><small>Инварианты</small><strong>{invariants.length ? `${invariants.length} активн.` : 'не заданы'}</strong></div><div><small>MCP</small><strong>{config.mcp?.enabled ? config.mcp.servers.join(' · ') : 'выключен'}</strong></div><div><small>RAG</small><strong>{config.rag?.enabled ? `${config.rag.strategy}, top ${config.rag.topK}` : 'выключен'}</strong></div><div className="agent-config-details-wide"><small>Системный промпт</small><strong>{config.systemPrompt || 'не задан'}</strong></div>{invariants.length > 0 && <div className="agent-config-details-wide"><small>Жёсткие правила</small><strong>{invariants.map((item) => `${item.title}: ${item.rule}`).join(' · ')}</strong></div>}</div></div>
+  const rag = config.rag
+  const ragLabel = rag?.enabled ? `${rag.strategy} · ${rag.candidateTopK ?? rag.topK} → ${rag.topK} · rewrite ${rag.queryRewrite ? 'вкл.' : 'выкл.'} · реранкинг ${rag.rerank?.enabled ? `≥ ${rag.rerank.minRelevance}/3` : 'выкл.'}${rag.minSimilarity !== undefined ? ` · cosine ≥ ${rag.minSimilarity}` : ''}` : 'выключен'
+  return <div className="agent-config-details"><div className="agent-config-details-heading"><span>Параметры выбранного агента</span><small>Текущая конфигурация</small></div><div className="agent-config-details-grid"><div><small>Название</small><strong>{config.name || 'не задано'}</strong></div><div><small>Temperature</small><strong>{config.temperature ?? 'по умолчанию'}</strong></div><div><small>Максимум токенов ответа</small><strong>{config.maxTokens ?? 'без лимита'}</strong></div><div><small>Стратегия контекста</small><strong>{strategyLabel}</strong></div><div><small>Формат ответа</small><strong>{outputFormat}</strong></div><div><small>Лимит входа</small><strong>{config.inputPolicy?.maxCharacters ? `${config.inputPolicy.maxCharacters} символов` : 'без лимита'}</strong></div><div><small>Stop-последовательности</small><strong>{stopSequences}</strong></div><div><small>Инварианты</small><strong>{invariants.length ? `${invariants.length} активн.` : 'не заданы'}</strong></div><div><small>MCP</small><strong>{config.mcp?.enabled ? config.mcp.servers.join(' · ') : 'выключен'}</strong></div><div><small>RAG</small><strong>{ragLabel}</strong></div><div className="agent-config-details-wide"><small>Системный промпт</small><strong>{config.systemPrompt || 'не задан'}</strong></div>{invariants.length > 0 && <div className="agent-config-details-wide"><small>Жёсткие правила</small><strong>{invariants.map((item) => `${item.title}: ${item.rule}`).join(' · ')}</strong></div>}</div></div>
 }
 
 function AgentTokenMetricsView({ metrics, conversationTokens }: { metrics: AgentTokenMetrics; conversationTokens?: number }) {
   const accumulatedTokens = conversationTokens ?? metrics.totalTokens
-  return <><div className="agent-token-metrics"><div><small>Текущий запрос</small><strong>~{metrics.inputTokens}</strong></div><div><small>Весь промпт</small><strong>{metrics.promptTokens}</strong></div><div><small>Всего за диалог</small><strong>{accumulatedTokens}</strong></div><div><small>Ответ модели</small><strong>{metrics.completionTokens}</strong></div></div><p className="agent-token-note">«Текущий запрос» — приблизительное число токенов только нового сообщения пользователя. «Весь промпт» — точный prompt_tokens: системный промпт, история и новый вопрос. «Всего за диалог» — накопленная сумма total_tokens успешных API-вызовов.</p></>
+  return <><div className="agent-token-metrics"><div><small>Текущий запрос</small><strong>~{metrics.inputTokens}</strong></div><div><small>Все промпты</small><strong>{metrics.promptTokens}</strong></div><div><small>Всего за диалог</small><strong>{accumulatedTokens}</strong></div><div><small>Генерация моделей</small><strong>{metrics.completionTokens}</strong></div></div><p className="agent-token-note">«Текущий запрос» — приблизительное число токенов нового сообщения. Остальные метрики суммируют точный usage всех успешных API-вызовов запроса, включая rewrite, реранкинг и проверки. «Всего за диалог» — накопленная сумма total_tokens.</p></>
 }
 
 function TokenUsageChart({ points }: { points: AgentTokenUsagePoint[] }) {

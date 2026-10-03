@@ -12,7 +12,7 @@ const context = { indexRunId: 'test-index', sources: [source], instruction: 'И�
 test('ordinary agent run adds RAG context but preserves original input', async () => {
   let retrievals = 0
   let sentMessages: Array<{ role: string; content: string }> = []
-  const retriever = { retrieve: async (question: string) => { assert.equal(question, 'Как работает worker?'); retrievals += 1; return context } } as RagRetriever
+  const retriever = { retrieve: async (question: string) => { assert.equal(question, 'Как работает worker?'); retrievals += 1; return context } } as unknown as RagRetriever
   const client = { complete: async (messages: typeof sentMessages) => { sentMessages = messages; return { content: 'Через BEGIN IMMEDIATE [1].', promptTokens: 30, tokens: 8, totalTokens: 38 } } } as unknown as ConstructorParameters<typeof Agent>[2]
   const agent = new Agent('rag-test', { provider: 'deepseek', model: 'test-model', rag: { enabled: true, strategy: 'structured', topK: 4 } }, client, undefined, undefined, retriever)
   const result = await agent.run('Как работает worker?')

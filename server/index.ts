@@ -13,6 +13,7 @@ import { SchedulerWorker } from './scheduler-worker'
 import { isContextDemoScenario, prepareContextDemo, resetContextDemo } from './context-demo'
 import { CONTEXT_COMPARISON_SUMMARIZE_AFTER_MESSAGES, contextComparisonDefaultInput, contextComparisonHistory } from './context-comparison'
 import { ContextStrategiesService } from './context-strategies'
+import { RagIndexStore } from './rag-indexer'
 
 type ChatRole = 'system' | 'user' | 'assistant'
 
@@ -240,6 +241,12 @@ const modelDefinitions: ModelDefinition[] = [
 
 app.use(express.json({ limit: '1mb' }))
 app.use('/api/agents', createAgentRouter(agentService))
+app.get('/api/rag/index', (_request, response) => {
+  let store: RagIndexStore | undefined
+  try { store = new RagIndexStore(); response.json({ index: store.latestRun() ?? null }) }
+  catch (error) { response.status(500).json({ error: error instanceof Error ? error.message : 'Не удалось прочитать индекс.' }) }
+  finally { store?.close() }
+})
 
 app.get('/api/scheduler/jobs', (_request, response) => {
   const jobs = schedulerStore.listJobs().map((job) => {

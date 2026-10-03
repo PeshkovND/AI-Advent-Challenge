@@ -23,6 +23,8 @@
     "rag:demo": "tsx server/rag-cli.ts demo",
     "test:rag": "tsx --test server/rag-indexer.test.ts",
     "test:rag:agent": "tsx --test server/rag-agent.test.ts",
+    "test:rag:retrieval": "tsx --test server/rag-retrieval.test.ts server/rag-report.test.ts",
+    "rag:evaluate": "tsx server/rag-evaluate.ts",
     "rag:check-questions": "tsx server/rag-check-questions.ts",
     "build": "vite build",
     "preview": "vite preview",
