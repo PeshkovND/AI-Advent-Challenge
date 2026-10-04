@@ -2,8 +2,10 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { parseRagReport } from '../src/rag-report-import'
 import { reportStats } from '../src/rag-evaluation'
-import { demoAgentConfig, demoModes, demoAgentIds, restoreDemoReport } from '../src/rag-demo-config'
+import { demoAgentConfig, demoQuestions, demoModes, demoAgentIds, restoreDemoReport } from '../src/rag-demo-config'
 import { ragQuestions } from '../src/rag-questions'
+import { ragAbstentionQuestion } from '../src/rag-day23-questions'
+import { parseGroundedAnswer } from './rag-grounding'
 
 const fixture = () => ({
   id: '1b424b2f-eb9d-4741-b863-fede94c2125c', createdAt: '2026-10-03T12:00:00.000Z', completed: true,
@@ -16,6 +18,18 @@ test('generated reports can be imported without transmitting or regenerating ans
   const report = parseRagReport(JSON.stringify({ ...fixture(), generatedAnswers: true }))
   assert.equal(report.results[1].answers.full?.output, 'Actual answer')
   assert.equal(report.index.id, 'frozen-index')
+})
+test('report import preserves grounding and literal citations without replacing old answers', () => {
+  const parsed = parseGroundedAnswer(JSON.stringify({ status: 'answered', claims: [{ text: 'Answer', citations: [{ chunkId: 'chunk', quote: 'Exact literal answer.' }] }] }),
+    [{ source: 'source.md', title: 'Title', section: 'Section', chunkId: 'chunk', strategy: 'structured', score: 0.5, text: 'Exact literal answer.' }])
+  if (parsed.status !== 'answered') throw new Error('Expected answer')
+  const saved = fixture()
+  const rag = { ...saved.results[1].answers.full.rag, grounding: { ...parsed, answer: 'Answer [1]', sources: [{ source: 'source.md', section: 'Section', chunkId: 'chunk' }],
+    verification: { status: 'passed', attempts: 1, judgments: [{ claimId: 1, supported: true, reason: 'Supported.' }] },
+    usage: { inputTokens: 0, promptTokens: 10, completionTokens: 5, totalTokens: 15 } } }
+  const report = parseRagReport(JSON.stringify({ ...saved, results: { 1: { ...saved.results[1], answers: { full: { ...saved.results[1].answers.full, rag } } } } }))
+  assert.equal(report.results[1].answers.full?.rag?.grounding?.citations[0].quote, 'Exact literal answer.')
+  assert.equal(report.results[1].answers.full?.output, 'Actual answer')
 })
 test('report import rejects retrieval-only probes and malformed nested fields', () => {
   assert.throws(() => parseRagReport(JSON.stringify({ ...fixture(), generatedAnswers: false })), /без ответов/)
@@ -33,17 +47,44 @@ test('evidence coverage is not counted as correct answer quality', () => {
   assert.equal(reportStats(report, 'baseline').evidencePassed, 0)
 })
 
-test('simple demo uses four normal agents and enables enhancement only in the fourth', () => {
+test('simple demo uses four normal agents, grounding in all RAG modes and enhanced retrieval only in the fourth', () => {
   assert.equal(new Set(Object.values(demoAgentIds)).size, 4)
   const configs = demoModes.map((mode) => demoAgentConfig(mode, 'same-index'))
   assert.ok(configs.every((config) => config.model === configs[0].model && config.systemPrompt === configs[0].systemPrompt && config.temperature === 0))
   assert.equal(configs[0].rag, undefined)
-  for (const config of configs.slice(1)) assert.equal(config.rag?.indexRunId, 'same-index')
+  for (const config of configs.slice(1)) {
+    assert.equal(config.rag?.indexRunId, 'same-index')
+    assert.equal(config.rag?.grounding?.enabled, true)
+  }
   const improved = demoAgentConfig('improved', 'same-index').rag
   assert.equal(improved?.queryRewrite, true)
   assert.equal(improved?.rerank?.minRelevance, 2)
   assert.equal(improved?.candidateTopK, 20)
-  assert.equal(demoAgentConfig('structured', 'same-index').rag?.queryRewrite, undefined)
+  assert.equal(improved?.grounding?.enabled, true)
+  for (const mode of ['structured', 'fixed'] as const) {
+    const basic = demoAgentConfig(mode, 'same-index').rag!
+    assert.equal(basic.strategy, mode)
+    assert.equal(basic.topK, 4)
+    assert.equal(basic.queryRewrite, undefined)
+    assert.equal(basic.rerank, undefined)
+    assert.equal(basic.minSimilarity, undefined)
+    assert.equal(basic.candidateTopK, undefined)
+  }
+})
+
+test('demo appends an abstention question without replacing the ten original questions or injecting an answer', () => {
+  assert.equal(ragQuestions.length, 10)
+  assert.equal(demoQuestions.length, 11)
+  assert.deepEqual(demoQuestions.slice(0, 10), ragQuestions)
+  assert.equal(new Set(demoQuestions.map((question) => question.id)).size, 11)
+  const question = demoQuestions[10]
+  assert.equal(question.id, 11)
+  assert.equal(question.question, ragAbstentionQuestion.question)
+  assert.deepEqual(question.sources, [])
+  assert.deepEqual(question.evidence, [])
+  assert.ok(question.expected.includes('Не знаю'))
+  assert.ok(question.expected.includes('уточнение'))
+  for (const mode of demoModes) assert.ok(!demoAgentConfig(mode, 'index').systemPrompt.includes('Redis'))
 })
 
 test('simple demo restores the fullest compatible report without inventing plain or fixed answers', () => {

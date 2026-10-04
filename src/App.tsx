@@ -788,6 +788,7 @@ function AgentsPage() {
   const [ragCandidateTopK, setRagCandidateTopK] = useState('20')
   const [ragRewrite, setRagRewrite] = useState(false)
   const [ragRerank, setRagRerank] = useState(false)
+  const [ragGrounding, setRagGrounding] = useState(false)
   const [ragMinRelevance, setRagMinRelevance] = useState('2')
   const [ragMinSimilarity, setRagMinSimilarity] = useState('')
   const [input, setInput] = useState('')
@@ -925,6 +926,7 @@ function AgentsPage() {
           candidateTopK: Number(ragCandidateTopK),
           ...(ragRewrite ? { queryRewrite: true } : {}),
           ...(ragRerank ? { rerank: { enabled: true, minRelevance: Number(ragMinRelevance) } } : {}),
+          ...(ragGrounding ? { grounding: { enabled: true } } : {}),
           ...(ragMinSimilarity.trim() ? { minSimilarity: Number(ragMinSimilarity) } : {}),
         } : undefined,
       }
@@ -951,6 +953,7 @@ function AgentsPage() {
       setRagEnabled(false)
       setRagRewrite(false)
       setRagRerank(false)
+      setRagGrounding(false)
       setError(null)
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : 'Не удалось создать агента.')
@@ -1044,6 +1047,7 @@ function AgentsPage() {
                 <label className="invariant-toggle"><input type="checkbox" checked={ragRewrite} onChange={(event) => setRagRewrite(event.target.checked)} /> Query rewrite</label>
                 <label className="invariant-toggle"><input type="checkbox" checked={ragRerank} onChange={(event) => setRagRerank(event.target.checked)} /> Реранкинг и фильтрация</label>
                 {ragRerank && <label>Порог релевантности<select value={ragMinRelevance} onChange={(event) => setRagMinRelevance(event.target.value)}><option value="0">0 · все</option><option value="1">1 · общая тема</option><option value="2">2 · частичный ответ</option><option value="3">3 · прямой ответ</option></select></label>}
+                <label className="invariant-toggle"><input type="checkbox" checked={ragGrounding} onChange={(event) => setRagGrounding(event.target.checked)} /> Обязательные цитаты и проверка ответа</label>
               </>}
             </div>
             <div className="invariant-editor"><div className="agent-field-heading"><span>Инварианты</span><label className="invariant-toggle"><input type="checkbox" checked={invariantsEnabled} onChange={(event) => setInvariantsEnabled(event.target.checked)} /> Включить</label></div><p>Жёсткие правила, которые агент не имеет права нарушать.</p>{invariantsEnabled && <div className="invariant-list">{invariantFields.map((item, index) => <div className="invariant-row" key={item.id}><input value={item.title} onChange={(event) => setInvariantFields((current) => current.map((entry) => entry.id === item.id ? { ...entry, title: event.target.value } : entry))} placeholder={`Правило ${index + 1}, например: Стек`} aria-label={`Название инварианта ${index + 1}`} /><textarea value={item.rule} onChange={(event) => setInvariantFields((current) => current.map((entry) => entry.id === item.id ? { ...entry, rule: event.target.value } : entry))} placeholder="Например: Использовать только SwiftUI и iOS 16+." rows={2} aria-label={`Описание инварианта ${index + 1}`} /><button className="stop-remove" type="button" onClick={() => setInvariantFields((current) => current.filter((entry) => entry.id !== item.id))} aria-label={`Удалить инвариант ${index + 1}`}>×</button></div>)}<button className="stop-add" type="button" onClick={() => setInvariantFields((current) => [...current, createInvariantField()])}>＋ Добавить инвариант</button></div>}</div>
@@ -1088,7 +1092,7 @@ function AgentConfigDetails({ config }: { config: AgentConfig }) {
   const strategyLabel = strategy?.strategy === 'sliding' ? `Sliding Window · N=${strategy.windowSize ?? '—'}` : strategy?.strategy === 'facts' ? `Sticky Facts · N=${strategy.windowSize ?? '—'}` : strategy?.strategy === 'branching' ? 'Branching' : strategy?.strategy === 'summary' ? `Summary · N=${strategy.summarizeAfterMessages ?? 10}` : 'не задана'
   const invariants = config.invariants?.enabled ? config.invariants.items ?? [] : []
   const rag = config.rag
-  const ragLabel = rag?.enabled ? `${rag.strategy} · ${rag.candidateTopK ?? rag.topK} → ${rag.topK} · rewrite ${rag.queryRewrite ? 'вкл.' : 'выкл.'} · реранкинг ${rag.rerank?.enabled ? `≥ ${rag.rerank.minRelevance}/3` : 'выкл.'}${rag.minSimilarity !== undefined ? ` · cosine ≥ ${rag.minSimilarity}` : ''}` : 'выключен'
+  const ragLabel = rag?.enabled ? `${rag.strategy} · ${rag.candidateTopK ?? rag.topK} → ${rag.topK} · rewrite ${rag.queryRewrite ? 'вкл.' : 'выкл.'} · реранкинг ${rag.rerank?.enabled ? `≥ ${rag.rerank.minRelevance}/3` : 'выкл.'}${rag.minSimilarity !== undefined ? ` · cosine ≥ ${rag.minSimilarity}` : ''} · цитаты ${rag.grounding?.enabled ? 'вкл.' : 'выкл.'}` : 'выключен'
   return <div className="agent-config-details"><div className="agent-config-details-heading"><span>Параметры выбранного агента</span><small>Текущая конфигурация</small></div><div className="agent-config-details-grid"><div><small>Название</small><strong>{config.name || 'не задано'}</strong></div><div><small>Temperature</small><strong>{config.temperature ?? 'по умолчанию'}</strong></div><div><small>Максимум токенов ответа</small><strong>{config.maxTokens ?? 'без лимита'}</strong></div><div><small>Стратегия контекста</small><strong>{strategyLabel}</strong></div><div><small>Формат ответа</small><strong>{outputFormat}</strong></div><div><small>Лимит входа</small><strong>{config.inputPolicy?.maxCharacters ? `${config.inputPolicy.maxCharacters} символов` : 'без лимита'}</strong></div><div><small>Stop-последовательности</small><strong>{stopSequences}</strong></div><div><small>Инварианты</small><strong>{invariants.length ? `${invariants.length} активн.` : 'не заданы'}</strong></div><div><small>MCP</small><strong>{config.mcp?.enabled ? config.mcp.servers.join(' · ') : 'выключен'}</strong></div><div><small>RAG</small><strong>{ragLabel}</strong></div><div className="agent-config-details-wide"><small>Системный промпт</small><strong>{config.systemPrompt || 'не задан'}</strong></div>{invariants.length > 0 && <div className="agent-config-details-wide"><small>Жёсткие правила</small><strong>{invariants.map((item) => `${item.title}: ${item.rule}`).join(' · ')}</strong></div>}</div></div>
 }
 

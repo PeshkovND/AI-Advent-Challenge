@@ -12,6 +12,7 @@ import { actorForStage, applyTaskDecision, newTaskState, parseTaskDecision, pars
 import type { AgentTaskState, TaskDecision, TaskInputInterpretation, TaskTransitionAuthorization } from './task-state'
 import { RagRetriever, type RagConfig, type RagCompletion } from './rag-retrieval'
 import type { RagResult } from '../src/rag-types'
+import { answerWithGrounding, renderGroundedAnswer } from './rag-grounding'
 
 export type AgentProvider = 'deepseek' | 'huggingface' | 'openrouter'
 export type AgentMessageRole = 'system' | 'user' | 'assistant'
@@ -493,6 +494,7 @@ export class Agent {
     private readonly mcpRuntime?: McpToolRuntime,
     private readonly ragRetriever: RagRetriever = new RagRetriever(),
   ) {
+    validateGroundingConfig(config)
     this.contextStrategies = contextStrategies
     if (config.memoryLayers) {
       this.memory = new AgentMemory(config.memoryLayers, async (systemPrompt, input) => {
@@ -578,6 +580,13 @@ export class Agent {
     const memory = this.memory ? await this.memory.prepare(prepared.history, validatedInput, { history, summary: prepared.summary ?? summary }) : undefined
     const effectiveConfig = withRuntimeContext(prepared.config, memory?.systemPrompt)
     const ragContext = this.config.rag?.enabled ? await this.ragRetriever.retrieve(validatedInput, this.config.rag, createRagCompletion(this.client, this.config, signal), signal) : undefined
+    let grounding: RagResult['grounding']
+    const groundedCompletion = async (answerMessages: AgentMessage[]) => {
+      grounding = await answerWithGrounding(validatedInput, answerMessages, ragContext!.sources, createRagCompletion(this.client, this.config, signal), signal)
+      const content = this.config.outputPolicy?.format === 'json' ? JSON.stringify(grounding) : renderGroundedAnswer(grounding)
+      if (this.config.outputPolicy?.maxCharacters !== undefined && content.length > this.config.outputPolicy.maxCharacters) throw new AgentError('Лимит ответа слишком мал для полного ответа с источниками и цитатами. Увеличьте maxCharacters.', 502)
+      return { content, tokens: grounding.usage.completionTokens, promptTokens: grounding.usage.promptTokens, totalTokens: grounding.usage.totalTokens }
+    }
     const instructions = [runtimeInstruction, ragContext?.instruction].filter(Boolean).join('\n\n') || undefined
     const messages = buildMessages(effectiveConfig, memory?.history ?? prepared.history, validatedInput, prepared.summary ?? summary, instructions)
     const mcpResult = this.config.mcp?.enabled
@@ -590,7 +599,9 @@ export class Agent {
       }, { provider: this.config.provider, model: this.config.model, temperature: this.config.temperature, maxTokens: this.config.maxTokens, servers: this.config.mcp.servers, toolAccess: this.config.mcp.toolAccess, serverToolAccess: this.config.mcp.serverToolAccess })
       : undefined
     if (this.config.mcp?.enabled && !mcpResult) throw new AgentError('MCP включён в конфигурации агента, но MCP runtime не настроен.', 503)
-    let completion = mcpResult
+    let completion = ragContext && this.config.rag?.grounding?.enabled
+      ? await groundedCompletion(messages)
+      : mcpResult
       ? { content: mcpResult.output, tokens: mcpResult.tokens, promptTokens: mcpResult.promptTokens, totalTokens: mcpResult.totalTokens }
       : await this.client.complete(messages, toLlmOptions(this.config), signal)
     let rawOutput = completion.content
@@ -604,7 +615,7 @@ export class Agent {
       attempts += 1
       for (const violation of postCheck.verdict.violations) violatedIds.add(violation.invariantId)
       const repairMessages: AgentMessage[] = [...messages, { role: 'system', content: repairInvariantPrompt(activeInvariants(this.config.invariants), postCheck.verdict) }]
-      completion = await this.client.complete(repairMessages, toLlmOptions(this.config), signal)
+      completion = grounding ? await groundedCompletion(repairMessages) : await this.client.complete(repairMessages, toLlmOptions(this.config), signal)
       rawOutput = completion.content
       const repairedTaskOutput = this.resolveTaskOutput(rawOutput, validatedInput)
       output = repairedTaskOutput.output
@@ -652,7 +663,7 @@ export class Agent {
       ...(taskDecision ? { taskDecision } : {}),
       ...(invariantCheck ? { invariantCheck } : {}),
       ...(mcpResult?.toolCalls.length ? { mcpToolCalls: mcpResult.toolCalls } : {}),
-      ...(ragContext ? { rag: { indexRunId: ragContext.indexRunId, sources: ragContext.sources, trace: ragContext.trace } } : {}),
+      ...(ragContext ? { rag: { indexRunId: ragContext.indexRunId, sources: ragContext.sources, trace: ragContext.trace, ...(grounding ? { grounding } : {}) } } : {}),
     }
   }
 
@@ -680,7 +691,7 @@ export class Agent {
   }
 
   async stream(input: string, history: AgentMessage[], onChunk: (content: string) => void, summary?: string, contextId = this.id, mcpContext: McpToolCall[] = [], clientContext?: AgentRuntimeContext): Promise<AgentRunResult> {
-    if (activeInvariants(this.config.invariants).length || this.config.mcp?.enabled) {
+    if (activeInvariants(this.config.invariants).length || this.config.mcp?.enabled || (this.config.rag?.enabled && this.config.rag.grounding?.enabled)) {
       const result = await this.run(input, history, summary, contextId, undefined, runtimeContextInstruction(clientContext), mcpContext, clientContext)
       onChunk(result.output)
       return result
@@ -1604,7 +1615,8 @@ export function createRagCompletion(client: Pick<LlmClient, 'complete'>, config:
     const timeout = AbortSignal.timeout(stage === 'rewrite' ? 45_000 : 90_000)
     const completion = await client.complete(messages, {
       provider: config.provider ?? 'deepseek', model: config.model ?? 'deepseek-v4-flash',
-      temperature: 0, maxTokens: stage === 'rewrite' ? 400 : 4_096, format: 'json',
+      temperature: stage === 'answer' ? config.temperature ?? 0 : 0,
+      maxTokens: stage === 'rewrite' ? 400 : stage === 'verify' ? 2_048 : stage === 'answer' ? config.maxTokens ?? 4_096 : 4_096, format: 'json',
     }, signal ? AbortSignal.any([signal, timeout]) : timeout)
     // Auxiliary prompts are not a new user message; count their exact API usage only.
     const usage = createTokenMetrics(config, '', completion)
@@ -1776,7 +1788,16 @@ function normalizeAgentConfig(value: unknown, defaultDeepSeekModel: string) {
     rag: normalizeRagConfig(input.rag),
   }
 
+  validateGroundingConfig(config)
   return removeUndefined(config)
+}
+
+function validateGroundingConfig(config: AgentConfig) {
+  if (!config.rag?.enabled || !config.rag.grounding?.enabled) return
+  // Citation verification is independent of retrieval enhancements. Basic RAG can
+  // keep its original top-K search; the generator/verifier must still reject unsupported facts.
+  if (config.taskMachine || config.mcp?.enabled) throw new AgentError('Режим проверяемых цитат работает с документами RAG и не совмещается с taskMachine или MCP-действиями. Используйте отдельного обычного RAG-агента.')
+  if (config.outputPolicy?.stopSequences?.length) throw new AgentError('Stop-последовательности несовместимы с полным JSON-контрактом цитат.')
 }
 
 function normalizeMcpConfig(value: unknown): AgentConfig['mcp'] | undefined {
@@ -1814,6 +1835,7 @@ export function normalizeRagConfig(value: unknown): RagConfig | undefined {
     ...(minSimilarity !== undefined ? { minSimilarity } : {}),
     ...(value.queryRewrite === true ? { queryRewrite: true } : {}),
     ...(rerankInput ? { rerank: { enabled: true, minRelevance: minRelevance! } } : {}),
+    ...(isRecord(value.grounding) && value.grounding.enabled === true ? { grounding: { enabled: true } } : {}),
     ...(readString(value.indexRunId, 120) ? { indexRunId: readString(value.indexRunId, 120) } : {}),
   }
 }

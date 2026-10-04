@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { ragQuestions, type RagEvidence } from './rag-questions'
-import { demoModes, demoAgentIds, demoLabels, demoAgentConfig, restoreDemoReport, type DemoSnapshot } from './rag-demo-config'
+import type { RagEvidence } from './rag-questions'
+import { demoQuestions, demoModes, demoAgentIds, demoLabels, demoAgentConfig, restoreDemoReport, type DemoSnapshot } from './rag-demo-config'
 import { listRagReports, loadDemoSnapshot, saveDemoSnapshot, type RagRunResult } from './rag-report-store'
 import { parseRagReport } from './rag-report-import'
 
@@ -87,7 +87,7 @@ export default function RagPage() {
       const current = await request<{ agents: AgentSummary[] }>('/api/agents')
       if (!demoModes.every((mode) => { const agent = current.agents.find((item) => item.id === demoAgentIds[mode]); return agent && sameConfig(agent.config, demoAgentConfig(mode, index.id)) })) throw new Error('Конфигурации агентов изменились. Обновите агентов перед запуском.')
       await persist(next)
-      for (const question of ragQuestions) {
+      for (const question of demoQuestions) {
         setProgressId(question.id)
         const conversationId = crypto.randomUUID()
         const outcomes = await Promise.allSettled(demoModes.map(async (mode) => {
@@ -118,32 +118,32 @@ export default function RagPage() {
     finally { setBusy(false) }
   }
   function downloadResults() {
-    const report = { generatedAt: snapshot?.createdAt, indexRunId: snapshot?.indexRunId, agents: demoAgentIds, questions: ragQuestions.map((item) => ({ ...item, result: results[item.id] ?? null })) }
+    const report = { generatedAt: snapshot?.createdAt, indexRunId: snapshot?.indexRunId, agents: demoAgentIds, questions: demoQuestions.map((item) => ({ ...item, result: results[item.id] ?? null })) }
     const url = URL.createObjectURL(new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' }))
     const link = document.createElement('a'); link.href = url; link.download = 'rag-comparison.json'; link.click(); URL.revokeObjectURL(url)
   }
-  const processed = ragQuestions.filter((question) => results[question.id]).length
+  const processed = demoQuestions.filter((question) => results[question.id]).length
   return <div className="page-view rag-page">
-    <header className="page-header"><div><p className="eyebrow">Дни 22–23 · сравнение RAG</p><h1>Ответ с документами и без них</h1><p className="header-description">Один вопрос и одна модель: без RAG, structured, fixed и улучшенный RAG с rewrite и реранкингом.</p></div></header>
+    <header className="page-header"><div><p className="eyebrow">Дни 22–24 · сравнение RAG</p><h1>Ответ с документами и без них</h1><p className="header-description">Один вопрос и одна модель: без RAG, structured, fixed и улучшенный RAG с проверяемыми цитатами.</p></div></header>
     {error && <div className="error-message" role="alert">{error}</div>}
     {storageWarning && <p className="rag-warning" role="alert">{storageWarning}</p>}
     <section className="rag-panel"><div className="section-heading"><div><span className="step-number">01</span><div><p className="eyebrow">Агенты</p><h2>Четыре режима для сравнения</h2></div></div></div>
-      <div className="rag-agent-pair rag-agent-four">{demoModes.map((mode) => <div key={mode}><strong>{demoLabels[mode]}</strong><span>{mode === 'improved' ? 'Structured · rewrite · реранкинг · 20 → 4' : mode === 'without' ? 'Поиск выключен' : `${mode} · top 4`}</span></div>)}</div>
+      <div className="rag-agent-pair rag-agent-four">{demoModes.map((mode) => <div key={mode}><strong>{demoLabels[mode]}</strong><span>{mode === 'improved' ? 'Rewrite · реранкинг · цитаты · проверка' : mode === 'without' ? 'Поиск выключен' : `${mode} · top 4 · цитаты · проверка`}</span></div>)}</div>
       <button className="compare-button" type="button" disabled={busy || loading || !index || agentsReady} onClick={() => void createAgents()}>{agentsReady ? 'Агенты готовы' : 'Создать или обновить агентов'} <span>→</span></button>
       {!index && <p className="rag-note">Для запуска нужен локальный индекс: npm run rag:index.</p>}
       <p className="rag-note">Обычные агенты · deepseek-v4-flash · одинаковый промпт · temperature 0. У улучшенного RAG порог релевантности 2/3; параметры заданы в конфигурации агента.</p>
     </section>
-    <section className="rag-panel"><div className="section-heading"><div><span className="step-number">02</span><div><p className="eyebrow">Контрольный набор</p><h2>10 вопросов · ожидаемое и фактическое</h2></div></div><span className="same-prompt">{processed}/10 обработано</span></div>
-      <p className="rag-note">При запуске вопросы и найденные фрагменты отправляются в DeepSeek. Улучшенный RAG делает дополнительные вызовы для rewrite и реранкинга.</p>
-      <div className="rag-toolbar"><button className="compare-button" type="button" disabled={!agentsReady || busy || loading} onClick={() => void runAll()}>{busy ? `Вопрос ${progressId ?? '…'} из 10…` : Object.keys(results).length ? 'Запустить все 10 заново' : 'Получить ответы на все 10 вопросов'} <span>→</span></button><button className="secondary-button" type="button" disabled={busy || loading || !Object.keys(results).length} onClick={downloadResults}>Скачать результаты JSON</button><button className="clear-context-button" type="button" disabled={busy || loading || !allAgentsExist} onClick={() => void clearAgents()}>Очистить тесты агентов</button></div>
+    <section className="rag-panel"><div className="section-heading"><div><span className="step-number">02</span><div><p className="eyebrow">Контрольный набор</p><h2>{demoQuestions.length} вопросов · ожидаемое и фактическое</h2></div></div><span className="same-prompt">{processed}/{demoQuestions.length} обработано</span></div>
+      <p className="rag-note">При запуске вопросы и найденные фрагменты отправляются в DeepSeek. Все RAG-агенты проверяют ответ по цитатам; улучшенный RAG дополнительно выполняет rewrite и реранкинг.</p>
+      <div className="rag-toolbar"><button className="compare-button" type="button" disabled={!agentsReady || busy || loading} onClick={() => void runAll()}>{busy ? `Вопрос ${progressId ?? '…'} из ${demoQuestions.length}…` : Object.keys(results).length ? `Запустить все ${demoQuestions.length} заново` : `Получить ответы на все ${demoQuestions.length} вопросов`} <span>→</span></button><button className="secondary-button" type="button" disabled={busy || loading || !Object.keys(results).length} onClick={downloadResults}>Скачать результаты JSON</button><button className="clear-context-button" type="button" disabled={busy || loading || !allAgentsExist} onClick={() => void clearAgents()}>Очистить тесты агентов</button></div>
       {snapshot && Object.keys(results).length > 0 && <p className="rag-note">Сохранены результаты от {new Date(snapshot.createdAt).toLocaleString('ru-RU')}. Они сохраняются после обновления страницы. Недостающие ответы можно получить новым прогоном.</p>}
-      <div className="rag-question-list">{ragQuestions.map((item) => {
+      <div className="rag-question-list">{demoQuestions.map((item) => {
         const comparison = results[item.id], answered = demoModes.filter((mode) => comparison?.[mode]).length
         return <article className="rag-question-card" key={item.id}>
           <div className="rag-question-heading"><h3>{item.id}. {item.question}</h3><small>{progressId === item.id ? 'Выполняется…' : comparison?.errors && Object.keys(comparison.errors).length ? 'Есть ошибка' : answered ? `Ответы: ${answered}/4` : 'Ожидает запуска'}</small></div>
           <div className="rag-comparison-grid rag-unified-grid">
-            <div className="rag-expected"><h4>Ожидаемый результат</h4><p>{item.expected}</p><strong>Ожидаемые источники</strong><div className="rag-source-tags">{item.sources.map((source) => <code key={source}>{source}</code>)}</div></div>
-            {demoModes.map((mode) => <RagAnswer key={mode} title={demoLabels[mode]} result={comparison?.[mode]} error={comparison?.errors?.[mode]} evidence={mode === 'without' ? undefined : item.evidence} />)}
+            <div className="rag-expected"><h4>Ожидаемый результат</h4><p>{item.expected}</p><strong>Ожидаемые источники</strong><div className="rag-source-tags">{item.sources.length ? item.sources.map((source) => <code key={source}>{source}</code>) : <span>Нет подтверждённых источников в базе.</span>}</div></div>
+            {demoModes.map((mode) => <RagAnswer key={mode} title={demoLabels[mode]} result={comparison?.[mode]} error={comparison?.errors?.[mode]} evidence={mode === 'without' ? undefined : item.evidence} expectsGrounding={mode !== 'without'} />)}
           </div>
         </article>
       })}</div>
@@ -151,11 +151,13 @@ export default function RagPage() {
   </div>
 }
 
-function RagAnswer({ title, result, error, evidence }: { title: string; result?: RagRunResult; error?: string; evidence?: RagEvidence[] }) {
+function RagAnswer({ title, result, error, evidence, expectsGrounding }: { title: string; result?: RagRunResult; error?: string; evidence?: RagEvidence[]; expectsGrounding?: boolean }) {
   const sources = result?.rag?.sources
-  const hits = evidence && sources ? evidence.filter((item) => sources.some((source) => [item, ...(item.alternatives ?? [])].some((candidate) => source.source === candidate.source && source.text.includes(candidate.quote)))).length : null
+  const hits = evidence?.length && sources ? evidence.filter((item) => sources.some((source) => [item, ...(item.alternatives ?? [])].some((candidate) => source.source === candidate.source && source.text.includes(candidate.quote)))).length : null
   return <div className="rag-answer"><h4>{title}</h4>{result ? <>
     <small>{result.model} · {(result.durationMs / 1000).toFixed(1)} с · всего {result.totalTokens} токенов</small>
+    {expectsGrounding && !result.rag?.grounding && <small>Сохранённый ответ — без обязательных цитат. Нужен новый прогон.</small>}
+    {result.rag?.grounding && <small>{result.rag.grounding.status === 'answered' ? 'Цитаты дословные · смысл проверен LLM' : 'Не знаю · требуется уточнение'}</small>}
     {hits !== null && <small className={hits === evidence?.length ? 'rag-evidence-hit' : 'rag-evidence-miss'}>Контрольные фрагменты: {hits}/{evidence?.length}</small>}
     <div className="rag-answer-text"><ReactMarkdown remarkPlugins={[remarkGfm]}>{result.output}</ReactMarkdown></div>
     {result.rag && <details><summary>Найденные источники ({result.rag.sources.length})</summary><div className="rag-sources">{result.rag.sources.map((source, i) => <div key={source.chunkId}><strong>[{i + 1}] {source.source} · {source.section}</strong><small>score {source.score.toFixed(3)} · {source.chunkId}</small><p>{source.text}</p></div>)}</div></details>}

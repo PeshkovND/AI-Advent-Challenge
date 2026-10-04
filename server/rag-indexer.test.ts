@@ -11,7 +11,7 @@ test('project corpus excludes control questions and their answer key', () => {
   const directory = mkdtempSync(join(tmpdir(), 'rag-corpus-'))
   try {
     for (const folder of ['docs', 'server', 'src']) mkdirSync(join(directory, folder))
-    for (const source of ['docs/day-21.md', 'docs/day-22.md', 'docs/day-23.md', 'server/rag-check-questions.ts', 'server/rag-evaluate.ts', 'server/rag-retrieval.test.ts', 'src/example.spec.tsx', 'src/rag-questions.ts', 'src/rag-day23-questions.ts', 'src/App.tsx']) {
+    for (const source of ['docs/day-21.md', 'docs/day-22.md', 'docs/day-23.md', 'docs/day-24.md', 'server/rag-check-questions.ts', 'server/rag-evaluate.ts', 'server/rag-grounding-evaluate.ts', 'server/rag-retrieval.test.ts', 'src/example.spec.tsx', 'src/rag-questions.ts', 'src/rag-day23-questions.ts', 'src/App.tsx']) {
       writeFileSync(join(directory, source), 'Test document')
     }
     assert.deepEqual(collectProjectDocuments(directory).map((document) => document.source), ['docs/day-21.md', 'src/App.tsx'])

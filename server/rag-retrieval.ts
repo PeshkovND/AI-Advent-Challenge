@@ -3,7 +3,7 @@ import type { RagCandidate, RagConfig, RagResult, RagSource, RagTrace, RagUsage 
 export type { RagConfig, RagSource } from '../src/rag-types'
 
 export type RagContext = RagResult & { instruction: string }
-export type RagCompletion = (messages: Array<{ role: 'system' | 'user'; content: string }>, stage: 'rewrite' | 'rerank') => Promise<{ content: string; usage: RagUsage }>
+export type RagCompletion = (messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>, stage: 'rewrite' | 'rerank' | 'answer' | 'verify') => Promise<{ content: string; usage: RagUsage }>
 type SearchStore = Pick<RagIndexStore, 'latestRun' | 'getRun' | 'search' | 'close'>
 type Embeddings = Pick<OllamaEmbeddingClient, 'embedQueries'>
 type Dependencies = { store?: () => SearchStore; embeddings?: (run: RagIndexRun) => Embeddings }

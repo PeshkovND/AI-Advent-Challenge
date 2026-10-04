@@ -1,19 +1,23 @@
 import { ragAgentBaseConfig } from './rag-agent-config'
-import { defaultRagSettings, improvedAgentConfig } from './rag-improved-config'
+import { groundedAgentConfig } from './rag-grounded-config'
 import type { RagReport, RagRunResult } from './rag-report-store'
 import { ragQuestions } from './rag-questions'
+import { ragAbstentionQuestion } from './rag-day23-questions'
 import type { RagConfig } from './rag-types'
 
 export const demoModes = ['without', 'structured', 'fixed', 'improved'] as const
 export type DemoMode = typeof demoModes[number]
 export const demoAgentIds: Record<DemoMode, string> = { without: 'day22-without-rag', structured: 'day22-with-rag', fixed: 'day22-with-rag-fixed', improved: 'day23-full' }
 export const demoLabels: Record<DemoMode, string> = { without: 'Без RAG', structured: 'RAG · structured', fixed: 'RAG · fixed', improved: 'Улучшенный RAG' }
+// Keep the original ten evaluation questions intact; append a real out-of-corpus case for the UI.
+export const demoQuestions = [...ragQuestions, { ...ragAbstentionQuestion, id: 11,
+  expected: 'Все RAG-агенты должны ответить «Не знаю» и попросить уточнение: в базе нет подтверждённой конфигурации Redis. Использованные источники и цитаты должны быть пустыми. Без RAG модель может описать общий подход, но не должна выдавать его за настройки этого проекта.' }]
 export type DemoComparison = Partial<Record<DemoMode, RagRunResult>> & { errors?: Partial<Record<DemoMode, string>> }
 export type DemoSnapshot = { createdAt: string; indexRunId?: string; results: Record<number, DemoComparison> }
 
 export function demoAgentConfig(mode: DemoMode, indexRunId: string): typeof ragAgentBaseConfig & { name: string; rag?: RagConfig } {
-  if (mode === 'improved') return improvedAgentConfig('full', defaultRagSettings, indexRunId)
-  return { ...ragAgentBaseConfig, name: `Day 22 · ${demoLabels[mode]}`, ...(mode !== 'without' ? { rag: { enabled: true, strategy: mode, topK: 4, indexRunId } } : {}) }
+  if (mode === 'improved') return groundedAgentConfig(indexRunId)
+  return { ...ragAgentBaseConfig, name: `${mode === 'without' ? 'Day 22' : 'Day 24'} · ${demoLabels[mode]}`, ...(mode !== 'without' ? { rag: { enabled: true, strategy: mode, topK: 4, indexRunId, grounding: { enabled: true } } } : {}) }
 }
 
 /** Restore actual Day 23 answers without regenerating or mixing different runs. */

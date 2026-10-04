@@ -7,6 +7,8 @@ export type RagConfig = {
   minSimilarity?: number
   queryRewrite?: boolean
   rerank?: { enabled: boolean; minRelevance: number }
+  /** Require literal citations and a semantic support check before releasing an answer. */
+  grounding?: { enabled: boolean }
   indexRunId?: string
 }
 export type RagSource = {
@@ -27,4 +29,17 @@ export type RagTrace = {
   timings: { embeddingMs: number; searchMs: number; totalMs: number }
   usage: RagUsage; emptyContext: boolean
 }
-export type RagResult = { indexRunId: string; sources: RagSource[]; trace?: RagTrace }
+export type RagCitation = { id: number; source: string; section: string; chunkId: string; quote: string }
+export type RagClaim = { id: number; text: string; citationIds: number[] }
+export type RagGrounding = {
+  status: 'answered' | 'unknown'
+  answer: string
+  sources: Array<{ source: string; section: string; chunkId: string }>
+  citations: RagCitation[]
+  claims: RagClaim[]
+  clarification?: string
+  reason?: 'weak-context' | 'insufficient-evidence' | 'unsupported-answer'
+  verification: { status: 'passed' | 'abstained'; attempts: number; judgments: Array<{ claimId: number; supported: boolean; reason: string }> }
+  usage: RagUsage
+}
+export type RagResult = { indexRunId: string; sources: RagSource[]; trace?: RagTrace; grounding?: RagGrounding }
