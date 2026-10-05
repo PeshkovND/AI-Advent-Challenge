@@ -60,7 +60,7 @@ export type RagSearchResult = {
 }
 
 const supportedExtensions = new Set(['.md', '.ts', '.tsx', '.js', '.jsx', '.css', '.pdf'])
-const evaluationSources = new Set(['docs/day-22.md', 'docs/day-23.md', 'docs/day-24.md', 'docs/day-25.md', 'src/rag-questions.ts', 'src/rag-day23-questions.ts', 'src/rag-chat-scenarios.ts', 'server/rag-check-questions.ts', 'server/rag-evaluate.ts', 'server/rag-grounding-evaluate.ts', 'server/rag-chat-evaluate.ts', 'server/rag-chat-task-probe.ts'])
+const evaluationSources = new Set(['docs/day-22.md', 'docs/day-23.md', 'docs/day-24.md', 'docs/day-25.md', 'src/rag-questions.ts', 'src/rag-day23-questions.ts', 'src/rag-chat-scenarios.ts', 'server/rag-check-questions.ts', 'server/rag-evaluate.ts', 'server/rag-grounding-evaluate.ts', 'server/rag-chat-evaluate.ts', 'server/rag-chat-task-probe.ts', 'server/rag-chat-preferences-evaluate.ts'])
 const defaultChunkSize = 200
 const defaultOverlap = 40
 

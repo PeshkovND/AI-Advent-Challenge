@@ -25,7 +25,7 @@
     "test:rag:agent": "tsx --test server/rag-agent.test.ts",
     "test:rag:retrieval": "tsx --test server/rag-retrieval.test.ts server/rag-report.test.ts",
     "test:rag:grounding": "tsx --test server/rag-grounding.test.ts",
-    "test:rag:chat": "tsx --test server/rag-chat.test.ts",
+    "test:rag:chat": "tsx --test server/rag-chat.test.ts server/response-preferences.test.ts",
     "rag:check-chat": "tsx server/rag-chat-evaluate.ts",
     "rag:check-grounding": "tsx server/rag-grounding-evaluate.ts",
     "rag:evaluate": "tsx server/rag-evaluate.ts",

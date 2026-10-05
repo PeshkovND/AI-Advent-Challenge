@@ -16,6 +16,7 @@ import { answerWithGrounding, renderGroundedAnswer } from './rag-grounding'
 import { dialogueEvidence, dialogueInstruction, dialogueStateSchema, latestDialogueMemory, noRetrievalInstruction, prepareDialogue, retrievalDecisionSchema } from './dialogue-memory'
 import { groundingSchema } from '../src/rag-report-import'
 import type { DialogueMemoryConfig, DialogueMemoryState, RagChatConversation, RetrievalDecision } from '../src/rag-chat-types'
+import { answerWithoutDocuments, replyInstruction, DialogueReplyConflict } from './response-preferences'
 
 export type AgentProvider = 'deepseek' | 'huggingface' | 'openrouter'
 export type AgentMessageRole = 'system' | 'user' | 'assistant'
@@ -127,6 +128,8 @@ export type ContextStrategiesServiceLike = {
 
 export type AgentRunResult = {
   agentId: string
+  /** Current-turn instructions for diagnostics; never part of persistent preferences. */
+  replyInstructions?: import('../src/rag-chat-types').DialogueFact[]
   input: string
   output: string
   provider: AgentProvider
@@ -597,7 +600,7 @@ export class Agent {
     const users = history.filter((message) => message.role === 'user').map((message) => message.content)
     const recentDialogue = history.slice(-(this.config.dialogueMemory?.historyWindow ?? 6)).map((message) => ({ role: message.role, content: (message.grounding?.answer ?? message.content).slice(0, 2000) }))
     const dialogue = this.config.dialogueMemory?.enabled
-      ? await prepareDialogue(validatedInput, latestDialogueMemory(history), users.slice(-3), createRagCompletion(this.client, this.config, signal), signal, recentDialogue)
+      ? await prepareDialogue(validatedInput, latestDialogueMemory(history), users.slice(-3), createRagCompletion(this.client, this.config, signal), signal, recentDialogue, users)
       : undefined
     const promptHistory = dialogue ? recentDialogue : history
     const prepared: AgentContextPreparation = this.contextStrategies
@@ -610,16 +613,37 @@ export class Agent {
     const shouldSearch = Boolean(this.config.rag?.enabled && route === 'documents')
     const retrieval: RetrievalDecision | undefined = dialogue ? { policy: automatic ? 'auto' : 'always', route, searched: shouldSearch, reason: automatic ? dialogue.reason : 'Поиск включён для каждого сообщения конфигурацией агента.' } : undefined
     const ragContext = shouldSearch ? await this.ragRetriever.retrieve(dialogue?.question ?? validatedInput, this.config.rag!, createRagCompletion(this.client, this.config, signal), signal) : undefined
-    const dialogueContext = dialogue ? { question: dialogue.question, instruction: dialogueInstruction(dialogue.state, dialogue.question), sources: dialogueEvidence(dialogue.state, [...users, validatedInput]), allowDialogueOnly: dialogue.intent === 'dialogue' } : undefined
+    const hasPreferences = Boolean(dialogue && (dialogue.state.constraints.length || dialogue.instructions.length))
+    const dialogueContext = dialogue ? { question: dialogue.question, instruction: dialogueInstruction(dialogue.state, dialogue.question), sources: dialogueEvidence(dialogue.state, [...users, validatedInput]), allowDialogueOnly: dialogue.intent === 'dialogue', instructions: dialogue.instructions, checkWishes: hasPreferences } : undefined
+    const plainCompletion = async (answerMessages: AgentMessage[], plainRoute: 'conversation' | 'general' | 'preferences' | 'abstention' | 'clarification') => {
+      const response = await answerWithoutDocuments(answerMessages, [dialogueContext?.instruction, replyInstruction(dialogue?.instructions)].filter(Boolean).join('\n\n'), dialogue?.instructions ?? [], plainRoute,
+        async (nextMessages) => { const timeout = AbortSignal.timeout(90_000); const next = await this.client.complete(nextMessages, toLlmOptions(this.config), signal ? AbortSignal.any([signal, timeout]) : timeout); return { content: next.content, usage: createTokenMetrics(this.config, '', next) } }, createRagCompletion(this.client, this.config, signal), signal)
+      if (response.needsClarification && retrieval) Object.assign(retrieval, { route: 'clarification', reason: 'Нужно уточнить просьбу или приоритет требований.' })
+      return { content: response.content, tokens: response.usage.completionTokens, promptTokens: response.usage.promptTokens, totalTokens: response.usage.totalTokens }
+    }
     let grounding: RagResult['grounding']
     const groundedCompletion = async (answerMessages: AgentMessage[]) => {
-      grounding = await answerWithGrounding(validatedInput, answerMessages, ragContext?.sources ?? [], createRagCompletion(this.client, this.config, signal), signal, dialogueContext)
+      try { grounding = await answerWithGrounding(validatedInput, answerMessages, ragContext?.sources ?? [], createRagCompletion(this.client, this.config, signal), signal, dialogueContext) }
+      catch (error) {
+        if (!(error instanceof DialogueReplyConflict)) throw error
+        grounding = undefined
+        const clarified = await plainCompletion([...answerMessages, { role: 'system', content: `Вместо фактического ответа задай только конкретный вопрос об уточнении пожеланий: ${error.message}. Не выдумывай факты и не отвечай «не знаю».` }], 'clarification')
+        if (retrieval) retrieval.reason = error.message.slice(0, 1000)
+        return { ...clarified, tokens: clarified.tokens + error.usage.completionTokens, promptTokens: clarified.promptTokens + error.usage.promptTokens, totalTokens: clarified.totalTokens + error.usage.totalTokens }
+      }
       if (automatic && route === 'dialogue' && grounding.status === 'unknown') grounding = { ...grounding, answer: 'Не знаю: в сохранённой памяти диалога недостаточно сведений для ответа.', clarification: 'Уточните, пожалуйста, вашу цель, ограничение или термин, которые нужно зафиксировать.' }
+      if (dialogue && hasPreferences && grounding.status === 'unknown') {
+        const refusal = await plainCompletion([
+          { role: 'system', content: `${dialogueContext?.instruction}\n${replyInstruction(dialogue.instructions)}\nСформулируй только отказ по недостаточному подтверждению с учётом пожеланий. Это НЕ подтверждение отсутствия функции. Не отвечай по существу, не придумывай факты или источники. Сообщи, что не знаешь, и попроси уточнение либо источник. Число информационных пунктов не требуется заполнять выдуманными фактами.` },
+          { role: 'user', content: JSON.stringify({ question: validatedInput, refusal: grounding.answer, clarification: grounding.clarification }) },
+        ], 'abstention')
+        grounding = { ...grounding, answer: refusal.content, clarification: undefined, usage: sumTokenMetrics(grounding.usage, createTokenMetrics(this.config, '', refusal)) }
+      }
       const content = this.config.outputPolicy?.format === 'json' ? JSON.stringify(grounding) : renderGroundedAnswer(grounding)
       if (this.config.outputPolicy?.maxCharacters !== undefined && content.length > this.config.outputPolicy.maxCharacters) throw new AgentError('Лимит ответа слишком мал для полного ответа с источниками и цитатами. Увеличьте maxCharacters.', 502)
       return { content, tokens: grounding.usage.completionTokens, promptTokens: grounding.usage.promptTokens, totalTokens: grounding.usage.totalTokens }
     }
-    const instructions = [runtimeInstruction, dialogueContext?.instruction, ragContext?.instruction, route === 'conversation' || route === 'general' ? noRetrievalInstruction(route) : undefined].filter(Boolean).join('\n\n') || undefined
+    const instructions = [runtimeInstruction, dialogueContext?.instruction, dialogue ? replyInstruction(dialogue.instructions) : undefined, ragContext?.instruction, route === 'conversation' || route === 'general' || route === 'preferences' || route === 'clarification' ? noRetrievalInstruction(route, dialogue?.clarification) : undefined].filter(Boolean).join('\n\n') || undefined
     const messages = buildMessages(effectiveConfig, memory?.history ?? prepared.history, validatedInput, prepared.summary ?? summary, instructions)
     const mcpResult = this.config.mcp?.enabled
       ? await this.mcpRuntime?.run({
@@ -635,6 +659,8 @@ export class Agent {
       ? await groundedCompletion(messages)
       : mcpResult
       ? { content: mcpResult.output, tokens: mcpResult.tokens, promptTokens: mcpResult.promptTokens, totalTokens: mcpResult.totalTokens }
+      : dialogue && (route === 'preferences' || route === 'clarification' || ((route === 'conversation' || route === 'general') && hasPreferences))
+      ? await plainCompletion(messages, route as 'preferences' | 'conversation' | 'general' | 'clarification')
       : await this.client.complete(messages, toLlmOptions(this.config), signal)
     let rawOutput = completion.content
     let { output, taskDecision } = this.resolveTaskOutput(rawOutput, validatedInput)
@@ -698,7 +724,7 @@ export class Agent {
       ...(ragContext ? { rag: { indexRunId: ragContext.indexRunId, sources: ragContext.sources, trace: ragContext.trace, ...(grounding ? { grounding } : {}) } } : {}),
       ...(!ragContext && grounding ? { grounding } : {}),
       ...(retrieval ? { retrieval } : {}),
-      ...(dialogue ? { dialogueMemory: dialogue.state, resolvedQuestion: dialogue.question } : {}),
+      ...(dialogue ? { dialogueMemory: dialogue.state, resolvedQuestion: dialogue.question, replyInstructions: dialogue.instructions } : {}),
     }
   }
 
@@ -925,9 +951,13 @@ export class AgentService {
 
   async clearHistory(id: string, conversationId?: string) {
     await this.ready
-    this.get(id)
-    if (this.activeDialogueRuns.has(conversationId ? conversationScopeId(id, conversationId) : id)) throw new AgentError('Дождитесь завершения ответа перед очисткой диалога.', 409)
-    await this.stateStore.clearHistory(conversationId ? conversationScopeId(id, conversationId) : id)
+    const agent = this.get(id)
+    const scope = conversationId ? conversationScopeId(id, conversationId) : id
+    if (this.activeDialogueRuns.has(scope)) throw new AgentError('Дождитесь завершения ответа перед очисткой диалога.', 409)
+    // Hold the same scope lock while deleting: a new turn must not restore cleared memory.
+    if (agent.config.dialogueMemory?.enabled) this.activeDialogueRuns.add(scope)
+    try { await this.stateStore.clearHistory(scope) }
+    finally { if (agent.config.dialogueMemory?.enabled) this.activeDialogueRuns.delete(scope) }
   }
 
   async clearAllHistory(id: string) {

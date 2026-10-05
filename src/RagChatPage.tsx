@@ -11,6 +11,7 @@ const activeConversationKey = 'deepchat-day25-conversation'
 const initialMemory = (): DialogueMemoryState => ({ turn: 0, clarifications: [], constraints: [], terms: [] })
 async function request<T>(path: string, body?: unknown, method = 'GET'): Promise<T> {
   const response = await fetch(path, { method, ...(body !== undefined ? { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {}) })
+  if (response.status === 204) return undefined as T
   const data = await response.json()
   if (!response.ok) throw new Error(data.error ?? `HTTP ${response.status}`)
   return data as T
@@ -92,6 +93,26 @@ export default function RagChatPage() {
     setError(undefined)
     composer.current?.focus()
   }
+  async function deleteChat(id: string) {
+    if (busy || loading || !ready) return
+    const title = conversations.find((conversation) => conversation.id === id)?.title ?? 'Текущий диалог'
+    if (!window.confirm(`Удалить диалог «${title}»?\n\nЕго история, источники и память задачи будут удалены безвозвратно. Остальные диалоги сохранятся.`)) return
+    setBusy(true)
+    setError(undefined)
+    try {
+      await request<void>(`/api/agents/${ragChatAgentId}/history?conversationId=${encodeURIComponent(id)}`, undefined, 'DELETE')
+      setConversations((list) => list.filter((conversation) => conversation.id !== id))
+      if (id === conversationId) {
+        const nextId = crypto.randomUUID()
+        rememberConversation(nextId)
+        setConversationId(nextId)
+        setMessages([])
+        setMemory(initialMemory())
+        setInput('')
+      }
+    } catch (cause) { setError(`Не удалось удалить диалог: ${String(cause)}`) }
+    finally { setBusy(false) }
+  }
   async function send(event: FormEvent) {
     event.preventDefault()
     const text = input.trim()
@@ -134,12 +155,15 @@ export default function RagChatPage() {
     <aside className="rag-chat-history" aria-label="Сохранённые диалоги">
       <button className="rag-chat-new" onClick={newChat} disabled={busy || loading}>＋ Новый чат</button>
       <p>Диалоги</p>
-      <div className="rag-chat-history-list">{conversations.map((conversation) => <button key={conversation.id} className={conversation.id === conversationId ? 'active' : ''} disabled={busy || loading} onClick={() => { setInput(''); setConversationId(conversation.id) }} title={conversation.title}>{conversation.title}</button>)}</div>
+      <div className="rag-chat-history-list">{conversations.map((conversation) => <div key={conversation.id} className={`rag-chat-history-row${conversation.id === conversationId ? ' active' : ''}`}>
+        <button className="rag-chat-history-select" aria-current={conversation.id === conversationId ? 'true' : undefined} disabled={busy || loading} onClick={() => { setInput(''); setConversationId(conversation.id) }} title={conversation.title}>{conversation.title}</button>
+        <button className="rag-chat-delete" disabled={busy || loading || !ready} onClick={() => void deleteChat(conversation.id)} aria-label={`Удалить диалог «${conversation.title}»`} title="Удалить диалог"><TrashIcon /></button>
+      </div>)}</div>
       <span className="rag-chat-history-note">История и память сохраняются на сервере. Новый чат начинает отдельный диалог.</span>
     </aside>
     <div className="rag-chat-workspace">
       <header className="rag-chat-header"><div><strong>RAG-чат <span>Day 25</span></strong><small>DeepSeek · локальные документы · память задачи</small></div>
-        <div className="rag-chat-header-actions"><button className="rag-chat-mobile-new" onClick={newChat} disabled={busy || loading} aria-label="Новый чат">＋</button><MemoryView memory={memory} /></div>
+        <div className="rag-chat-header-actions"><button className="rag-chat-mobile-new" onClick={newChat} disabled={busy || loading} aria-label="Новый чат">＋</button>{messages.length > 0 && <button className="rag-chat-delete rag-chat-mobile-delete" disabled={busy || loading || !ready} onClick={() => void deleteChat(conversationId)} aria-label="Удалить текущий диалог" title="Удалить текущий диалог"><TrashIcon /></button>}<MemoryView memory={memory} /></div>
       </header>
       <div className="rag-chat-scroll">
         <div className="rag-chat-thread">
@@ -155,6 +179,10 @@ export default function RagChatPage() {
   </section>
 }
 
+function TrashIcon() {
+  return <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7" /></svg>
+}
+
 function ChatMessage({ message }: { message: RagChatMessage }) {
   if (message.role === 'user') return <div className="rag-chat-user"><p>{message.content}</p></div>
   const grounding = message.grounding
@@ -163,13 +191,16 @@ function ChatMessage({ message }: { message: RagChatMessage }) {
   </div></article>
 }
 function SourcesView({ grounding, retrieval }: { grounding?: RagGrounding; retrieval?: RetrievalDecision }) {
+  if (retrieval?.route === 'clarification' && !retrieval.searched) return <div className="rag-chat-no-sources" title={retrieval.reason}>Нужно уточнение · без поиска по документам</div>
+  if (retrieval?.route === 'clarification') return <div className="rag-chat-no-sources" title={retrieval.reason}>Нужно уточнить пожелания · фактический ответ не выдан</div>
+  if (retrieval?.route === 'preferences' && !retrieval.searched) return <div className="rag-chat-no-sources" title={retrieval.reason}>Пожелания учтены · без поиска по документам</div>
   if (retrieval && !retrieval.searched && (retrieval.route === 'conversation' || retrieval.route === 'general')) return <div className="rag-chat-no-sources" title={retrieval.reason}>Без поиска по документам · {retrieval.route === 'conversation' ? 'обычный разговор' : 'ответ из общих знаний'}</div>
   if (!grounding?.citations.length) return <div className="rag-chat-no-sources">Источники: {grounding?.status === 'unknown' ? 'подтверждение не найдено — нужен уточняющий вопрос.' : 'для этого сохранённого ответа нет проверенных цитат.'}</div>
   const sources = grounding.sources.filter((source, index, all) => all.findIndex((item) => item.source === source.source) === index)
   return <div><div className="rag-chat-source-labels" aria-label="Использованные источники">{sources.map((source) => <span key={source.source} title={`${source.source} · ${source.section} · ${source.chunkId}`}>{source.source}</span>)}</div><details className="rag-chat-sources"><summary>Источники и цитаты · {grounding.sources.length}<span>Показать подтверждения</span></summary><div>{grounding.citations.map((citation) => <section key={citation.id}><strong>[{citation.id}] {citation.source}</strong><small>{citation.kind === 'dialogue' ? 'Слова пользователя, не документация проекта' : citation.section} · {citation.chunkId}</small><blockquote>{citation.quote}</blockquote></section>)}</div></details></div>
 }
 function MemoryView({ memory }: { memory: DialogueMemoryState }) {
-  return <details className="rag-chat-memory"><summary>Память задачи <span>{memory.turn}</span></summary><div><h2>Что зафиксировано</h2><MemoryGroup title="Цель" items={memory.goal ? [memory.goal] : []} /><MemoryGroup title="Уточнения" items={memory.clarifications} /><MemoryGroup title="Ограничения" items={memory.constraints} /><MemoryGroup title="Термины" items={memory.terms} /><p>Это сведения пользователя, а не доказательства фактов о проекте.</p></div></details>
+  return <details className="rag-chat-memory"><summary>Память задачи <span>{memory.turn}</span></summary><div><h2>Что зафиксировано</h2><MemoryGroup title="Цель" items={memory.goal ? [memory.goal] : []} /><MemoryGroup title="Уточнения" items={memory.clarifications} /><MemoryGroup title="Ограничения" items={memory.constraints} /><MemoryGroup title="Термины" items={memory.terms} />{Boolean(memory.pendingTurns?.length) && <section><h3>Нужны уточнения</h3><p>Сообщения {memory.pendingTurns!.join(', ')} сохранены в истории, но изменения памяти ещё не разобраны.</p></section>}<p>Это сведения пользователя, а не доказательства фактов о проекте.</p></div></details>
 }
 function MemoryGroup({ title, items }: { title: string; items: Array<{ text: string; quote: string; userTurn: number }> }) {
   return <section><h3>{title}</h3>{items.length ? <ul>{items.map((item, index) => <li key={index} title={`Сообщение №${item.userTurn}: ${item.quote}`}>{item.text}<small>сообщение №{item.userTurn}</small></li>)}</ul> : <span>Пока не задано</span>}</section>

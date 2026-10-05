@@ -37,7 +37,7 @@ async function save(completed = false) {
     turns: rows.length, errors: rows.filter((row) => row.error).length,
     answered: rows.filter((row) => (row.answer?.grounding ?? row.answer?.rag?.grounding)?.status === 'answered').length,
     goalPreserved: rows.filter((row) => row.checks?.goalPreserved).length,
-    withSources: rows.filter((row) => row.checks?.hasSources).length,
+    withSources: rows.filter((row) => (row.answer?.grounding ?? row.answer?.rag?.grounding)?.sources.length).length,
     literalQuotes: rows.filter((row) => row.checks?.literalQuotes).length,
     checksPassed: rows.filter((row) => row.checks && Object.values(row.checks).every(Boolean)).length,
     totalTokens: rows.reduce((sum, row) => sum + (row.answer?.totalTokens ?? 0), 0),
@@ -60,22 +60,23 @@ for (const scenario of scenarios) {
       const facts = [answer.dialogueMemory.goal, ...answer.dialogueMemory.clarifications, ...answer.dialogueMemory.constraints, ...answer.dialogueMemory.terms].filter((item) => item !== undefined)
       const users = messages.filter((message) => message.role === 'user')
       const constraintText = answer.dialogueMemory.constraints.map((item) => item.text.toLowerCase()).join('\n')
+      const acknowledgement = turn.preferencesOnly && answer.retrieval?.policy === 'auto'
       row.checks = {
         historySaved: messages.length === (offset + 1) * 2 && JSON.stringify(dialogueMemory) === JSON.stringify(answer.dialogueMemory),
         appropriateRetrieval: answer.retrieval?.policy === 'auto'
-          ? turn.dialogueOnly ? answer.retrieval.route === 'dialogue' && !answer.retrieval.searched && !answer.rag : answer.retrieval.route === 'documents' && answer.retrieval.searched && Boolean(answer.rag?.trace)
+          ? acknowledgement ? answer.retrieval.route === 'preferences' && !answer.retrieval.searched && !answer.rag : turn.dialogueOnly ? answer.retrieval.route === 'dialogue' && !answer.retrieval.searched && !answer.rag : answer.retrieval.route === 'documents' && answer.retrieval.searched && Boolean(answer.rag?.trace)
           : Boolean(answer.rag?.trace && answer.resolvedQuestion),
         goalPreserved: Boolean(answer.dialogueMemory.goal?.text.toLowerCase().includes(scenario.goal)),
         memoryProvenance: facts.every((item) => users[item.userTurn - 1]?.content.includes(item.quote)),
         refinementsPreserved: (turn.memoryTerms ?? []).every((term) => facts.some((item) => item.text.toLowerCase().includes(term.toLowerCase()))),
         supersededConstraintsRemoved: (turn.absentConstraints ?? []).every((constraint) => !constraintText.includes(constraint)),
-        hasSources: Boolean(grounding?.sources.length && grounding.citations.length),
-        correctSourceKind: Boolean(grounding?.citations.some((citation) => turn.dialogueOnly ? citation.kind === 'dialogue' : citation.kind !== 'dialogue')),
-        literalQuotes: Boolean(grounding?.citations.length && grounding.citations.every((citation) => citation.kind === 'dialogue'
+        sourcesAppropriate: acknowledgement ? !grounding : Boolean(grounding?.sources.length && grounding.citations.length),
+        correctSourceKind: acknowledgement ? !grounding : Boolean(grounding?.citations.some((citation) => turn.dialogueOnly || turn.preferencesOnly ? citation.kind === 'dialogue' : citation.kind !== 'dialogue')),
+        literalQuotes: acknowledgement ? !grounding : Boolean(grounding?.citations.length && grounding.citations.every((citation) => citation.kind === 'dialogue'
           ? users[Number(citation.chunkId.match(/^dialogue-user-(\d+)/)?.[1]) - 1]?.content.includes(citation.quote)
           : answer.rag?.sources.some((source) => source.chunkId === citation.chunkId && source.source === citation.source && source.text.includes(citation.quote)))),
-        semanticSupportByLlm: Boolean(grounding?.status === 'answered' && grounding.verification.status === 'passed' && grounding.verification.judgments.length === grounding.claims.length && grounding.verification.judgments.every((item) => item.supported)),
-        taskCheckByLlm: Boolean(grounding?.verification.taskCheck?.goalAligned && grounding.verification.taskCheck?.constraintsRespected && grounding.verification.taskCheck?.answersQuestion),
+        semanticSupportByLlm: acknowledgement ? !/не знаю/i.test(answer.output) : Boolean(grounding?.status === 'answered' && grounding.verification.status === 'passed' && grounding.verification.judgments.length === grounding.claims.length && grounding.verification.judgments.every((item) => item.supported)),
+        taskCheckByLlm: acknowledgement ? Boolean(answer.output.trim()) : Boolean(grounding?.verification.taskCheck?.goalAligned && grounding.verification.taskCheck?.constraintsRespected && grounding.verification.taskCheck?.answersQuestion),
       }
       const failed = Object.entries(row.checks).filter(([, passed]) => !passed).map(([name]) => name)
       console.log(`${scenario.id} ${offset + 1}/12: ${grounding?.status}; ${grounding?.citations.length ?? 0} цитат; ${failed.length ? `FAIL ${failed.join(', ')}` : 'OK'}; ${answer.totalTokens} токенов`)

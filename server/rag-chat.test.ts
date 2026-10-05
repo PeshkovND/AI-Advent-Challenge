@@ -39,12 +39,12 @@ test('memory patches retain early facts, replace a key explicitly and require cu
   for (let i = 0; i < 15; i++) state = applyDialoguePatch(patch('Следующий вопрос'), state, 'Дальше').state
   assert.equal(state.goal?.text, goalText)
   assert.equal(state.constraints[0].text, 'Новые зависимости запрещены')
-  state = applyDialoguePatch(patch('Дальше', [update('constraints', 'libs', 'Новые зависимости разрешены')]), state, 'Новые зависимости разрешены').state
+  state = applyDialoguePatch(patch('Дальше', [{ ...update('constraints', 'libs', 'Новые зависимости разрешены'), previousQuote: state.constraints[0].quote }]), state, 'Новые зависимости разрешены').state
   assert.equal(state.constraints.length, 1)
   assert.equal(state.constraints[0].text, 'Новые зависимости разрешены')
   assert.throws(() => applyDialoguePatch(patch('Вопрос', [update('goal', 'goal', 'Придуманная цель')]), state, 'Привет'))
   assert.throws(() => applyDialoguePatch(patch('Вопрос', [update('goal', 'a', 'Привет'), update('goal', 'b', 'Привет')]), state, 'Привет'))
-  state = applyDialoguePatch(patch('Вопрос', [], [{ category: 'constraints', key: 'libs', quote: 'Отменяю ограничение' }]), state, 'Отменяю ограничение').state
+  state = applyDialoguePatch(patch('Вопрос', [], [{ category: 'constraints', key: 'libs', quote: 'Отменяю ограничение', previousQuote: state.constraints[0].quote }]), state, 'Отменяю ограничение').state
   assert.equal(state.constraints.length, 0)
 })
 
@@ -60,10 +60,10 @@ test('task extraction sees only user data and preserves a self-contained search 
   assert.equal(result.usage.totalTokens, 15)
 })
 
-test('a greeting can have no search question, but a document route cannot', () => {
+test('an omitted rewritten question safely uses the original input in every route', () => {
   assert.equal(applyDialoguePatch(patch('', [], [], 'conversation'), emptyDialogueMemory(), 'Привет').question, 'Привет')
   assert.equal(applyDialoguePatch(patch('', [], [], 'dialogue'), emptyDialogueMemory(), 'Моя цель — тест').question, 'Моя цель — тест')
-  assert.throws(() => applyDialoguePatch(patch(''), emptyDialogueMemory(), 'Как устроен проект?'), /непустой question/)
+  assert.equal(applyDialoguePatch(patch(''), emptyDialogueMemory(), 'Как устроен проект?').question, 'Как устроен проект?')
 })
 
 test('ordinary agent searches every turn, resolves follow-ups, bounds history and keeps the early goal', async () => {
@@ -117,14 +117,17 @@ test('dialogue evidence is original user text and cannot substitute weak project
 
 test('failed extraction and cancellation do not advance memory or make a retrieval call', async () => {
   const retriever = { retrieve: async () => { throw new Error('must not search') } } as unknown as RagRetriever
-  const client = { complete: async () => ({ content: '{}', tokens: 5, promptTokens: 10, totalTokens: 15 }) } as unknown as ConstructorParameters<typeof Agent>[2]
+  const client = { complete: async (messages: AgentMessage[]) => ({ content: messages[0].content.includes('Обнови компактную память') ? '{}' : messages[0].content.includes('Проверь соблюдение') ? JSON.stringify({ constraintsRespected: true, appropriateToRoute: true, reason: 'Уточнение без фактов.' }) : 'Что нужно запомнить или изменить?', tokens: 5, promptTokens: 10, totalTokens: 15 }) } as unknown as ConstructorParameters<typeof Agent>[2]
   const agent = new Agent('failed', config, client, undefined, undefined, retriever)
-  await assert.rejects(agent.run('Вопрос'), /intent|question|Invalid|expected/)
+  const answer = await agent.run('Вопрос')
+  assert.equal(answer.retrieval?.route, 'clarification')
+  assert.equal(answer.retrieval?.searched, false)
+  assert.deepEqual(answer.dialogueMemory?.pendingTurns, [1])
   const controller = new AbortController(); controller.abort()
   await assert.rejects(agent.run('Вопрос', [], undefined, 'failed', controller.signal), /abort/i)
 })
 
-test('a factually supported answer that violates the task is repaired and reverified; persistent failure abstains', async () => {
+test('a factually supported answer that violates the task is repaired; persistent format failure is not lack of evidence', async () => {
   const dialogue = { question: 'Дай один пункт', instruction: 'Нужен один пункт', sources: [], allowDialogueOnly: false }
   let checks = 0
   let answers = 0
@@ -144,9 +147,7 @@ test('a factually supported answer that violates the task is repaired and reveri
   const reject: RagCompletion = async (_messages, stage) => ({ content: stage === 'answer'
     ? JSON.stringify({ status: 'answered', claims: [{ text: source.text, citations: [{ chunkId: source.chunkId, quote: source.text }] }] })
     : JSON.stringify({ items: [{ claimId: 1, supported: true, reason: 'Факт подтверждён.' }], taskCheck: { goalAligned: true, constraintsRespected: false, answersQuestion: false, reason: 'Просьба не выполнена.' } }), usage })
-  const refused = await answerWithGrounding('Дай один пункт', [], [source], reject, undefined, dialogue)
-  assert.equal(refused.status, 'unknown')
-  assert.equal(refused.verification.taskCheck?.constraintsRespected, false)
+  await assert.rejects(answerWithGrounding('Дай один пункт', [], [source], reject, undefined, dialogue), /Весь ответ не выполняет задачу/)
   assert.throws(() => parseDialogueJudgments('{"items":[]}', []))
 })
 
@@ -207,8 +208,8 @@ test('auto routes ordinary conversation and general knowledge without retrieval,
     if (messages[0].content.includes('Обнови компактную память')) {
       const data = JSON.parse(messages[messages.length - 1].content)
       assert.equal(data.input, current.input)
-      assert.ok(messages[0].content.includes('Наличие старой цели НЕ превращает приветствие'))
-      assert.ok(messages[0].content.includes('Приветствие плюс вопрос о проекте тоже documents'))
+      assert.ok(messages[0].content.includes('Старая цель не превращает приветствие'))
+      assert.ok(messages[0].content.includes('Приветствие плюс вопрос о проекте — documents'))
       return { content: patch(current.intent === 'documents' ? `Worker: ${current.input}` : current.input,
         current.input === routes[1].input ? [update('goal', 'goal', current.input)] : [], [], current.intent), promptTokens: 10, tokens: 5, totalTokens: 15 }
     }
@@ -219,7 +220,7 @@ test('auto routes ordinary conversation and general knowledge without retrieval,
     }
     answerCalls++
     if (current.intent === 'conversation' || current.intent === 'general') {
-      assert.ok(messages.some((message) => message.content.includes('поиск по документам не нужен и НЕ выполнялся')))
+      assert.ok(messages.some((message) => message.content.includes('Поиск по документам НЕ выполнялся')))
       assert.ok(!messages.some((message) => message.content.includes('Верни только JSON одного из двух')))
       return { content: current.output, promptTokens: 10, tokens: 5, totalTokens: 15 }
     }
@@ -333,6 +334,68 @@ test('ordinary HTTP API restores isolated conversations, citations and memory af
   assert.equal((await restored.getHistory('chat', 'two')).length, 2)
 })
 
+test('DELETE history removes one conversation, memory and token counters, preserving other chats and agent config after restart', async (t) => {
+  const directory = await mkdtemp(join(tmpdir(), 'rag-chat-delete-'))
+  t.after(async () => { await rm(directory, { recursive: true, force: true }) })
+  const filePath = join(directory, 'state.json')
+  const options = { defaultDeepSeekModel: 'test', client: fakeClient(), ragRetriever: { retrieve: async () => context } as unknown as RagRetriever }
+  const service = new AgentService({ ...options, stateStore: new AgentStateStore(filePath) })
+  await service.create({ id: 'chat', config })
+  await service.create({ id: 'other', config })
+  await service.run('chat', goalText, [], undefined, 'removed')
+  await service.run('chat', 'Другая цель — изучить память.', [], undefined, 'kept')
+  await service.run('other', goalText, [], undefined, 'removed')
+  const kept = await service.getHistory('chat', 'kept')
+  const other = await service.getHistory('other', 'removed')
+  const savedConfig = service.get('chat').config
+  assert.ok((await service.getConversationTokens('chat', 'removed')) > 0)
+  const app = express(); app.use(express.json()); app.use('/api/agents', createAgentRouter(service))
+  const server = app.listen(0, '127.0.0.1')
+  await new Promise<void>((resolve) => server.once('listening', resolve))
+  t.after(() => new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve())))
+  const address = server.address(); assert.ok(address && typeof address !== 'string')
+  const base = `http://127.0.0.1:${address.port}/api/agents/chat`
+  const deleted = await fetch(`${base}/history?conversationId=removed`, { method: 'DELETE' })
+  assert.equal(deleted.status, 204)
+  assert.equal(await deleted.text(), '')
+  const cleared = await (await fetch(`${base}/history?conversationId=removed`)).json()
+  assert.equal(cleared.count, 0)
+  assert.deepEqual(cleared.dialogueMemory, emptyDialogueMemory())
+  assert.equal(cleared.conversationTokens, 0)
+  assert.deepEqual(cleared.tokenHistory, [])
+  assert.deepEqual((await (await fetch(`${base}/conversations`)).json()).conversations.map((item: { id: string }) => item.id), ['kept'])
+  assert.equal((await fetch(`${base}/history?conversationId=removed`, { method: 'DELETE' })).status, 204)
+  assert.deepEqual(service.get('chat').config, savedConfig)
+  const restored = new AgentService({ ...options, stateStore: new AgentStateStore(filePath) })
+  assert.deepEqual(await restored.getHistory('chat', 'removed'), [])
+  assert.deepEqual(await restored.getHistory('chat', 'kept'), kept)
+  assert.deepEqual(await restored.getHistory('other', 'removed'), other)
+})
+
+test('clearing a dialogue prevents a concurrent run until deletion has finished', async (t) => {
+  const directory = await mkdtemp(join(tmpdir(), 'rag-chat-delete-lock-'))
+  t.after(async () => { await rm(directory, { recursive: true, force: true }) })
+  const store = new AgentStateStore(join(directory, 'state.json'))
+  const service = new AgentService({ defaultDeepSeekModel: 'test', stateStore: store, client: fakeClient(), ragRetriever: { retrieve: async () => context } as unknown as RagRetriever })
+  await service.create({ id: 'chat', config })
+  await service.run('chat', goalText, [], undefined, 'one')
+  let release!: () => void
+  let started!: () => void
+  const barrier = new Promise<void>((resolve) => { release = resolve })
+  const entered = new Promise<void>((resolve) => { started = resolve })
+  const original = store.clearHistory.bind(store)
+  store.clearHistory = async (scope) => { started(); await barrier; await original(scope) }
+  const clearing = service.clearHistory('chat', 'one')
+  await entered
+  try {
+    await assert.rejects(service.run('chat', 'Новый вопрос', [], undefined, 'one'), /Дождитесь/)
+    await assert.rejects(service.clearHistory('chat', 'one'), /Дождитесь/)
+    await service.run('chat', 'Другая цель — изучить память.', [], undefined, 'two')
+  } finally { release(); await clearing }
+  assert.deepEqual(await service.getHistory('chat', 'one'), [])
+  assert.equal((await service.getHistory('chat', 'two')).length, 2)
+})
+
 test('overlapping requests to one dialogue are rejected without losing the first turn', async (t) => {
   const directory = await mkdtemp(join(tmpdir(), 'rag-chat-lock-'))
   t.after(async () => { await rm(directory, { recursive: true, force: true }) })
@@ -347,6 +410,7 @@ test('overlapping requests to one dialogue are rejected without losing the first
   const first = service.run('chat', goalText, [], undefined, 'one')
   await entered
   await assert.rejects(service.run('chat', 'Параллельный вопрос', [], undefined, 'one'), /Дождитесь/)
+  await assert.rejects(service.clearHistory('chat', 'one'), /Дождитесь/)
   await assert.rejects(service.clearHistory('chat', 'one'), /Дождитесь/)
   await assert.rejects(service.clearAllHistory('chat'), /Дождитесь/)
   release(); await first
