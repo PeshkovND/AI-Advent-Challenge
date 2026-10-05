@@ -13,6 +13,9 @@ import type { AgentTaskState, TaskDecision, TaskInputInterpretation, TaskTransit
 import { RagRetriever, type RagConfig, type RagCompletion } from './rag-retrieval'
 import type { RagResult } from '../src/rag-types'
 import { answerWithGrounding, renderGroundedAnswer } from './rag-grounding'
+import { dialogueEvidence, dialogueInstruction, dialogueStateSchema, latestDialogueMemory, noRetrievalInstruction, prepareDialogue, retrievalDecisionSchema } from './dialogue-memory'
+import { groundingSchema } from '../src/rag-report-import'
+import type { DialogueMemoryConfig, DialogueMemoryState, RagChatConversation, RetrievalDecision } from '../src/rag-chat-types'
 
 export type AgentProvider = 'deepseek' | 'huggingface' | 'openrouter'
 export type AgentMessageRole = 'system' | 'user' | 'assistant'
@@ -21,6 +24,10 @@ export type AgentMessage = {
   role: AgentMessageRole
   content: string
   archived?: boolean
+  grounding?: NonNullable<RagResult['grounding']>
+  dialogueMemory?: DialogueMemoryState
+  searchQuery?: string
+  retrieval?: RetrievalDecision
 }
 
 export type AgentTokenMetrics = {
@@ -74,6 +81,7 @@ export type AgentConfig = {
   /** MCP capabilities are selected by server-side ids; clients never provide commands or credentials. */
   mcp?: { enabled: boolean; servers: string[]; toolAccess?: 'all' | 'read-only'; serverToolAccess?: Record<string, 'all' | 'read-only'> }
   rag?: RagConfig
+  dialogueMemory?: DialogueMemoryConfig
   /**
    * Optional context policy used by the Day 10 strategy demo. The policy is
    * part of the agent configuration so the Agent, rather than the storage
@@ -145,6 +153,11 @@ export type AgentRunResult = {
   invariantCheck?: InvariantCheckInfo
   mcpToolCalls?: McpToolCall[]
   rag?: RagResult
+  dialogueMemory?: DialogueMemoryState
+  resolvedQuestion?: string
+  retrieval?: RetrievalDecision
+  /** Grounded dialogue-only answer, without a document retrieval result. */
+  grounding?: RagResult['grounding']
 }
 
 export type AgentTaskRunEvent = {
@@ -208,6 +221,13 @@ export class AgentStateStore {
   async getHistory(agentId: string) {
     await this.ready
     return (this.state.histories[agentId] ?? []).map((message) => ({ ...message }))
+  }
+
+  async listConversations(agentId: string): Promise<RagChatConversation[]> {
+    await this.ready
+    const prefix = `${agentId}::conversation::`
+    return Object.entries(this.state.histories).filter(([scope, messages]) => scope.startsWith(prefix) && messages.length > 0)
+      .map(([scope, messages]) => ({ id: scope.slice(prefix.length), title: messages.find((message) => message.role === 'user')?.content.slice(0, 70) ?? 'Диалог', messageCount: messages.length })).reverse()
   }
 
   async replaceHistory(agentId: string, messages: AgentMessage[]) {
@@ -574,20 +594,32 @@ export class Agent {
       const explanation = preflight.error ?? blockedInvariantMessage(preflight.verdict)
       return this.blockedInvariantResult(validatedInput, explanation, preflight.verdict, 0, preflight.tokenMetrics, startedAt)
     }
-    const prepared = this.contextStrategies
-      ? await this.contextStrategies.prepareAgentContext(contextId, validatedInput, this.config, history)
-      : { config: this.config, history }
+    const users = history.filter((message) => message.role === 'user').map((message) => message.content)
+    const recentDialogue = history.slice(-(this.config.dialogueMemory?.historyWindow ?? 6)).map((message) => ({ role: message.role, content: (message.grounding?.answer ?? message.content).slice(0, 2000) }))
+    const dialogue = this.config.dialogueMemory?.enabled
+      ? await prepareDialogue(validatedInput, latestDialogueMemory(history), users.slice(-3), createRagCompletion(this.client, this.config, signal), signal, recentDialogue)
+      : undefined
+    const promptHistory = dialogue ? recentDialogue : history
+    const prepared: AgentContextPreparation = this.contextStrategies
+      ? await this.contextStrategies.prepareAgentContext(contextId, validatedInput, this.config, promptHistory)
+      : { config: this.config, history: promptHistory }
     const memory = this.memory ? await this.memory.prepare(prepared.history, validatedInput, { history, summary: prepared.summary ?? summary }) : undefined
     const effectiveConfig = withRuntimeContext(prepared.config, memory?.systemPrompt)
-    const ragContext = this.config.rag?.enabled ? await this.ragRetriever.retrieve(validatedInput, this.config.rag, createRagCompletion(this.client, this.config, signal), signal) : undefined
+    const automatic = this.config.rag?.retrievalPolicy === 'auto' && dialogue !== undefined
+    const route = automatic ? dialogue.intent : 'documents'
+    const shouldSearch = Boolean(this.config.rag?.enabled && route === 'documents')
+    const retrieval: RetrievalDecision | undefined = dialogue ? { policy: automatic ? 'auto' : 'always', route, searched: shouldSearch, reason: automatic ? dialogue.reason : 'Поиск включён для каждого сообщения конфигурацией агента.' } : undefined
+    const ragContext = shouldSearch ? await this.ragRetriever.retrieve(dialogue?.question ?? validatedInput, this.config.rag!, createRagCompletion(this.client, this.config, signal), signal) : undefined
+    const dialogueContext = dialogue ? { question: dialogue.question, instruction: dialogueInstruction(dialogue.state, dialogue.question), sources: dialogueEvidence(dialogue.state, [...users, validatedInput]), allowDialogueOnly: dialogue.intent === 'dialogue' } : undefined
     let grounding: RagResult['grounding']
     const groundedCompletion = async (answerMessages: AgentMessage[]) => {
-      grounding = await answerWithGrounding(validatedInput, answerMessages, ragContext!.sources, createRagCompletion(this.client, this.config, signal), signal)
+      grounding = await answerWithGrounding(validatedInput, answerMessages, ragContext?.sources ?? [], createRagCompletion(this.client, this.config, signal), signal, dialogueContext)
+      if (automatic && route === 'dialogue' && grounding.status === 'unknown') grounding = { ...grounding, answer: 'Не знаю: в сохранённой памяти диалога недостаточно сведений для ответа.', clarification: 'Уточните, пожалуйста, вашу цель, ограничение или термин, которые нужно зафиксировать.' }
       const content = this.config.outputPolicy?.format === 'json' ? JSON.stringify(grounding) : renderGroundedAnswer(grounding)
       if (this.config.outputPolicy?.maxCharacters !== undefined && content.length > this.config.outputPolicy.maxCharacters) throw new AgentError('Лимит ответа слишком мал для полного ответа с источниками и цитатами. Увеличьте maxCharacters.', 502)
       return { content, tokens: grounding.usage.completionTokens, promptTokens: grounding.usage.promptTokens, totalTokens: grounding.usage.totalTokens }
     }
-    const instructions = [runtimeInstruction, ragContext?.instruction].filter(Boolean).join('\n\n') || undefined
+    const instructions = [runtimeInstruction, dialogueContext?.instruction, ragContext?.instruction, route === 'conversation' || route === 'general' ? noRetrievalInstruction(route) : undefined].filter(Boolean).join('\n\n') || undefined
     const messages = buildMessages(effectiveConfig, memory?.history ?? prepared.history, validatedInput, prepared.summary ?? summary, instructions)
     const mcpResult = this.config.mcp?.enabled
       ? await this.mcpRuntime?.run({
@@ -599,14 +631,14 @@ export class Agent {
       }, { provider: this.config.provider, model: this.config.model, temperature: this.config.temperature, maxTokens: this.config.maxTokens, servers: this.config.mcp.servers, toolAccess: this.config.mcp.toolAccess, serverToolAccess: this.config.mcp.serverToolAccess })
       : undefined
     if (this.config.mcp?.enabled && !mcpResult) throw new AgentError('MCP включён в конфигурации агента, но MCP runtime не настроен.', 503)
-    let completion = ragContext && this.config.rag?.grounding?.enabled
+    let completion = (ragContext || (automatic && route === 'dialogue')) && this.config.rag?.grounding?.enabled
       ? await groundedCompletion(messages)
       : mcpResult
       ? { content: mcpResult.output, tokens: mcpResult.tokens, promptTokens: mcpResult.promptTokens, totalTokens: mcpResult.totalTokens }
       : await this.client.complete(messages, toLlmOptions(this.config), signal)
     let rawOutput = completion.content
     let { output, taskDecision } = this.resolveTaskOutput(rawOutput, validatedInput)
-    let tokenMetrics = sumTokenMetrics(preflight.tokenMetrics, ragContext?.trace?.usage, createTokenMetrics(this.config, validatedInput, completion))
+    let tokenMetrics = sumTokenMetrics(preflight.tokenMetrics, dialogue?.usage, ragContext?.trace?.usage, createTokenMetrics(this.config, validatedInput, completion))
     let attempts = 0
     const violatedIds = new Set<string>()
     let postCheck = await this.checkInvariants('output', output)
@@ -664,6 +696,9 @@ export class Agent {
       ...(invariantCheck ? { invariantCheck } : {}),
       ...(mcpResult?.toolCalls.length ? { mcpToolCalls: mcpResult.toolCalls } : {}),
       ...(ragContext ? { rag: { indexRunId: ragContext.indexRunId, sources: ragContext.sources, trace: ragContext.trace, ...(grounding ? { grounding } : {}) } } : {}),
+      ...(!ragContext && grounding ? { grounding } : {}),
+      ...(retrieval ? { retrieval } : {}),
+      ...(dialogue ? { dialogueMemory: dialogue.state, resolvedQuestion: dialogue.question } : {}),
     }
   }
 
@@ -758,13 +793,15 @@ export class AgentService {
   private contextStrategies?: ContextStrategiesServiceLike
   private readonly mcpRuntime?: McpToolRuntime
   private readonly activeTaskRuns = new Map<string, AbortController>()
+  private readonly ragRetriever?: RagRetriever
   readonly ready: Promise<void>
 
-  constructor(options: AgentServiceOptions & { mcpRuntime?: McpToolRuntime }) {
-    this.client = new LlmClient(options)
+  constructor(options: AgentServiceOptions & { mcpRuntime?: McpToolRuntime; stateStore?: AgentStateStore; client?: LlmClient; ragRetriever?: RagRetriever }) {
+    this.client = options.client ?? new LlmClient(options)
     this.defaultDeepSeekModel = options.defaultDeepSeekModel
     this.mcpRuntime = options.mcpRuntime
-    this.stateStore = new AgentStateStore()
+    this.stateStore = options.stateStore ?? new AgentStateStore()
+    this.ragRetriever = options.ragRetriever
     const defaultConfig = normalizeAgentConfig({
       name: 'Основной агент',
       provider: 'deepseek',
@@ -852,22 +889,28 @@ export class AgentService {
     if (this.contextStrategies?.resetAgentContext) await this.contextStrategies.resetAgentContext(id)
   }
 
-  async getHistory(id: string) {
+  async getHistory(id: string, conversationId?: string) {
     await this.ready
     this.get(id)
-    return this.stateStore.getHistory(id)
+    return this.stateStore.getHistory(conversationId ? conversationScopeId(id, conversationId) : id)
   }
 
-  async getConversationTokens(id: string) {
+  async listConversations(id: string) {
     await this.ready
     this.get(id)
-    return this.stateStore.getConversationTokens(id)
+    return this.stateStore.listConversations(id)
   }
 
-  async getTokenHistory(id: string) {
+  async getConversationTokens(id: string, conversationId?: string) {
     await this.ready
     this.get(id)
-    return this.stateStore.getTokenHistory(id)
+    return this.stateStore.getConversationTokens(conversationId ? conversationScopeId(id, conversationId) : id)
+  }
+
+  async getTokenHistory(id: string, conversationId?: string) {
+    await this.ready
+    this.get(id)
+    return this.stateStore.getTokenHistory(conversationId ? conversationScopeId(id, conversationId) : id)
   }
 
   async getContextInfo(id: string) {
@@ -880,15 +923,17 @@ export class AgentService {
       : createContextInfo(agent.config, activeHistory, undefined, 0, 0)
   }
 
-  async clearHistory(id: string) {
+  async clearHistory(id: string, conversationId?: string) {
     await this.ready
     this.get(id)
-    await this.stateStore.clearHistory(id)
+    if (this.activeDialogueRuns.has(conversationId ? conversationScopeId(id, conversationId) : id)) throw new AgentError('Дождитесь завершения ответа перед очисткой диалога.', 409)
+    await this.stateStore.clearHistory(conversationId ? conversationScopeId(id, conversationId) : id)
   }
 
   async clearAllHistory(id: string) {
     await this.ready
     this.get(id)
+    if ([...this.activeDialogueRuns].some((scope) => scope === id || scope.startsWith(`${id}::conversation::`))) throw new AgentError('Дождитесь завершения ответов перед очисткой диалогов.', 409)
     const clearedScopes = await this.stateStore.clearAllHistory(id)
     if (this.contextStrategies?.resetAgentContext) await this.contextStrategies.resetAgentContext(id)
     return { agentId: id, clearedScopes }
@@ -1005,7 +1050,19 @@ export class AgentService {
     return this.get(id).config.taskState!
   }
 
+  private readonly activeDialogueRuns = new Set<string>()
+
   async run(id: string, input: string, providedHistory: AgentMessage[] = [], onTaskEvent?: (event: AgentTaskRunEvent) => void, conversationId?: string, clientContext?: AgentRuntimeContext) {
+    await this.ready
+    if (!this.get(id).config.dialogueMemory?.enabled) return this.runUnlocked(id, input, providedHistory, onTaskEvent, conversationId, clientContext)
+    const scope = conversationId ? conversationScopeId(id, conversationId) : id
+    if (this.activeDialogueRuns.has(scope)) throw new AgentError('Дождитесь завершения предыдущего ответа в этом диалоге.', 409)
+    this.activeDialogueRuns.add(scope)
+    try { return await this.runUnlocked(id, input, providedHistory, onTaskEvent, conversationId, clientContext) }
+    finally { this.activeDialogueRuns.delete(scope) }
+  }
+
+  private async runUnlocked(id: string, input: string, providedHistory: AgentMessage[] = [], onTaskEvent?: (event: AgentTaskRunEvent) => void, conversationId?: string, clientContext?: AgentRuntimeContext) {
     await this.ready
     let agent = this.get(id)
     if (agent.config.taskMachine && !agent.config.taskState) {
@@ -1029,10 +1086,11 @@ export class AgentService {
     const storedHistory = await this.stateStore.getHistory(scope)
     const mcpContext = await this.stateStore.getMcpContext(scope)
     const activeHistory = storedHistory.filter((message) => !message.archived)
-    const sourceHistory = activeHistory.length > 0 ? activeHistory : providedHistory
+    // Memory provenance is derived only from server-persisted user messages.
+    const sourceHistory = agent.config.dialogueMemory?.enabled ? storedHistory : activeHistory.length > 0 ? activeHistory : providedHistory
     const initialState = agent.config.taskState
     const initialStage = initialState?.stage
-    const isInternalContinuation = input.startsWith('ВНУТРЕННЕЕ ПРОДОЛЖЕНИЕ')
+    const isInternalContinuation = Boolean(initialState) && input.startsWith('ВНУТРЕННЕЕ ПРОДОЛЖЕНИЕ')
     // Validation feedback is normally a command for the state machine. Check it
     // before applying that command so a conflicting requested change cannot
     // silently move validation back into execution.
@@ -1126,7 +1184,7 @@ export class AgentService {
     }
     let contextMessages = await this.stateStore.appendHistory(scope, [
       ...(isInternalContinuation ? [] : [{ role: 'user' as const, content: result.input }]),
-      { role: 'assistant', content: result.output },
+      { role: 'assistant', content: result.output, ...(result.dialogueMemory ? { dialogueMemory: result.dialogueMemory, grounding: result.grounding ?? result.rag?.grounding, retrieval: result.retrieval, ...(result.retrieval?.searched ? { searchQuery: result.resolvedQuestion } : {}) } : {}) },
     ])
     let conversationTokens = await this.stateStore.addConversationTokens(scope, result.tokenMetrics, result.summaryTokenMetrics?.totalTokens ?? 0, result.strategyTokenMetrics, result.memoryClassifierTokenMetrics)
     onTaskEvent?.({ content: result.output, taskState: taskUpdate?.state ?? this.get(id).config.taskState, ...(result.invariantCheck ? { invariantCheck: result.invariantCheck } : {}) })
@@ -1184,6 +1242,11 @@ export class AgentService {
   async stream(id: string, input: string, providedHistory: AgentMessage[], onChunk: (content: string) => void, conversationId?: string, clientContext?: AgentRuntimeContext) {
     await this.ready
     const agent = this.get(id)
+    if (agent.config.dialogueMemory?.enabled) {
+      const result = await this.run(id, input, providedHistory, undefined, conversationId, clientContext)
+      onChunk(result.output)
+      return result
+    }
     if (agent.config.taskState?.status === 'paused') throw new AgentError('Задача на паузе. Продолжите её перед новым сообщением.', 409)
     const scope = agent.config.taskState ? taskScopeId(id, agent.config.taskState) : conversationId ? conversationScopeId(id, conversationId) : id
     const storedHistory = await this.stateStore.getHistory(scope)
@@ -1271,7 +1334,7 @@ export class AgentService {
   }
 
   private register(id: string, config: Required<Pick<AgentConfig, 'provider' | 'model'>> & AgentConfig, createdAt: string) {
-    this.agents.set(id, new Agent(id, config, this.client, this.contextStrategies, this.mcpRuntime))
+    this.agents.set(id, new Agent(id, config, this.client, this.contextStrategies, this.mcpRuntime, this.ragRetriever))
     this.createdAt.set(id, createdAt)
   }
 
@@ -1457,18 +1520,24 @@ export function createAgentRouter(service: AgentService): Router {
 
   router.get('/:agentId/history', async (request, response) => {
     try {
-      const messages = await service.getHistory(request.params.agentId)
-      const conversationTokens = await service.getConversationTokens(request.params.agentId)
-      const tokenHistory = await service.getTokenHistory(request.params.agentId)
-      response.json({ agentId: request.params.agentId, messages, count: messages.length, conversationTokens, tokenHistory })
+      const conversationId = parseConversationId(request.query.conversationId)
+      const messages = await service.getHistory(request.params.agentId, conversationId)
+      const conversationTokens = await service.getConversationTokens(request.params.agentId, conversationId)
+      const tokenHistory = await service.getTokenHistory(request.params.agentId, conversationId)
+      response.json({ agentId: request.params.agentId, messages, count: messages.length, conversationTokens, tokenHistory, ...(service.get(request.params.agentId).config.dialogueMemory?.enabled ? { dialogueMemory: latestDialogueMemory(messages) } : {}) })
     } catch (error) {
       sendAgentError(response, error)
     }
   })
 
+  router.get('/:agentId/conversations', async (request, response) => {
+    try { response.json({ conversations: await service.listConversations(request.params.agentId) }) }
+    catch (error) { sendAgentError(response, error) }
+  })
+
   router.delete('/:agentId/history', async (request, response) => {
     try {
-      await service.clearHistory(request.params.agentId)
+      await service.clearHistory(request.params.agentId, parseConversationId(request.query.conversationId))
       response.status(204).send()
     } catch (error) {
       sendAgentError(response, error)
@@ -1616,7 +1685,7 @@ export function createRagCompletion(client: Pick<LlmClient, 'complete'>, config:
     const completion = await client.complete(messages, {
       provider: config.provider ?? 'deepseek', model: config.model ?? 'deepseek-v4-flash',
       temperature: stage === 'answer' ? config.temperature ?? 0 : 0,
-      maxTokens: stage === 'rewrite' ? 400 : stage === 'verify' ? 2_048 : stage === 'answer' ? config.maxTokens ?? 4_096 : 4_096, format: 'json',
+      maxTokens: stage === 'rewrite' ? 400 : stage === 'memory' ? 2_048 : stage === 'verify' ? 2_048 : stage === 'answer' ? config.maxTokens ?? 4_096 : 4_096, format: 'json',
     }, signal ? AbortSignal.any([signal, timeout]) : timeout)
     // Auxiliary prompts are not a new user message; count their exact API usage only.
     const usage = createTokenMetrics(config, '', completion)
@@ -1786,6 +1855,7 @@ function normalizeAgentConfig(value: unknown, defaultDeepSeekModel: string) {
     taskMachine: input.taskMachine === true ? true : undefined,
     mcp: normalizeMcpConfig(input.mcp),
     rag: normalizeRagConfig(input.rag),
+    dialogueMemory: normalizeDialogueMemory(input.dialogueMemory),
   }
 
   validateGroundingConfig(config)
@@ -1793,11 +1863,20 @@ function normalizeAgentConfig(value: unknown, defaultDeepSeekModel: string) {
 }
 
 function validateGroundingConfig(config: AgentConfig) {
+  if (config.rag?.retrievalPolicy === 'auto' && !config.dialogueMemory?.enabled) throw new AgentError('rag.retrievalPolicy=auto требует включённой dialogueMemory для выбора режима по контексту диалога.')
+  if (config.dialogueMemory?.enabled && (!config.rag?.enabled || !config.rag.grounding?.enabled || config.taskState || config.contextStrategy || (config.memoryLayers && config.memoryLayers.enabled !== false))) throw new AgentError('Память RAG-диалога требует RAG с проверяемыми цитатами и собственной историей: не совмещайте её с taskState, contextStrategy или memoryLayers.')
   if (!config.rag?.enabled || !config.rag.grounding?.enabled) return
   // Citation verification is independent of retrieval enhancements. Basic RAG can
   // keep its original top-K search; the generator/verifier must still reject unsupported facts.
   if (config.taskMachine || config.mcp?.enabled) throw new AgentError('Режим проверяемых цитат работает с документами RAG и не совмещается с taskMachine или MCP-действиями. Используйте отдельного обычного RAG-агента.')
   if (config.outputPolicy?.stopSequences?.length) throw new AgentError('Stop-последовательности несовместимы с полным JSON-контрактом цитат.')
+}
+
+export function normalizeDialogueMemory(value: unknown): DialogueMemoryConfig | undefined {
+  if (!isRecord(value) || value.enabled !== true) return undefined
+  const historyWindow = value.historyWindow === undefined ? 6 : value.historyWindow
+  if (!Number.isInteger(historyWindow) || Number(historyWindow) < 2 || Number(historyWindow) > 20 || Number(historyWindow) % 2) throw new AgentError('dialogueMemory.historyWindow должен быть чётным целым числом от 2 до 20.')
+  return { enabled: true, historyWindow: Number(historyWindow) }
 }
 
 function normalizeMcpConfig(value: unknown): AgentConfig['mcp'] | undefined {
@@ -1819,6 +1898,7 @@ function normalizeMcpConfig(value: unknown): AgentConfig['mcp'] | undefined {
 
 export function normalizeRagConfig(value: unknown): RagConfig | undefined {
   if (!isRecord(value) || value.enabled !== true) return undefined
+  if (value.retrievalPolicy !== undefined && value.retrievalPolicy !== 'always' && value.retrievalPolicy !== 'auto') throw new AgentError('rag.retrievalPolicy должен быть always или auto.')
   const strategy = value.strategy === 'fixed' ? 'fixed' : 'structured'
   const topK = readInteger(value.topK, 1, 8) ?? 4
   const validNumber = (input: unknown, min: number, max: number, integer = false): input is number => typeof input === 'number' && Number.isFinite(input) && input >= min && input <= max && (!integer || Number.isInteger(input))
@@ -1831,6 +1911,7 @@ export function normalizeRagConfig(value: unknown): RagConfig | undefined {
   if (rerankInput && minRelevance === undefined) throw new AgentError('minRelevance должен быть целым числом от 0 до 3.')
   return {
     enabled: true, strategy, topK,
+    ...(value.retrievalPolicy !== undefined ? { retrievalPolicy: value.retrievalPolicy as 'always' | 'auto' } : {}),
     ...(candidateTopK !== undefined ? { candidateTopK } : {}),
     ...(minSimilarity !== undefined ? { minSimilarity } : {}),
     ...(value.queryRewrite === true ? { queryRewrite: true } : {}),
@@ -2040,7 +2121,15 @@ function parseStoredMessages(value: unknown): AgentMessage[] {
   return value.filter((item): item is AgentMessage => isRecord(item)
     && ['system', 'user', 'assistant'].includes(String(item.role))
     && typeof item.content === 'string')
-    .map((item) => ({ role: item.role, content: item.content, ...(item.archived === true ? { archived: true } : {}) }))
+    .map((item) => {
+      const memory = dialogueStateSchema.safeParse(item.dialogueMemory)
+      const grounding = groundingSchema.safeParse(item.grounding)
+      const retrieval = retrievalDecisionSchema.safeParse(item.retrieval)
+      return { role: item.role, content: item.content, ...(item.archived === true ? { archived: true } : {}),
+        ...(memory.success ? { dialogueMemory: memory.data } : {}), ...(grounding.success ? { grounding: grounding.data } : {}),
+        ...(retrieval.success ? { retrieval: retrieval.data } : {}),
+        ...(typeof item.searchQuery === 'string' ? { searchQuery: item.searchQuery } : {}) }
+    })
 }
 
 function parseStoredMcpContext(value: unknown): McpToolCall[] {

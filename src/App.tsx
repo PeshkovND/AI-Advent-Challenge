@@ -4,10 +4,12 @@ import rehypeKatex from 'rehype-katex'
 import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
 import RagPage from './RagPage'
+import RagChatPage from './RagChatPage'
 import type { RagConfig } from './rag-types'
+import type { DialogueMemoryConfig } from './rag-chat-types'
 
 type MessageRole = 'user' | 'assistant'
-type Page = 'chat' | 'compare' | 'reasoning' | 'temperature' | 'models' | 'agents' | 'rag' | 'context-demo' | 'context-comparison' | 'context-strategies' | 'context-branching' | 'memory-layers' | 'personalization' | 'task-state' | 'calendar-mcp' | 'scheduler'
+type Page = 'chat' | 'compare' | 'reasoning' | 'temperature' | 'models' | 'agents' | 'rag' | 'rag-chat' | 'context-demo' | 'context-comparison' | 'context-strategies' | 'context-branching' | 'memory-layers' | 'personalization' | 'task-state' | 'calendar-mcp' | 'scheduler'
 
 type ChatMessage = {
   id: string
@@ -98,6 +100,7 @@ type AgentConfig = {
   taskMachine?: boolean
   mcp?: { enabled: boolean; servers: string[]; toolAccess?: 'all' | 'read-only'; serverToolAccess?: Record<string, 'all' | 'read-only'> }
   rag?: RagConfig
+  dialogueMemory?: DialogueMemoryConfig
 }
 type AgentInvariant = { id: string; title: string; rule: string }
 type InvariantField = AgentInvariant
@@ -268,10 +271,11 @@ const createInvariantField = (): InvariantField => ({ id: `invariant-${crypto.ra
 
 function App() {
   const [activePage, setActivePage] = useState<Page>(() => {
-    try { return sessionStorage.getItem('deepchat-rag-open') === 'true' || sessionStorage.getItem('deepchat-day23-open') === 'true' ? 'rag' : 'chat' }
+    try { return sessionStorage.getItem('deepchat-rag-chat-open') === 'true' ? 'rag-chat' : sessionStorage.getItem('deepchat-rag-open') === 'true' || sessionStorage.getItem('deepchat-day23-open') === 'true' ? 'rag' : 'chat' }
     catch { return 'chat' }
   })
-  useEffect(() => { try { sessionStorage.setItem('deepchat-rag-open', String(activePage === 'rag')); sessionStorage.removeItem('deepchat-day23-open') } catch { /* Navigation works without storage. */ } }, [activePage])
+  useEffect(() => { try { sessionStorage.setItem('deepchat-rag-open', String(activePage === 'rag')); sessionStorage.setItem('deepchat-rag-chat-open', String(activePage === 'rag-chat')); sessionStorage.removeItem('deepchat-day23-open') } catch { /* Navigation works without storage. */ } }, [activePage])
+  useEffect(() => { document.title = activePage === 'rag-chat' ? 'DeepChat · RAG-чат' : 'DeepChat · Сравнение ответов' }, [activePage])
 
   return (
     <div className="day-app">
@@ -302,6 +306,9 @@ function App() {
           </button>
           <button className={`page-nav-button ${activePage === 'rag' ? 'active' : ''}`} onClick={() => setActivePage('rag')}>
             <span>⌕</span> RAG
+          </button>
+          <button className={`page-nav-button ${activePage === 'rag-chat' ? 'active' : ''}`} onClick={() => setActivePage('rag-chat')}>
+            <span>◍</span> RAG-чат
           </button>
           <button className={`page-nav-button ${activePage === 'context-demo' ? 'active' : ''}`} onClick={() => setActivePage('context-demo')}>
             <span>◫</span> Контекст
@@ -338,8 +345,8 @@ function App() {
         </div>
       </aside>
 
-      <main className="day-main">
-        {activePage === 'chat' ? <ChatPage /> : activePage === 'compare' ? <ComparePage /> : activePage === 'reasoning' ? <ReasoningPage /> : activePage === 'temperature' ? <TemperaturePage /> : activePage === 'models' ? <ModelsPage /> : activePage === 'agents' ? <AgentsPage /> : activePage === 'rag' ? <RagPage /> : activePage === 'context-demo' ? <ContextDemoPage /> : activePage === 'context-comparison' ? <ContextCompressionComparisonPage /> : activePage === 'context-strategies' ? <ContextStrategiesPage /> : activePage === 'context-branching' ? <ContextBranchingPage /> : activePage === 'memory-layers' ? <MemoryLayersPage /> : activePage === 'personalization' ? <PersonalizationPage /> : activePage === 'task-state' ? <TaskStatePage /> : activePage === 'calendar-mcp' ? <CalendarMcpPage /> : <SchedulerPage />}
+      <main className={`day-main${activePage === 'rag-chat' ? ' day-main-rag-chat' : ''}`}>
+        {activePage === 'rag-chat' ? <RagChatPage /> : activePage === 'chat' ? <ChatPage /> : activePage === 'compare' ? <ComparePage /> : activePage === 'reasoning' ? <ReasoningPage /> : activePage === 'temperature' ? <TemperaturePage /> : activePage === 'models' ? <ModelsPage /> : activePage === 'agents' ? <AgentsPage /> : activePage === 'rag' ? <RagPage /> : activePage === 'context-demo' ? <ContextDemoPage /> : activePage === 'context-comparison' ? <ContextCompressionComparisonPage /> : activePage === 'context-strategies' ? <ContextStrategiesPage /> : activePage === 'context-branching' ? <ContextBranchingPage /> : activePage === 'memory-layers' ? <MemoryLayersPage /> : activePage === 'personalization' ? <PersonalizationPage /> : activePage === 'task-state' ? <TaskStatePage /> : activePage === 'calendar-mcp' ? <CalendarMcpPage /> : <SchedulerPage />}
       </main>
     </div>
   )

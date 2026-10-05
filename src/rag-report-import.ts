@@ -7,13 +7,13 @@ const mode = z.enum(['baseline', 'rerank', 'rewrite', 'full'])
 const evidence = z.object({ source: z.string(), quote: z.string(), alternatives: z.array(z.object({ source: z.string(), quote: z.string() })).optional() })
 const source = z.object({ source: z.string(), title: z.string(), section: z.string(), chunkId: z.string(), strategy, score: finite, text: z.string() })
 const usage = z.object({ inputTokens: finite, promptTokens: finite, completionTokens: finite, totalTokens: finite })
-const grounding = z.object({
+export const groundingSchema = z.object({
   status: z.enum(['answered', 'unknown']), answer: z.string(),
-  sources: z.array(z.object({ source: z.string(), section: z.string(), chunkId: z.string() })),
-  citations: z.array(z.object({ id: finite.int().positive(), source: z.string(), section: z.string(), chunkId: z.string(), quote: z.string() })),
+  sources: z.array(z.object({ source: z.string(), section: z.string(), chunkId: z.string(), kind: z.literal('dialogue').optional() })),
+  citations: z.array(z.object({ id: finite.int().positive(), source: z.string(), section: z.string(), chunkId: z.string(), quote: z.string(), kind: z.literal('dialogue').optional() })),
   claims: z.array(z.object({ id: finite.int().positive(), text: z.string(), citationIds: z.array(finite.int().positive()) })),
   clarification: z.string().optional(), reason: z.enum(['weak-context', 'insufficient-evidence', 'unsupported-answer']).optional(),
-  verification: z.object({ status: z.enum(['passed', 'abstained']), attempts: finite.int().min(0).max(2), judgments: z.array(z.object({ claimId: finite.int().positive(), supported: z.boolean(), reason: z.string() })) }), usage,
+  verification: z.object({ status: z.enum(['passed', 'abstained']), attempts: finite.int().min(0).max(2), judgments: z.array(z.object({ claimId: finite.int().positive(), supported: z.boolean(), reason: z.string() })), taskCheck: z.object({ goalAligned: z.boolean(), constraintsRespected: z.boolean(), answersQuestion: z.boolean(), reason: z.string() }).optional() }), usage,
 })
 const trace = z.object({
   originalQuestion: z.string(), searchQuery: z.string(), candidateTopK: finite, topK: finite,
@@ -23,7 +23,7 @@ const trace = z.object({
   rerank: z.object({ status: z.enum(['disabled', 'applied', 'skipped']), durationMs: finite, usage: usage.optional(), attempts: finite.int().min(1).max(2).optional(), warning: z.string().optional() }),
   timings: z.object({ embeddingMs: finite, searchMs: finite, totalMs: finite }), usage, emptyContext: z.boolean(),
 })
-const result = z.object({ output: z.string(), durationMs: finite, model: z.string(), totalTokens: finite, promptTokens: finite.optional(), rag: z.object({ indexRunId: z.string(), sources: z.array(source), trace: trace.optional(), grounding: grounding.optional() }).optional() })
+const result = z.object({ output: z.string(), durationMs: finite, model: z.string(), totalTokens: finite, promptTokens: finite.optional(), rag: z.object({ indexRunId: z.string(), sources: z.array(source), trace: trace.optional(), grounding: groundingSchema.optional() }).optional() })
 const reportSchema = z.object({
   id: z.string().uuid(), createdAt: z.string().datetime(), completed: z.boolean(),
   index: z.object({ id: z.string(), model: z.string(), embeddingProfile: z.string() }),

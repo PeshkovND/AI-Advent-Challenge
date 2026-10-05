@@ -1,5 +1,7 @@
 export type RagConfig = {
   enabled: boolean
+  /** Always retrieve (legacy default), or let dialogue preparation decide. */
+  retrievalPolicy?: 'always' | 'auto'
   strategy: 'fixed' | 'structured'
   /** Maximum number of passages sent to the answering model. */
   topK: number
@@ -29,17 +31,18 @@ export type RagTrace = {
   timings: { embeddingMs: number; searchMs: number; totalMs: number }
   usage: RagUsage; emptyContext: boolean
 }
-export type RagCitation = { id: number; source: string; section: string; chunkId: string; quote: string }
+export type RagCitation = { id: number; source: string; section: string; chunkId: string; quote: string; kind?: 'dialogue' }
 export type RagClaim = { id: number; text: string; citationIds: number[] }
+export type RagTaskCheck = { goalAligned: boolean; constraintsRespected: boolean; answersQuestion: boolean; reason: string }
 export type RagGrounding = {
   status: 'answered' | 'unknown'
   answer: string
-  sources: Array<{ source: string; section: string; chunkId: string }>
+  sources: Array<{ source: string; section: string; chunkId: string; kind?: 'dialogue' }>
   citations: RagCitation[]
   claims: RagClaim[]
   clarification?: string
   reason?: 'weak-context' | 'insufficient-evidence' | 'unsupported-answer'
-  verification: { status: 'passed' | 'abstained'; attempts: number; judgments: Array<{ claimId: number; supported: boolean; reason: string }> }
+  verification: { status: 'passed' | 'abstained'; attempts: number; judgments: Array<{ claimId: number; supported: boolean; reason: string }>; taskCheck?: RagTaskCheck }
   usage: RagUsage
 }
 export type RagResult = { indexRunId: string; sources: RagSource[]; trace?: RagTrace; grounding?: RagGrounding }
