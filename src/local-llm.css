@@ -1,0 +1,13 @@
+.local-llm-history-title { display: block; min-width: 0; padding: 12px 10px; color: #555967; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.local-llm-device { display: flex; align-items: center; gap: 10px; margin: auto 10px 0; padding-top: 24px; }
+.local-llm-device strong { display: block; color: #646879; font-size: 11px; font-weight: 600; }
+.local-llm-device small { display: block; margin-top: 5px; color: #9498a6; font-size: 10px; }
+.local-llm-status-dot { width: 7px; height: 7px; border-radius: 50%; background: #b6bbc9; }
+.local-llm-status-dot.ready { background: #62ac93; box-shadow: 0 0 0 4px #62ac9312; }
+.local-llm-page .rag-chat-history-note { margin-top: 0; }
+.local-llm-refresh { display: grid; place-items: center; width: 32px; height: 32px; padding: 0; border: 1px solid #e6e7ef; border-radius: 50%; background: #fff; color: #8c91a1; font-size: 20px; }
+.local-llm-refresh:hover { color: #6366d4; background: #f6f6fc; }
+.local-llm-page .rag-chat-memory section p { margin: 0; color: #747a8c; font-size: 12px; line-height: 1.7; }
+.local-llm-message-note { display: block; margin-top: 8px; color: #9b9fae; font-size: 10px; }
+.local-llm-notice { margin: 0 0 12px; padding: 10px 12px; color: #74799d; background: #f7f7fc; border-radius: 9px; font-size: 11px; line-height: 1.6; }
+.local-llm-page button:focus-visible { outline: 2px solid #7175d9; outline-offset: 3px; }
