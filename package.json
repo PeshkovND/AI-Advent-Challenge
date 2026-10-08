@@ -32,7 +32,9 @@
     "rag:check-questions": "tsx server/rag-check-questions.ts",
     "build": "vite build",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "llm:local:demo": "tsx server/local-llm-demo.ts --auto",
+    "llm:local:chat": "tsx server/local-llm-demo.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/client": "^2.0.0",
