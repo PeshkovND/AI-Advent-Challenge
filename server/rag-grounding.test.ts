@@ -199,3 +199,41 @@ test('ordinary agent refuses context rejected by cosine or relevance cutoff with
     assert.ok(result.output.includes('Уточните'))
   }
 })
+
+test('opt-in partial grounding retains verified facts when repair returns unknown', async () => {
+  let answers = 0
+  const grounded = await answerWithGrounding(question, messages, [source], async (_input, stage) => {
+    if (stage === 'answer') {
+      answers++
+      if (answers === 2) return { content: '{"status":"unknown"}', usage }
+      return { content: JSON.stringify({ status: 'answered', claims: [
+        JSON.parse(payload()).claims[0], { ...JSON.parse(payload()).claims[0], text: 'All missed runs are replayed.' },
+      ] }), usage }
+    }
+    return { content: JSON.stringify({ items: [{ claimId: 1, supported: true, reason: 'Directly stated.' }, { claimId: 2, supported: false, reason: 'Contradicts the passage.' }] }), usage }
+  }, undefined, undefined, { allowPartial: true })
+  assert.equal(grounded.status, 'answered')
+  assert.equal(grounded.partial, true)
+  assert.equal(grounded.verification.attempts, 2)
+  assert.equal(grounded.claims.length, 1)
+  assert.ok(!grounded.answer.includes('All missed'))
+  assert.ok(grounded.verification.judgments.every((item) => item.supported))
+  assert.ok(renderGroundedAnswer(grounded).includes('только часть ответа'))
+  assert.equal(grounded.usage.totalTokens, usage.totalTokens * 3)
+})
+test('partial mode does not turn unsupported claims into an answer', async () => {
+  const grounded = await answerWithGrounding(question, messages, [source], async (_input, stage) => ({
+    content: stage === 'answer' ? payload() : verdict(false), usage,
+  }), undefined, undefined, { allowPartial: true })
+  assert.equal(grounded.status, 'unknown')
+  assert.equal(grounded.partial, undefined)
+  assert.deepEqual(grounded.citations, [])
+})
+test('partial mode does not hide an unavailable verifier after an initial partial result', async () => {
+  let verifications = 0
+  await assert.rejects(answerWithGrounding(question, messages, [source], async (_input, stage) => {
+    if (stage === 'answer') return { content: JSON.stringify({ status: 'answered', claims: [JSON.parse(payload()).claims[0], { ...JSON.parse(payload()).claims[0], text: 'Other fact' }] }), usage }
+    if (++verifications === 2) throw new Error('verifier unavailable')
+    return { content: JSON.stringify({ items: [{ claimId: 1, supported: true, reason: 'Direct' }, { claimId: 2, supported: false, reason: 'Unproved' }] }), usage }
+  }, undefined, undefined, { allowPartial: true }), /verifier unavailable/)
+})

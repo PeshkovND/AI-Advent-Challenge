@@ -6,11 +6,12 @@ import remarkMath from 'remark-math'
 import RagPage from './RagPage'
 import RagChatPage from './RagChatPage'
 import LocalLlmPage from './LocalLlmPage'
+import LocalRagPage from './LocalRagPage'
 import type { RagConfig } from './rag-types'
 import type { DialogueMemoryConfig } from './rag-chat-types'
 
 type MessageRole = 'user' | 'assistant'
-type Page = 'local-llm' | 'chat' | 'compare' | 'reasoning' | 'temperature' | 'models' | 'agents' | 'rag' | 'rag-chat' | 'context-demo' | 'context-comparison' | 'context-strategies' | 'context-branching' | 'memory-layers' | 'personalization' | 'task-state' | 'calendar-mcp' | 'scheduler'
+type Page = 'local-rag' | 'local-llm' | 'chat' | 'compare' | 'reasoning' | 'temperature' | 'models' | 'agents' | 'rag' | 'rag-chat' | 'context-demo' | 'context-comparison' | 'context-strategies' | 'context-branching' | 'memory-layers' | 'personalization' | 'task-state' | 'calendar-mcp' | 'scheduler'
 
 type ChatMessage = {
   id: string
@@ -276,7 +277,7 @@ function App() {
     catch { return 'chat' }
   })
   useEffect(() => { try { sessionStorage.setItem('deepchat-rag-open', String(activePage === 'rag')); sessionStorage.setItem('deepchat-rag-chat-open', String(activePage === 'rag-chat')); sessionStorage.removeItem('deepchat-day23-open') } catch { /* Navigation works without storage. */ } }, [activePage])
-  useEffect(() => { document.title = activePage === 'local-llm' ? 'DeepChat · Локальная LLM' : activePage === 'rag-chat' ? 'DeepChat · RAG-чат' : 'DeepChat · Сравнение ответов' }, [activePage])
+  useEffect(() => { document.title = activePage === 'local-rag' ? 'DeepChat · Локальный RAG' : activePage === 'local-llm' ? 'DeepChat · Локальная LLM' : activePage === 'rag-chat' ? 'DeepChat · RAG-чат' : 'DeepChat · Сравнение ответов' }, [activePage])
 
   return (
     <div className="day-app">
@@ -287,6 +288,7 @@ function App() {
         </div>
 
         <nav className="page-nav" aria-label="Разделы приложения">
+          <button className={`page-nav-button ${activePage === 'local-rag' ? 'active' : ''}`} onClick={() => setActivePage('local-rag')}><span>◉</span> Локальный RAG</button>
           <button className={`page-nav-button ${activePage === 'local-llm' ? 'active' : ''}`} onClick={() => setActivePage('local-llm')}><span>◎</span> Локальная LLM</button>
           <button className={`page-nav-button ${activePage === 'chat' ? 'active' : ''}`} onClick={() => setActivePage('chat')}>
             <span>⌁</span> Чат
@@ -348,7 +350,7 @@ function App() {
       </aside>
 
       <main className={`day-main${(activePage === 'rag-chat' || activePage === 'local-llm') ? ' day-main-rag-chat' : ''}`}>
-        {activePage === 'local-llm' ? <LocalLlmPage /> : activePage === 'rag-chat' ? <RagChatPage /> : activePage === 'chat' ? <ChatPage /> : activePage === 'compare' ? <ComparePage /> : activePage === 'reasoning' ? <ReasoningPage /> : activePage === 'temperature' ? <TemperaturePage /> : activePage === 'models' ? <ModelsPage /> : activePage === 'agents' ? <AgentsPage /> : activePage === 'rag' ? <RagPage /> : activePage === 'context-demo' ? <ContextDemoPage /> : activePage === 'context-comparison' ? <ContextCompressionComparisonPage /> : activePage === 'context-strategies' ? <ContextStrategiesPage /> : activePage === 'context-branching' ? <ContextBranchingPage /> : activePage === 'memory-layers' ? <MemoryLayersPage /> : activePage === 'personalization' ? <PersonalizationPage /> : activePage === 'task-state' ? <TaskStatePage /> : activePage === 'calendar-mcp' ? <CalendarMcpPage /> : <SchedulerPage />}
+        {activePage === 'local-rag' ? <LocalRagPage /> : activePage === 'local-llm' ? <LocalLlmPage /> : activePage === 'rag-chat' ? <RagChatPage /> : activePage === 'chat' ? <ChatPage /> : activePage === 'compare' ? <ComparePage /> : activePage === 'reasoning' ? <ReasoningPage /> : activePage === 'temperature' ? <TemperaturePage /> : activePage === 'models' ? <ModelsPage /> : activePage === 'agents' ? <AgentsPage /> : activePage === 'rag' ? <RagPage /> : activePage === 'context-demo' ? <ContextDemoPage /> : activePage === 'context-comparison' ? <ContextCompressionComparisonPage /> : activePage === 'context-strategies' ? <ContextStrategiesPage /> : activePage === 'context-branching' ? <ContextBranchingPage /> : activePage === 'memory-layers' ? <MemoryLayersPage /> : activePage === 'personalization' ? <PersonalizationPage /> : activePage === 'task-state' ? <TaskStatePage /> : activePage === 'calendar-mcp' ? <CalendarMcpPage /> : <SchedulerPage />}
       </main>
     </div>
   )

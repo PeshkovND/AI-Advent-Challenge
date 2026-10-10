@@ -1,0 +1,8 @@
+.local-rag-cloud-toggle{display:flex;align-items:center;gap:8px;color:#72798c;font-size:12px;margin:16px 0}
+.local-rag-cloud-toggle input{accent-color:#6366d4}
+.local-rag-page .rag-answer>small{margin-bottom:7px}
+.local-rag-page blockquote{margin:10px 0;padding:8px 10px;border-left:2px solid #d7d8f4;background:#f5f5fc;color:#757d91}
+.local-rag-answer-time{margin:10px 0;color:#858a9c;font-size:11px;line-height:1.5}
+.local-rag-answer-time strong{color:#626779;font-weight:600}
+.local-rag-page .local-rag-model-pair,.local-rag-page .local-rag-comparison-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+@media(max-width:840px){.local-rag-page .local-rag-model-pair,.local-rag-page .local-rag-comparison-grid{grid-template-columns:1fr}}

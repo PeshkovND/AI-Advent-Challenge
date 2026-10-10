@@ -34,7 +34,8 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "llm:local:demo": "tsx server/local-llm-demo.ts --auto",
-    "llm:local:chat": "tsx server/local-llm-demo.ts"
+    "llm:local:chat": "tsx server/local-llm-demo.ts",
+    "rag:local:evaluate": "tsx server/local-rag-evaluate.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/client": "^2.0.0",

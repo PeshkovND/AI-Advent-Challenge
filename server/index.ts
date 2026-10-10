@@ -1,6 +1,7 @@
 import 'dotenv/config'
 import './network-config'
 import { createLocalLlmRouter } from './local-llm-router'
+import { createLocalRagRouter } from './local-rag-router'
 import express, { Response } from 'express'
 import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -242,6 +243,7 @@ const modelDefinitions: ModelDefinition[] = [
 
 app.use(express.json({ limit: '1mb' }))
 app.use('/api/local-llm', createLocalLlmRouter())
+app.use('/api/local-rag', createLocalRagRouter())
 app.use('/api/agents', createAgentRouter(agentService))
 app.get('/api/rag/index', (_request, response) => {
   let store: RagIndexStore | undefined

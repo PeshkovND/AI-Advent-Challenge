@@ -36,6 +36,7 @@ export type RagClaim = { id: number; text: string; citationIds: number[] }
 export type RagTaskCheck = { goalAligned: boolean; constraintsRespected: boolean; answersQuestion: boolean; reason: string }
 export type RagGrounding = {
   status: 'answered' | 'unknown'
+  partial?: boolean
   answer: string
   sources: Array<{ source: string; section: string; chunkId: string; kind?: 'dialogue' }>
   citations: RagCitation[]
