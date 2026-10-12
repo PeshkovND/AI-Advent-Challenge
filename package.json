@@ -35,7 +35,11 @@
     "typecheck": "tsc --noEmit",
     "llm:local:demo": "tsx server/local-llm-demo.ts --auto",
     "llm:local:chat": "tsx server/local-llm-demo.ts",
-    "rag:local:evaluate": "tsx server/local-rag-evaluate.ts"
+    "rag:local:evaluate": "tsx server/local-rag-evaluate.ts",
+    "llm:optimize:evaluate": "node --import tsx server/llm-optimization-evaluate.ts",
+    "llm:optimize:tune": "node --import tsx server/llm-optimization-tune.ts",
+    "llm:optimize:review": "node --import tsx server/llm-optimization-review.ts",
+    "test:llm:optimization": "node --import tsx --test server/llm-optimization.test.ts server/llm-optimization-judge.test.ts server/llm-optimization-runner.test.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/client": "^2.0.0",
