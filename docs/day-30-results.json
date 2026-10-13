@@ -1,0 +1,189 @@
+{
+  "checkedAt": "2026-10-13T07:32:39.765Z",
+  "target": "http://192.168.0.41:8788",
+  "clientLocation": "machine-running-this-command",
+  "checks": [
+    {
+      "name": "authentication",
+      "passed": true,
+      "statusWithoutKey": 401
+    },
+    {
+      "name": "sequential-chat",
+      "passed": true,
+      "prompt": "Сколько будет 17 + 25? Ответь только числом.",
+      "status": 200,
+      "answer": "42",
+      "contextInfo": {
+        "dropped": 0,
+        "estimatedTokens": 138,
+        "budget": 6656
+      },
+      "queueInfo": {
+        "state": "running",
+        "position": 0,
+        "initialPosition": 0,
+        "waitedMs": 0
+      },
+      "elapsedMs": 2402,
+      "retryAfter": null
+    },
+    {
+      "name": "sequential-chat",
+      "passed": true,
+      "prompt": "Прибавь 8 к предыдущему результату. Ответь только числом.",
+      "status": 200,
+      "answer": "50",
+      "contextInfo": {
+        "dropped": 0,
+        "estimatedTokens": 372,
+        "budget": 6656
+      },
+      "queueInfo": {
+        "state": "running",
+        "position": 0,
+        "initialPosition": 0,
+        "waitedMs": 0
+      },
+      "elapsedMs": 280,
+      "retryAfter": null
+    },
+    {
+      "name": "sequential-chat",
+      "passed": true,
+      "prompt": "Назови столицу Франции. Ответь одним словом.",
+      "status": 200,
+      "answer": "Париж",
+      "contextInfo": {
+        "dropped": 0,
+        "estimatedTokens": 583,
+        "budget": 6656
+      },
+      "queueInfo": {
+        "state": "running",
+        "position": 0,
+        "initialPosition": 0,
+        "waitedMs": 0
+      },
+      "elapsedMs": 318,
+      "retryAfter": null
+    },
+    {
+      "name": "max-context",
+      "passed": true,
+      "status": 400,
+      "error": "Сам вопрос слишком большой для контекста. Сократите его или разделите на части.",
+      "elapsedMs": 2,
+      "retryAfter": null
+    },
+    {
+      "name": "concurrent-requests",
+      "passed": true,
+      "results": [
+        {
+          "status": 200,
+          "answer": "42",
+          "contextInfo": {
+            "dropped": 0,
+            "estimatedTokens": 136,
+            "budget": 6656
+          },
+          "queueInfo": {
+            "state": "running",
+            "position": 0,
+            "initialPosition": 0,
+            "waitedMs": 0
+          },
+          "elapsedMs": 355,
+          "retryAfter": null
+        },
+        {
+          "status": 200,
+          "answer": "42",
+          "contextInfo": {
+            "dropped": 0,
+            "estimatedTokens": 136,
+            "budget": 6656
+          },
+          "queueInfo": {
+            "state": "running",
+            "position": 0,
+            "initialPosition": 1,
+            "waitedMs": 351
+          },
+          "elapsedMs": 493,
+          "retryAfter": null
+        },
+        {
+          "status": 200,
+          "answer": "42",
+          "contextInfo": {
+            "dropped": 0,
+            "estimatedTokens": 136,
+            "budget": 6656
+          },
+          "queueInfo": {
+            "state": "running",
+            "position": 0,
+            "initialPosition": 2,
+            "waitedMs": 488
+          },
+          "elapsedMs": 636,
+          "retryAfter": null
+        }
+      ]
+    },
+    {
+      "name": "recovery-after-concurrency",
+      "passed": true,
+      "status": 200,
+      "answer": "10",
+      "contextInfo": {
+        "dropped": 0,
+        "estimatedTokens": 136,
+        "budget": 6656
+      },
+      "queueInfo": {
+        "state": "running",
+        "position": 0,
+        "initialPosition": 0,
+        "waitedMs": 0
+      },
+      "elapsedMs": 267,
+      "retryAfter": null
+    },
+    {
+      "name": "max-body",
+      "passed": true,
+      "status": 413
+    },
+    {
+      "name": "rate-limit",
+      "passed": true,
+      "status": 429,
+      "error": "Лимит запросов исчерпан. Повторите через 57 сек.",
+      "elapsedMs": 3,
+      "retryAfter": "57"
+    }
+  ],
+  "service": {
+    "model": "qwen3.5:4b",
+    "context": 8192,
+    "maxTokens": 1024,
+    "ready": true,
+    "limits": {
+      "requestsPerMinute": 12,
+      "maxConcurrentRequests": 1,
+      "timeoutMs": 120000,
+      "maxBodyBytes": 1048576,
+      "maxQueueSize": 3,
+      "queueTimeoutMs": 60000
+    },
+    "queue": {
+      "active": 0,
+      "waiting": 0,
+      "maxSize": 3
+    }
+  },
+  "passed": true
+}

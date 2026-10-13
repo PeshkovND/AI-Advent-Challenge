@@ -1,5 +1,6 @@
 node_modules
 dist
+dist-private-llm
 .DS_Store
 *.local
 .env

@@ -39,7 +39,14 @@
     "llm:optimize:evaluate": "node --import tsx server/llm-optimization-evaluate.ts",
     "llm:optimize:tune": "node --import tsx server/llm-optimization-tune.ts",
     "llm:optimize:review": "node --import tsx server/llm-optimization-review.ts",
-    "test:llm:optimization": "node --import tsx --test server/llm-optimization.test.ts server/llm-optimization-judge.test.ts server/llm-optimization-runner.test.ts"
+    "test:llm:optimization": "node --import tsx --test server/llm-optimization.test.ts server/llm-optimization-judge.test.ts server/llm-optimization-runner.test.ts",
+    "llm:service:init": "tsx server/private-llm-init.ts",
+    "llm:service:build": "vite build --config vite.private-llm.config.ts",
+    "llm:service": "npm run llm:service:build && npm run llm:service:start",
+    "llm:service:start": "tsx server/private-llm-server.ts",
+    "llm:service:check": "tsx server/private-llm-check.ts",
+    "llm:service:queue-demo": "tsx server/private-llm-queue-demo.ts",
+    "test:llm:service": "node --import tsx --test server/private-llm.test.ts server/local-llm-context.test.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/client": "^2.0.0",
