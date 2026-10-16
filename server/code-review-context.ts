@@ -4,7 +4,7 @@ import { chunkDocuments, documentFromText, type DocumentChunk } from './rag-inde
 import { publicProjectPath } from './project-workspace'
 
 const execute = promisify(execFile)
-export const reviewLimits = { files: 30, patchBytes: 10000, contentBytes: 4000, blobBytes: 128000, corpusBytes: 4_000_000, documents: 400 }
+export const reviewLimits = { files: 0, patchBytes: 10000, contentBytes: 4000, blobBytes: 128000, corpusBytes: 4_000_000, documents: 400 }
 export function bytePrefix(text: string, limit: number) {
   let result = '', size = 0
   for (const character of text) {
