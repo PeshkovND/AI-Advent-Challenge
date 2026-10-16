@@ -34,6 +34,12 @@ DeepChat — учебное приложение на React, TypeScript, Vite и
 
 Для локальных эмбеддингов нужна Ollama и модель `nomic-embed-text-v2-moe`; для локальных ответов — `qwen3.5:4b`. Облачные ответы используют `DEEPSEEK_API_KEY`. `npm run typecheck` проверяет TypeScript, `npm run build` собирает интерфейс, `npm run test:developer` проверяет ассистента разработчика.
 
+## Автоматическое ревью PR
+
+`server/code-review-context.ts` читает diff и файлы из неизменяемых Git blobs между merge-base и HEAD PR. Общие `documentFromText`, `chunkDocuments` и `publicProjectPath` используются для корпуса документации и кода merge-base. TF-IDF-поиск выбирает фрагменты отдельно для каждого изменённого файла; внешняя embedding-модель в CI не нужна. `server/code-review.ts` вызывает общий `modelClient` DeepSeek/Ollama, проверяет формат замечаний, реальные строки diff и дословные цитаты, формирует Markdown и JSON с покрытием. `server/code-review-cli.ts` доступен через `npm run review:pr`, воспроизводимое демо — `npm run review:demo`.
+
+`.github/workflows/ai-code-review.yml` работает на `pull_request_target`, запускает reviewer и зависимости только из base SHA и читает head как данные. Workflow обновляет один комментарий, Job Summary и артефакт; устаревший отчёт не публикуется. Для запуска нужен repository secret `DEEPSEEK_API_KEY`, опционально variable `AI_REVIEW_MODEL`. Сценарий не меняет `/help`, MCP, индексы или состояние диалоговых агентов. Подключение и ограничения: [day-32.md](day-32.md).
+
 ## Приватный сервис
 
 `server/private-llm-server.ts` запускает независимый сервис дня 30, `server/private-llm-app.ts` собирает его маршруты и защиту доступа. Команда `npm run llm:service` предоставляет локальный чат в домашней сети на порту 8788. Этот сервис не публикует маршруты `/api/developer` и не открывает Git-контекст проекта в сеть.
