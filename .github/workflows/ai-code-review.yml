@@ -1,7 +1,7 @@
 name: AI code review
 
-# This workflow must be installed in the base branch before it can review PRs.
-# Only trusted base code runs. PR commits are fetched/read as Git objects.
+# This workflow must be installed in the default branch before it can review PRs.
+# Only trusted default-branch code runs. PR commits are fetched/read as Git objects.
 on:
   pull_request_target:
     types: [opened, synchronize, reopened, ready_for_review]
@@ -26,10 +26,10 @@ jobs:
       - name: Set report directory
         run: echo "REVIEW_OUTPUT=$RUNNER_TEMP/ai-code-review" >> "$GITHUB_ENV"
 
-      - name: Check out trusted base code
+      - name: Check out trusted reviewer code
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.base.sha }}
+          ref: ${{ github.sha }}
           fetch-depth: 0
           persist-credentials: false
 
