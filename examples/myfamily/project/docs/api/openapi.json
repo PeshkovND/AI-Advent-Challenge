@@ -1,0 +1,164 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "MyFamily client API (partial, inferred)",
+    "version": "548ee58",
+    "description": "Восстановлено по HttpRequestFactory.swift. Доступность backend и его полный контракт не проверены."
+  },
+  "paths": {
+    "/auth/request": {
+      "post": {
+        "summary": "Запросить SMS-код",
+        "responses": {
+          "2XX": {
+            "description": "Ожидаемый клиентом успешный ответ; конкретный HTTP-код backend не подтверждён."
+          },
+          "default": {
+            "description": "HttpResponse/ResponseErrorMapper обрабатывают сетевые и API-ошибки."
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "uuid": {
+                    "type": "string"
+                  },
+                  "number": {
+                    "type": "string"
+                  },
+                  "access": {
+                    "type": "string",
+                    "const": "user"
+                  }
+                },
+                "required": [
+                  "uuid",
+                  "number",
+                  "access"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/confirm": {
+      "post": {
+        "summary": "Подтвердить SMS-код",
+        "responses": {
+          "2XX": {
+            "description": "Ожидаемый клиентом успешный ответ; конкретный HTTP-код backend не подтверждён."
+          },
+          "default": {
+            "description": "HttpResponse/ResponseErrorMapper обрабатывают сетевые и API-ошибки."
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "uuid": {
+                    "type": "string"
+                  },
+                  "number": {
+                    "type": "string"
+                  },
+                  "access": {
+                    "type": "string",
+                    "const": "user"
+                  },
+                  "code": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "uuid",
+                  "number",
+                  "access",
+                  "code"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/refresh-token": {
+      "post": {
+        "summary": "Обновить токены",
+        "responses": {
+          "2XX": {
+            "description": "Ожидаемый клиентом успешный ответ; конкретный HTTP-код backend не подтверждён."
+          },
+          "default": {
+            "description": "HttpResponse/ResponseErrorMapper обрабатывают сетевые и API-ошибки."
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "uuid": {
+                    "type": "string"
+                  },
+                  "refreshToken": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "uuid",
+                  "refreshToken"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/logout": {
+      "post": {
+        "summary": "Выйти из аккаунта",
+        "responses": {
+          "2XX": {
+            "description": "Ожидаемый клиентом успешный ответ; конкретный HTTP-код backend не подтверждён."
+          },
+          "default": {
+            "description": "HttpResponse/ResponseErrorMapper обрабатывают сетевые и API-ошибки."
+          }
+        }
+      }
+    },
+    "/profile": {
+      "get": {
+        "summary": "Получить профиль (метод getUseProfile в клиенте)",
+        "responses": {
+          "2XX": {
+            "description": "Ожидаемый клиентом успешный ответ; конкретный HTTP-код backend не подтверждён."
+          },
+          "default": {
+            "description": "HttpResponse/ResponseErrorMapper обрабатывают сетевые и API-ошибки."
+          }
+        }
+      }
+    }
+  },
+  "x-client-upload": {
+    "path": "/profile/avatar",
+    "implementation": "AlamofireHttpClient.sendUploadImageRequest → Session.upload",
+    "method": "Alamofire default; not explicitly set in application source",
+    "multipartField": "avatar",
+    "fileName": "image.jpg",
+    "contentType": "image/jpeg"
+  },
+  "x-source": "XcodeProject/Packages/AppModulesPackage/Sources/AppServices/Sources/API/HttpRequestFactory.swift"
+}

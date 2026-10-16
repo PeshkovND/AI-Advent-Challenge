@@ -1,0 +1,10 @@
+{
+  "defaultProjectId": "myfamily",
+  "projects": [
+    {
+      "id": "myfamily",
+      "name": "MyFamily",
+      "root": "data/projects/MyFamily"
+    }
+  ]
+}

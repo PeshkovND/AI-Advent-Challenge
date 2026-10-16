@@ -235,7 +235,7 @@ export class OllamaEmbeddingClient {
     return this.embedQueries([question], profile)
   }
 
-  async embedChunks(chunks: DocumentChunk[], batchSize = 24): Promise<EmbeddedChunk[]> {
+  async embedChunks(chunks: DocumentChunk[], batchSize = 24, signal?: AbortSignal): Promise<EmbeddedChunk[]> {
     const result: EmbeddedChunk[] = []
     for (let index = 0; index < chunks.length; index += batchSize) {
       const batch = chunks.slice(index, index + batchSize)
@@ -243,7 +243,7 @@ export class OllamaEmbeddingClient {
         if (this.embeddingProfile === 'plain') return chunk.text
         if (this.embeddingProfile === 'nomic-retrieval-v1') return `search_document: ${chunk.text}`
         return `search_document: ${chunk.title}\n${chunk.section}\n${chunk.text}`
-      }))
+      }), signal)
       result.push(...batch.map((chunk, item) => ({ ...chunk, embedding: embeddings[item] })))
     }
     return result

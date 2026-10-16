@@ -1,0 +1,970 @@
+{
+  "source": {
+    "repository": "https://github.com/PeshkovND/MyFamily",
+    "commit": "548ee58aa84ca3da659fcd05886fe383f7ccb707",
+    "branch": "main",
+    "documentationCommit": "7af9ed6878bc699359eb9cdb67162303c0739584",
+    "push": {
+      "status": "pushed-and-verified",
+      "remoteBranch": "origin/main",
+      "remoteCommit": "7af9ed6878bc699359eb9cdb67162303c0739584",
+      "commitUrl": "https://github.com/PeshkovND/MyFamily/commit/7af9ed6878bc699359eb9cdb67162303c0739584",
+      "workingTree": "clean; main synchronized with origin/main"
+    }
+  },
+  "documentation": {
+    "snapshot": "examples/myfamily",
+    "patch": "examples/myfamily-documentation.patch",
+    "documents": 8,
+    "chunks": 46,
+    "layout": [
+      "README.md",
+      "project/docs/*.md",
+      "project/docs/api/openapi.json",
+      "Docs/Architecture.md (preserved)"
+    ]
+  },
+  "cloud": {
+    "createdAt": "2026-10-16T08:12:18.218Z",
+    "provider": "cloud",
+    "projectId": "myfamily",
+    "indexRunId": "442e1170-4fdc-4d23-aa8e-176851e82858",
+    "results": [
+      {
+        "question": "Есть ли среди известных удалённых веток origin/develop и где находится точка входа MyFamily?",
+        "passed": true,
+        "missing": [],
+        "missingSources": [],
+        "expected": "answered",
+        "status": "answered",
+        "model": "deepseek-v4-flash",
+        "durationMs": 10791,
+        "answer": "Среди известных удалённых веток есть origin/develop. [1]\n\nТочка входа — `@main AppDelegate` в `XcodeProject/App/Source/Infrastructure/AppDelegate.swift`. [2]\n\nПри запуске AppDelegate включает WebP coder и менеджер клавиатуры, затем вызывает `appCoordinator.start()`. [3]",
+        "citations": [
+          {
+            "id": 1,
+            "source": "mcp://project/list_git_branches",
+            "section": "list_git_branches",
+            "chunkId": "mcp-list_git_branches",
+            "quote": "- origin/develop"
+          },
+          {
+            "id": 2,
+            "source": "project/docs/project-architecture.md",
+            "section": "Точки входа и зависимости",
+            "chunkId": "structured-33837d02a6084cfc",
+            "quote": "Точка входа — `@main AppDelegate` в `XcodeProject/App/Source/Infrastructure/AppDelegate.swift`."
+          },
+          {
+            "id": 3,
+            "source": "project/docs/project-architecture.md",
+            "section": "Точки входа и зависимости",
+            "chunkId": "structured-33837d02a6084cfc",
+            "quote": "При запуске AppDelegate включает WebP coder и менеджер клавиатуры, затем вызывает `appCoordinator.start()`."
+          }
+        ],
+        "verification": {
+          "status": "passed",
+          "attempts": 1,
+          "judgments": [
+            {
+              "claimId": 1,
+              "supported": true,
+              "reason": "Цитата из списка удалённых веток содержит origin/develop, утверждение полностью подтверждено."
+            },
+            {
+              "claimId": 2,
+              "supported": true,
+              "reason": "Цитата дословно подтверждает указанную точку входа."
+            },
+            {
+              "claimId": 3,
+              "supported": true,
+              "reason": "Цитата дословно подтверждает описание запуска AppDelegate."
+            }
+          ],
+          "taskCheck": {
+            "goalAligned": true,
+            "constraintsRespected": true,
+            "answersQuestion": true,
+            "reason": "Ответ отвечает на оба вопроса: подтверждает наличие origin/develop среди известных удалённых веток и указывает точку входа MyFamily; дополнительные сведения о запуске не противоречат ограничениям."
+          }
+        },
+        "retrievedDocuments": [
+          {
+            "source": "project/docs/project-architecture.md",
+            "section": "Точки входа и зависимости",
+            "score": 0.5822644753791121
+          },
+          {
+            "source": "README.md",
+            "section": "Документация для ассистента",
+            "score": 0.4599957778608207
+          },
+          {
+            "source": "README.md",
+            "section": "MyFamily",
+            "score": 0.556316433910887
+          },
+          {
+            "source": "project/docs/project-architecture.md",
+            "section": "Навигация",
+            "score": 0.49606847600000314
+          }
+        ],
+        "mcpTools": [
+          "get_git_branch",
+          "list_project_files",
+          "get_git_diff",
+          "list_git_branches"
+        ]
+      },
+      {
+        "question": "какие есть ветки в репозитории",
+        "passed": true,
+        "missing": [],
+        "missingSources": [],
+        "expected": "answered",
+        "status": "answered",
+        "model": "deepseek-v4-flash",
+        "durationMs": 1478,
+        "answer": "Локальные ветки: показано 1, всего 1; список полный.\n- main [1]\n\nИзвестные удалённые ветки: показано 35, всего 35; список полный.\n- origin/Feature/Families\n- origin/Feature/NeuralChecking\n- origin/Feature/deletingPosts\n- origin/bugfix/freezes\n- origin/bugfix/news-screen-broken-layout\n- origin/bugfix/swiftdata-crashes\n- origin/develop\n- origin/feature/add-post\n- origin/feature/audio-video-cache\n- origin/feature/comments-in-posts\n- origin/feature/crashlytics\n- origin/feature/date-date-for-ui\n- origin/feature/donate\n- origin/feature/edit-profile\n- origin/feature/family-screen\n- origin/feature/family-screen-mock-removing\n- origin/feature/firebase-client\n- origin/feature/geolocation\n- origin/feature/map-screen\n- origin/feature/map-screen-mock-removing\n- origin/feature/network-errors-handling\n- origin/feature/news-screen-layout\n- origin/feature/news-screen-mock-removing\n- origin/feature/post-screen-mock-removing\n- origin/feature/profile-screen\n- origin/feature/profile-screen-mock-removing\n- origin/feature/profile-shortcut\n- origin/feature/push-notifications\n- origin/feature/share-posts\n- origin/feature/sign-in-screen-layout\n- origin/feature/swift-data\n- origin/feature/tabbar-configuration\n- origin/feature/vk-id\n- origin/main\n- origin/refactor/global-refactoring [2][3]\n\nУдалённые ветки — remote-tracking refs локальной копии Git. Fetch и запрос к серверу не выполнялись; список на сервере мог измениться. Символические указатели вроде origin/HEAD не являются отдельными ветками. [4]",
+        "citations": [
+          {
+            "id": 1,
+            "source": "mcp://project/list_git_branches",
+            "section": "list_git_branches",
+            "chunkId": "mcp-list_git_branches",
+            "quote": "Локальные ветки: показано 1, всего 1; список полный.\n- main"
+          },
+          {
+            "id": 2,
+            "source": "mcp://project/list_git_branches",
+            "section": "list_git_branches",
+            "chunkId": "mcp-list_git_branches",
+            "quote": "Известные удалённые ветки: показано 35, всего 35; список полный.\n- origin/Feature/Families\n- origin/Feature/NeuralChecking\n- origin/Feature/deletingPosts\n- origin/bugfix/freezes\n- origin/bugfix/news-screen-broken-layout\n- origin/bugfix/swiftdata-crashes\n- origin/develop\n- origin/feature/add-post\n- origin/feature/audio-video-cache\n- origin/feature/comments-in-posts\n- origin/feature/crashlytics\n- origin/feature/date-date-for-ui\n- origin/feature/donate\n- origin/feature/edit-profile\n- origin/feature/family-screen\n- origin/feature/family-screen-mock-removing\n- origin/feature/firebase-client\n- origin/feature/geolocation\n- origin/feature/map-screen\n- origin/feature/map-screen-mock-removing\n- origin/feature/network-errors-handling\n- origin/feature/news-screen-layout\n- origin/feature/news-screen-mock-removing\n- origin/feature/post-screen-mock-removing\n- origin/feature/profile-screen\n- origin/feature/profile-screen-mock-removing\n- origin/feature/profile-shortcut\n- origin/feature/push-notifications\n- origin/feature/share-posts\n- origin/feature/sign-in-screen-layout\n- origin/feature/swift-data"
+          },
+          {
+            "id": 3,
+            "source": "mcp://project/list_git_branches",
+            "section": "list_git_branches",
+            "chunkId": "mcp-list_git_branches",
+            "quote": "- origin/feature/tabbar-configuration\n- origin/feature/vk-id\n- origin/main\n- origin/refactor/global-refactoring"
+          },
+          {
+            "id": 4,
+            "source": "mcp://project/list_git_branches",
+            "section": "list_git_branches",
+            "chunkId": "mcp-list_git_branches",
+            "quote": "Удалённые ветки — remote-tracking refs локальной копии Git. Fetch и запрос к серверу не выполнялись; список на сервере мог измениться. Символические указатели вроде origin/HEAD не являются отдельными ветками."
+          }
+        ],
+        "verification": {
+          "status": "passed",
+          "method": "tool-data",
+          "attempts": 1,
+          "judgments": [
+            {
+              "claimId": 1,
+              "supported": true,
+              "reason": "Точный текст источника MCP; цитаты проверены кодом."
+            },
+            {
+              "claimId": 2,
+              "supported": true,
+              "reason": "Точный текст источника MCP; цитаты проверены кодом."
+            },
+            {
+              "claimId": 3,
+              "supported": true,
+              "reason": "Точный текст источника MCP; цитаты проверены кодом."
+            }
+          ],
+          "taskCheck": {
+            "goalAligned": true,
+            "constraintsRespected": true,
+            "answersQuestion": true,
+            "reason": "Сценарий перечисления Git-веток; имена и счётчики скопированы из MCP с явным ограничением области и полноты."
+          }
+        },
+        "retrievedDocuments": [],
+        "mcpTools": [
+          "get_git_branch",
+          "list_project_files",
+          "get_git_diff",
+          "list_git_branches"
+        ],
+        "branchInventory": {
+          "localTotal": 1,
+          "remoteTotal": 35,
+          "missingBranches": []
+        }
+      },
+      {
+        "question": "Какой стек использует MyFamily, какая минимальная iOS, где точка входа и какая сейчас git-ветка?",
+        "passed": true,
+        "missing": [],
+        "missingSources": [],
+        "expected": "answered",
+        "status": "answered",
+        "model": "deepseek-v4-flash",
+        "durationMs": 10804,
+        "answer": "MyFamily использует Swift, UIKit, Combine, MVVM и Coordinator. [1]\n\nМинимальная версия iOS — 15.0. [2]\n\nМанифесты Swift Package Manager используют Swift tools 5.7. [3]\n\nТочка входа — `@main AppDelegate` в `XcodeProject/App/Source/Infrastructure/AppDelegate.swift`. [4]\n\nПри запуске AppDelegate включает WebP coder и менеджер клавиатуры, затем вызывает `appCoordinator.start()`. [5]\n\nТекущая git-ветка — main, commit 7af9ed6878bc699359eb9cdb67162303c0739584, detached=false. [6]",
+        "citations": [
+          {
+            "id": 1,
+            "source": "project/docs/project-architecture.md",
+            "section": "Технологии и слои",
+            "chunkId": "structured-d2adedba3efcef7c",
+            "quote": "MyFamily использует Swift, UIKit, Combine, MVVM и Coordinator."
+          },
+          {
+            "id": 2,
+            "source": "project/docs/project-architecture.md",
+            "section": "Технологии и слои",
+            "chunkId": "structured-d2adedba3efcef7c",
+            "quote": "Минимальная версия iOS — 15.0."
+          },
+          {
+            "id": 3,
+            "source": "project/docs/project-architecture.md",
+            "section": "Технологии и слои",
+            "chunkId": "structured-d2adedba3efcef7c",
+            "quote": "Манифесты Swift Package Manager используют Swift tools 5.7."
+          },
+          {
+            "id": 4,
+            "source": "project/docs/project-architecture.md",
+            "section": "Точки входа и зависимости",
+            "chunkId": "structured-33837d02a6084cfc",
+            "quote": "Точка входа — `@main AppDelegate` в `XcodeProject/App/Source/Infrastructure/AppDelegate.swift`."
+          },
+          {
+            "id": 5,
+            "source": "project/docs/project-architecture.md",
+            "section": "Точки входа и зависимости",
+            "chunkId": "structured-33837d02a6084cfc",
+            "quote": "При запуске AppDelegate включает WebP coder и менеджер клавиатуры, затем вызывает `appCoordinator.start()`."
+          },
+          {
+            "id": 6,
+            "source": "mcp://project/get_git_branch",
+            "section": "get_git_branch",
+            "chunkId": "mcp-get_git_branch",
+            "quote": "\"branch\": \"main\",\n  \"commit\": \"7af9ed6878bc699359eb9cdb67162303c0739584\",\n  \"detached\": false"
+          }
+        ],
+        "verification": {
+          "status": "passed",
+          "attempts": 1,
+          "judgments": [
+            {
+              "claimId": 1,
+              "supported": true,
+              "reason": "Цитата дословно подтверждает утверждение."
+            },
+            {
+              "claimId": 2,
+              "supported": true,
+              "reason": "Цитата дословно подтверждает утверждение."
+            },
+            {
+              "claimId": 3,
+              "supported": true,
+              "reason": "Цитата дословно подтверждает утверждение."
+            },
+            {
+              "claimId": 4,
+              "supported": true,
+              "reason": "Цитата дословно подтверждает утверждение."
+            },
+            {
+              "claimId": 5,
+              "supported": true,
+              "reason": "Цитата дословно подтверждает утверждение."
+            },
+            {
+              "claimId": 6,
+              "supported": true,
+              "reason": "Цитата из get_git_branch подтверждает ветку, commit и detached=false."
+            }
+          ],
+          "taskCheck": {
+            "goalAligned": true,
+            "constraintsRespected": true,
+            "answersQuestion": true,
+            "reason": "Ответ покрывает все части вопроса: стек, минимальная iOS, точка входа и текущая git-ветка; лишние детали не противоречат запросу."
+          }
+        },
+        "retrievedDocuments": [
+          {
+            "source": "project/docs/project-architecture.md",
+            "section": "Технологии и слои",
+            "score": 0.6014766829363666
+          },
+          {
+            "source": "project/docs/project-architecture.md",
+            "section": "Точки входа и зависимости",
+            "score": 0.5736819287100903
+          },
+          {
+            "source": "README.md",
+            "section": "MyFamily",
+            "score": 0.684396260935601
+          },
+          {
+            "source": "README.md",
+            "section": "Быстрый старт",
+            "score": 0.49814464594807606
+          }
+        ],
+        "mcpTools": [
+          "get_git_branch",
+          "list_project_files",
+          "get_git_diff",
+          "list_git_branches"
+        ]
+      },
+      {
+        "question": "Как связаны App, UmbrellaPackage и AppModulesPackage и где находится контейнер зависимостей?",
+        "passed": true,
+        "missing": [],
+        "missingSources": [],
+        "expected": "answered",
+        "status": "answered",
+        "model": "deepseek-v4-flash",
+        "durationMs": 11012,
+        "answer": "App зависит от UmbrellaPackage, а UmbrellaPackage — от AppModulesPackage. [1]\n\nAppModulesPackage зависит от внешних зависимостей. [2]\n\nЗависимые модули предоставляются пакетом AppModulesPackage, который включён в проект через пакет UmbrellaPackage. [3]\n\nUmbrellaPackage объединяет девять внутренних модулей в одну библиотеку для приложения. [4]\n\nКонтейнер зависимостей AppContainer находится в XcodeProject/App/Source/Infrastructure/. [5]",
+        "citations": [
+          {
+            "id": 1,
+            "source": "Docs/Architecture.md",
+            "section": "Overview",
+            "chunkId": "structured-85c4042a1963cfc6",
+            "quote": "App --> UmbrellaPackage\n    App -. Implicitly .-> AppModulesPackage\n    UmbrellaPackage --> AppModulesPackage"
+          },
+          {
+            "id": 2,
+            "source": "Docs/Architecture.md",
+            "section": "Overview",
+            "chunkId": "structured-85c4042a1963cfc6",
+            "quote": "AppModulesPackage --> ExternalDependencies"
+          },
+          {
+            "id": 3,
+            "source": "Docs/Architecture.md",
+            "section": "Modules",
+            "chunkId": "structured-1f27ac2d0cc73919",
+            "quote": "Dependent modules are provided by `AppModulesPackage` swift package which is included to project through `UmbrellaPackage` swift package to avoid SPM xcode configuration and have single static library as dependency artefact."
+          },
+          {
+            "id": 4,
+            "source": "project/docs/project-architecture.md",
+            "section": "Технологии и слои",
+            "chunkId": "structured-d2adedba3efcef7c",
+            "quote": "UmbrellaPackage объединяет девять внутренних модулей в одну библиотеку для приложения."
+          },
+          {
+            "id": 5,
+            "source": "README.md",
+            "section": "Структура",
+            "chunkId": "structured-65940df0faaee866",
+            "quote": "- `XcodeProject/App/Source/Infrastructure/` — `AppDelegate`, корневой `AppCoordinator` и контейнер зависимостей `AppContainer`."
+          }
+        ],
+        "verification": {
+          "status": "passed",
+          "attempts": 1,
+          "judgments": [
+            {
+              "claimId": 1,
+              "supported": true,
+              "reason": "Цитата 1 явно показывает App --> UmbrellaPackage и UmbrellaPackage --> AppModulesPackage, что соответствует утверждению."
+            },
+            {
+              "claimId": 2,
+              "supported": true,
+              "reason": "Цитата 2 показывает AppModulesPackage --> ExternalDependencies, что означает зависимость от внешних зависимостей."
+            },
+            {
+              "claimId": 3,
+              "supported": true,
+              "reason": "Цитата 3 дословно подтверждает, что зависимые модули предоставляются AppModulesPackage, включённым через UmbrellaPackage."
+            },
+            {
+              "claimId": 4,
+              "supported": true,
+              "reason": "Цитата 4 дословно утверждает, что UmbrellaPackage объединяет девять внутренних модулей в одну библиотеку для приложения."
+            },
+            {
+              "claimId": 5,
+              "supported": true,
+              "reason": "Цитата 5 указывает, что в XcodeProject/App/Source/Infrastructure/ находится контейнер зависимостей AppContainer."
+            }
+          ],
+          "taskCheck": {
+            "goalAligned": true,
+            "constraintsRespected": true,
+            "answersQuestion": true,
+            "reason": "Ответ описывает связи App, UmbrellaPackage и AppModulesPackage и указывает расположение контейнера зависимостей AppContainer, полностью отвечая на вопрос."
+          }
+        },
+        "retrievedDocuments": [
+          {
+            "source": "Docs/Architecture.md",
+            "section": "Overview",
+            "score": 0.5494670900426932
+          },
+          {
+            "source": "Docs/Architecture.md",
+            "section": "Modules",
+            "score": 0.5945539096371887
+          },
+          {
+            "source": "project/docs/project-architecture.md",
+            "section": "Технологии и слои",
+            "score": 0.5253555397895701
+          },
+          {
+            "source": "README.md",
+            "section": "Структура",
+            "score": 0.48642863528990676
+          }
+        ],
+        "mcpTools": [
+          "get_git_branch",
+          "list_project_files",
+          "get_git_diff",
+          "list_git_branches"
+        ]
+      },
+      {
+        "question": "Какие HTTP-метод, путь и параметры использует обновление токена авторизации?",
+        "passed": true,
+        "missing": [],
+        "missingSources": [],
+        "expected": "answered",
+        "status": "answered",
+        "model": "deepseek-v4-flash",
+        "durationMs": 10953,
+        "answer": "Обновление токена выполняется методом POST по пути /auth/refresh-token. [1]\n\nВ теле запроса обновления токена передаются параметры uuid и refreshToken. [1]\n\nПоле refreshToken передаётся вместе с uuid. [2]\n\nВ OpenAPI-описании для /auth/refresh-token указан requestBody с обязательными свойствами uuid и refreshToken типа string. [3]\n\nМетод фабрики для обновления токена — refreshToken(uuid:refreshToken:). [1]",
+        "citations": [
+          {
+            "id": 1,
+            "source": "project/docs/client-api.md",
+            "section": "Авторизация",
+            "chunkId": "structured-448a234b94c6a36f",
+            "quote": "| POST | /auth/refresh-token | uuid, refreshToken | refreshToken(uuid:refreshToken:) |"
+          },
+          {
+            "id": 2,
+            "source": "project/docs/client-api.md",
+            "section": "Авторизация",
+            "chunkId": "structured-448a234b94c6a36f",
+            "quote": "Endpoint для обновления токена — именно POST /auth/refresh-token; поле refreshToken передаётся вместе с uuid."
+          },
+          {
+            "id": 3,
+            "source": "project/docs/api/openapi.json",
+            "section": "openapi",
+            "chunkId": "structured-86757caf5ee76f5e",
+            "quote": "\"uuid\": {\n                    \"type\": \"string\"\n                  },\n                  \"refreshToken\": {\n                    \"type\": \"string\"\n                  }\n                },\n                \"required\": [\n                  \"uuid\",\n                  \"refreshToken\"\n                ]"
+          }
+        ],
+        "verification": {
+          "status": "passed",
+          "attempts": 1,
+          "judgments": [
+            {
+              "claimId": 1,
+              "supported": true,
+              "reason": "Цитата 1 явно указывает метод POST и путь /auth/refresh-token."
+            },
+            {
+              "claimId": 2,
+              "supported": true,
+              "reason": "Цитата 1 перечисляет параметры uuid и refreshToken для этого запроса."
+            },
+            {
+              "claimId": 3,
+              "supported": true,
+              "reason": "Цитата 2 прямо утверждает, что refreshToken передаётся вместе с uuid."
+            },
+            {
+              "claimId": 4,
+              "supported": true,
+              "reason": "Цитата 3 показывает requestBody со свойствами uuid и refreshToken типа string и оба в required."
+            },
+            {
+              "claimId": 5,
+              "supported": true,
+              "reason": "Цитата 1 содержит метод фабрики refreshToken(uuid:refreshToken:)."
+            }
+          ],
+          "taskCheck": {
+            "goalAligned": true,
+            "constraintsRespected": true,
+            "answersQuestion": true,
+            "reason": "Ответ полностью описывает HTTP-метод, путь и параметры обновления токена, все утверждения подтверждены цитатами."
+          }
+        },
+        "retrievedDocuments": [
+          {
+            "source": "project/docs/client-api.md",
+            "section": "Авторизация",
+            "score": 0.575918124225348
+          },
+          {
+            "source": "project/docs/api/openapi.json",
+            "section": "openapi",
+            "score": 0.4313227374627244
+          },
+          {
+            "source": "project/docs/api/openapi.json",
+            "section": "openapi",
+            "score": 0.37892727037264917
+          },
+          {
+            "source": "project/docs/client-api.md",
+            "section": "Где искать код",
+            "score": 0.44363286857127104
+          }
+        ],
+        "mcpTools": [
+          "get_git_branch",
+          "list_project_files",
+          "get_git_diff",
+          "list_git_branches"
+        ]
+      },
+      {
+        "question": "Где AppAuthService хранит Credentials, как проверяет авторизованность и какие поля нужны для заполненного профиля?",
+        "passed": true,
+        "missing": [],
+        "missingSources": [],
+        "expected": "answered",
+        "status": "answered",
+        "model": "deepseek-v4-flash",
+        "durationMs": 10401,
+        "answer": "AppAuthService сохраняет Account, Credentials и deviceId через DefaultsStorage. [1]\n\nCredentials сейчас хранятся в DefaultsStorage/UserDefaults. [2]\n\nВ saveCredentials есть комментарий IMPLEMENT: Replace with secure storage; Keychain для этого пути не реализован. [3]\n\nВ AppAuthService hasAuthorizedUser проверяет наличие credentials и условие expirationDate > Date(). [4]\n\nhasFilledProfile требует непустые firstName, lastName и displayName профиля. [5]",
+        "citations": [
+          {
+            "id": 1,
+            "source": "project/docs/data-models.md",
+            "section": "Хранилища и авторизация",
+            "chunkId": "structured-508da0e30987fc72",
+            "quote": "AppAuthService сохраняет Account, Credentials и deviceId через DefaultsStorage."
+          },
+          {
+            "id": 2,
+            "source": "project/docs/data-models.md",
+            "section": "Хранилища и авторизация",
+            "chunkId": "structured-508da0e30987fc72",
+            "quote": "Credentials сейчас хранятся в DefaultsStorage/UserDefaults."
+          },
+          {
+            "id": 3,
+            "source": "project/docs/data-models.md",
+            "section": "Хранилища и авторизация",
+            "chunkId": "structured-508da0e30987fc72",
+            "quote": "В saveCredentials есть комментарий IMPLEMENT: Replace with secure storage; Keychain для этого пути не реализован."
+          },
+          {
+            "id": 4,
+            "source": "project/docs/data-models.md",
+            "section": "Хранилища и авторизация",
+            "chunkId": "structured-508da0e30987fc72",
+            "quote": "В AppAuthService hasAuthorizedUser проверяет наличие credentials и условие expirationDate > Date()."
+          },
+          {
+            "id": 5,
+            "source": "project/docs/data-models.md",
+            "section": "Хранилища и авторизация",
+            "chunkId": "structured-508da0e30987fc72",
+            "quote": "hasFilledProfile требует непустые firstName, lastName и displayName профиля."
+          }
+        ],
+        "verification": {
+          "status": "passed",
+          "attempts": 1,
+          "judgments": [
+            {
+              "claimId": 1,
+              "supported": true,
+              "reason": "Цитата 1 дословно подтверждает утверждение."
+            },
+            {
+              "claimId": 2,
+              "supported": true,
+              "reason": "Цитата 2 дословно подтверждает утверждение."
+            },
+            {
+              "claimId": 3,
+              "supported": true,
+              "reason": "Цитата 3 дословно подтверждает утверждение."
+            },
+            {
+              "claimId": 4,
+              "supported": true,
+              "reason": "Цитата 4 дословно подтверждает утверждение."
+            },
+            {
+              "claimId": 5,
+              "supported": true,
+              "reason": "Цитата 5 дословно подтверждает утверждение."
+            }
+          ],
+          "taskCheck": {
+            "goalAligned": true,
+            "constraintsRespected": true,
+            "answersQuestion": true,
+            "reason": "Ответ охватывает все три части вопроса: где хранятся Credentials, как проверяется авторизованность и какие поля нужны для заполненного профиля; утверждения подтверждены цитатами."
+          }
+        },
+        "retrievedDocuments": [
+          {
+            "source": "project/docs/data-models.md",
+            "section": "Хранилища и авторизация",
+            "score": 0.6481386036684497
+          },
+          {
+            "source": "project/docs/data-models.md",
+            "section": "Доменные модели AppEntities",
+            "score": 0.5230254839652759
+          },
+          {
+            "source": "project/docs/data-models.md",
+            "section": "Сетевые payload и преобразование",
+            "score": 0.5108954684798597
+          },
+          {
+            "source": "project/docs/project-architecture.md",
+            "section": "Точки входа и зависимости",
+            "score": 0.4943944250656758
+          }
+        ],
+        "mcpTools": [
+          "get_git_branch",
+          "list_project_files",
+          "get_git_diff",
+          "list_git_branches"
+        ]
+      },
+      {
+        "question": "Реализованы ли полноценные Home, Store, Profile и переход после ввода телефона в SignInCoordinator?",
+        "passed": true,
+        "missing": [],
+        "missingSources": [],
+        "expected": "answered",
+        "status": "answered",
+        "model": "deepseek-v4-flash",
+        "durationMs": 11877,
+        "answer": "Home, Store и Profile в HomeCoordinator представлены тремя заглушками TitleStubViewController, а не завершёнными экранами. [1]\n\nВ README указано, что главный экран, магазин, профиль, создание профиля и onboarding содержат заглушки. [2]\n\nВ HomeFlow описан tab bar с тремя экранами-заглушками Home, Store и Profile. [3]\n\nВ SignInCoordinator обработчик события `.continue` только печатает `succes`, а экран ввода SMS и отправка `.finish(authState:)` не реализованы. [4]\n\nПолного перехода после SMS в текущем checkout нет: обработчик `.continue` внутри SignInCoordinator только печатает `succes`. [5]\n\nИнфраструктура запроса confirm присутствует в SignInInteractor и AuthService отдельно от UI-перехода. [6]",
+        "citations": [
+          {
+            "id": 1,
+            "source": "project/docs/implementation-status.md",
+            "section": "Где используются заглушки",
+            "chunkId": "structured-b07822005663da5b",
+            "quote": "HomeCoordinator создаёт UITabBarController с тремя TitleStubViewController: Home Screen, Store Screen и My Profile Screen. Профиль и магазин не являются завершёнными пользовательскими экранами."
+          },
+          {
+            "id": 2,
+            "source": "README.md",
+            "section": "MyFamily",
+            "chunkId": "structured-adfa33544c74bc46",
+            "quote": "Главный экран, магазин, профиль, создание профиля и onboarding содержат заглушки; готовые семейные функции из названия репозитория не следуют."
+          },
+          {
+            "id": 3,
+            "source": "project/docs/project-architecture.md",
+            "section": "Модули",
+            "chunkId": "structured-935935867f816aea",
+            "quote": "| HomeFlow | Tab bar с тремя экранами-заглушками Home, Store и Profile. |"
+          },
+          {
+            "id": 4,
+            "source": "project/docs/implementation-status.md",
+            "section": "Где используются заглушки",
+            "chunkId": "structured-b07822005663da5b",
+            "quote": "В SignInViewModel успешный запрос SMS отправляет событие `.continue`. SignInCoordinator обрабатывает его только `print(\"succes\")`. Экран ввода SMS и отправка события `.finish(authState:)` в этом обработчике не реализованы; полный сценарий авторизации до HomeFlow не завершён."
+          },
+          {
+            "id": 5,
+            "source": "project/docs/project-architecture.md",
+            "section": "Навигация",
+            "chunkId": "structured-160664d621555e43",
+            "quote": "Завершение signIn/signUp предусмотрено в корневом координаторе, но текущий обработчик `.continue` внутри SignInCoordinator только печатает `succes`; полного перехода после SMS в этом checkout нет."
+          },
+          {
+            "id": 6,
+            "source": "project/docs/implementation-status.md",
+            "section": "Где используются заглушки",
+            "chunkId": "structured-b07822005663da5b",
+            "quote": "В SignInInteractor и AuthService при этом есть методы confirm — инфраструктура запроса присутствует отдельно от UI-перехода."
+          }
+        ],
+        "verification": {
+          "status": "passed",
+          "attempts": 1,
+          "judgments": [
+            {
+              "claimId": 1,
+              "supported": true,
+              "reason": "Цитата прямо подтверждает три TitleStubViewController для Home, Store и My Profile и что профиль и магазин не завершённые экраны."
+            },
+            {
+              "claimId": 2,
+              "supported": true,
+              "reason": "Цитата README прямо перечисляет главный экран, магазин, профиль, создание профиля и onboarding как содержащие заглушки."
+            },
+            {
+              "claimId": 3,
+              "supported": true,
+              "reason": "Цитата из project-architecture.md прямо описывает HomeFlow как tab bar с тремя экранами-заглушками Home, Store и Profile."
+            },
+            {
+              "claimId": 4,
+              "supported": true,
+              "reason": "Цитата подтверждает, что обработчик .continue только печатает succes, а экран ввода SMS и отправка .finish(authState:) не реализованы."
+            },
+            {
+              "claimId": 5,
+              "supported": true,
+              "reason": "Цитата прямо утверждает отсутствие полного перехода после SMS в checkout и что .continue только печатает succes."
+            },
+            {
+              "claimId": 6,
+              "supported": true,
+              "reason": "Цитата подтверждает наличие методов confirm в SignInInteractor и AuthService отдельно от UI-перехода."
+            }
+          ],
+          "taskCheck": {
+            "goalAligned": true,
+            "constraintsRespected": true,
+            "answersQuestion": true,
+            "reason": "Ответ прямо отвечает на вопрос: Home, Store и Profile — заглушки, а полного перехода после ввода телефона/SMS в SignInCoordinator нет; все утверждения подтверждены цитатами."
+          }
+        },
+        "retrievedDocuments": [
+          {
+            "source": "project/docs/implementation-status.md",
+            "section": "Где используются заглушки",
+            "score": 0.6204545772768081
+          },
+          {
+            "source": "project/docs/project-architecture.md",
+            "section": "Навигация",
+            "score": 0.5809086758975631
+          },
+          {
+            "source": "README.md",
+            "section": "MyFamily",
+            "score": 0.41091496129919564
+          },
+          {
+            "source": "project/docs/project-architecture.md",
+            "section": "Модули",
+            "score": 0.48137486600435664
+          }
+        ],
+        "mcpTools": [
+          "get_git_branch",
+          "list_project_files",
+          "get_git_diff",
+          "list_git_branches"
+        ]
+      },
+      {
+        "question": "Какой точный production SLA и пароль базы PostgreSQL используются у MyFamily?",
+        "passed": true,
+        "missing": [],
+        "missingSources": [],
+        "expected": "unknown",
+        "status": "unknown",
+        "model": "deepseek-v4-flash",
+        "durationMs": 7578,
+        "answer": "Не знаю: в найденных документах недостаточно подтверждённых сведений для ответа.",
+        "citations": [],
+        "verification": {
+          "status": "abstained",
+          "attempts": 1,
+          "judgments": []
+        },
+        "retrievedDocuments": [
+          {
+            "source": "project/docs/client-api.md",
+            "section": "Ответы и ограничения контракта",
+            "score": 0.47671332793242166
+          },
+          {
+            "source": "project/docs/setup.md",
+            "section": "Схемы и конфигурации",
+            "score": 0.4552855182698303
+          },
+          {
+            "source": "project/docs/data-models.md",
+            "section": "Хранилища и авторизация",
+            "score": 0.43531973386649436
+          },
+          {
+            "source": "project/docs/implementation-status.md",
+            "section": "Обнаруженные пробелы перед сборкой",
+            "score": 0.4320987374052502
+          }
+        ],
+        "mcpTools": [
+          "get_git_branch",
+          "list_project_files",
+          "get_git_diff",
+          "list_git_branches"
+        ]
+      }
+    ]
+  },
+  "local": {
+    "passed": true,
+    "model": "qwen3.5:4b",
+    "durationMs": 58055,
+    "answer": "Обновление токена использует HTTP-метод POST и путь /auth/refresh-token. [1][2][3]\n\nВ запросе передаются параметры uuid (строка) и refreshToken (строка). [1][2][4]",
+    "citations": [
+      {
+        "id": 1,
+        "source": "Docs/client-api.md",
+        "section": "Авторизация",
+        "chunkId": "structured-d6104a9c8206523b",
+        "quote": "| HTTP | Путь | JSON-параметры | Метод фабрики |\n| --- | --- | --- | --- |\n| POST | /auth/request | uuid, number, access=\"user\" | requestAuth(uuid:number:) |\n| POST | /auth/confirm | uuid, number, access=\"user\", code | confirmAuth(uuid:number:code:) |\n| POST | /auth/refresh-token | uuid, refreshToken | refreshToken(uuid:refreshToken:) |\n| POST | /auth/logout | Без параметров тела в HttpRequest<Params.None> | logout() |"
+      },
+      {
+        "id": 2,
+        "source": "Docs/client-api.md",
+        "section": "Авторизация",
+        "chunkId": "structured-d6104a9c8206523b",
+        "quote": "Запросы с параметрами используют JSONParameterEncoder. Base URL добавляется замыканием baseUrlProviding; его предоставляет Env через AppContainer. Endpoint для обновления токена — именно POST /auth/refresh-token; поле refreshToken передаётся вместе с uuid."
+      },
+      {
+        "id": 3,
+        "source": "Docs/client-api.openapi.json",
+        "section": "client api.openapi",
+        "chunkId": "structured-259a870c9449ae17",
+        "quote": ": {\n              \"schema\": {\n                \"type\": \"object\",\n                \"properties\": {\n                  \"uuid\": {\n                    \"type\": \"string\"\n                  },\n                  \"number\": {\n                    \"type\": \"string\"\n                  },\n                  \"access\": {\n                    \"type\": \"string\",\n                    \"const\": \"user\"\n                  },\n                  \"code\": {\n                    \"type\": \"string\"\n                  }\n                },\n                \"required\": [\n                  \"uuid\",\n                  \"number\",\n                  \"access\",\n                  \"code\"\n                ]\n              }\n            }\n          }\n        }\n      }\n    },\n    \"/auth/refresh-token\": {\n      \"post\": {\n        \"summary\": \"Обновить токены\",\n        \"responses\": {\n          \"2XX\": {\n            \"description\": \"Ожидаемый клиентом"
+      },
+      {
+        "id": 4,
+        "source": "Docs/client-api.openapi.json",
+        "section": "client api.openapi",
+        "chunkId": "structured-1125322d79421a9c",
+        "quote": ": {\n              \"schema\": {\n                \"type\": \"object\",\n                \"properties\": {\n                  \"uuid\": {\n                    \"type\": \"string\"\n                  },\n                  \"refreshToken\": {\n                    \"type\": \"string\"\n                  }\n                },\n                \"required\": [\n                  \"uuid\",\n                  \"refreshToken\"\n                ]\n              }\n            }\n          }\n        }\n      }\n    },\n    \"/auth/logout\": {\n      \"post\": {\n        \"summary\": \"Выйти из аккаунта\",\n        \"responses\": {\n          \"2XX\": {\n            \"description\": \"Ожидаемый клиентом успешный ответ; конкретный HTTP-код backend не подтверждён.\"\n          },\n          \"default\": {\n            \"description\": \"HttpResponse/ResponseErrorMapper обрабатывают сетевые и API-ошибки.\"\n          }\n        }\n      }\n    },\n    \"/profile\": {\n      \"get\": {\n        \"summary\": \"Получить профиль (метод getUseProfile в клиенте)\",\n        \"responses\": {\n          \"2XX\": {"
+      }
+    ],
+    "verification": {
+      "status": "passed",
+      "attempts": 1,
+      "judgments": [
+        {
+          "claimId": 1,
+          "supported": true,
+          "reason": "Цитаты из client-api.md и openapi.json подтверждают использование метода POST и путь /auth/refresh-token."
+        },
+        {
+          "claimId": 2,
+          "supported": true,
+          "reason": "Таблица в client-api.md и схема в openapi.json указывают на передачу параметров uuid (строка) и refreshToken (строка)."
+        }
+      ]
+    }
+  },
+  "validation": {
+    "developerTests": 13,
+    "ragRegressionTests": 32,
+    "totalPassed": 45,
+    "typecheck": "passed",
+    "build": "passed; existing bundle size and Zod annotation warnings",
+    "documentationLinks": "passed",
+    "openApi": "parsed and checked request paths/required refresh fields",
+    "patch": "forward apply against 548ee58 and reverse check passed; all seven authored files match snapshot byte-for-byte; original Docs/Architecture.md also included in snapshot",
+    "iosBuild": "not run: full Xcode unavailable",
+    "gitBranchFix": {
+      "testsPassed": 73,
+      "cloudScenariosPassed": 8,
+      "totalCloudScenarios": 8
+    }
+  },
+  "deepChatRegression": {
+    "passed": true,
+    "createdAt": "2026-10-16T07:17:41.105Z",
+    "indexRunId": "b5985edd-07be-4f31-8b88-2dcdc0e7bf02",
+    "results": [
+      {
+        "question": "Как устроен проект: где интерфейс и сервер, как его запустить и какая сейчас git-ветка?",
+        "passed": true,
+        "status": "answered",
+        "durationMs": 12713,
+        "model": "deepseek-v4-flash"
+      },
+      {
+        "question": "Какой HTTP endpoint отвечает на вопросы ассистенту разработчика и какие поля он принимает?",
+        "passed": true,
+        "status": "answered",
+        "durationMs": 12114,
+        "model": "deepseek-v4-flash"
+      },
+      {
+        "question": "Какие настройки Kubernetes production-кластера и SLA 99.99% используются в этом проекте?",
+        "passed": true,
+        "status": "unknown",
+        "durationMs": 8018,
+        "model": "deepseek-v4-flash"
+      }
+    ]
+  },
+  "previousWebUi": {
+    "passed": true,
+    "projectId": "myfamily",
+    "provider": "local",
+    "model": "qwen3.5:4b",
+    "answer": "Текущая ветка проекта — main. [1]",
+    "durationSeconds": 36,
+    "historyIsolation": "DeepChat history appeared only when current was selected; MyFamily had a separate empty history before its own request.",
+    "screenshot": "data/myfamily-assistant.jpg"
+  },
+  "folderPicker": {
+    "passed": true,
+    "automaticRegistration": true,
+    "canonicalPathsAndSymlinkDeduplication": true,
+    "isolatedIndexAndHistory": true,
+    "gitlessFolder": true,
+    "uiAnswer": "Компонент называется FolderPickerSmoke. [1]\n\nЭто контрольная папка без Git. [2]\n\nВыбранная папка не находится в Git-репозитории. [3]",
+    "uiDurationSeconds": 5.6,
+    "screenshot": "data/day31-arbitrary-folder-proof.jpg",
+    "pickerScreenshot": "data/day31-folder-picker.jpg",
+    "testFixture": "temporary synthetic README; removed from recents after verification",
+    "persistsSelectionAfterReload": true
+  },
+  "webUi": {
+    "passed": true,
+    "projectId": "myfamily",
+    "provider": "cloud",
+    "model": "deepseek-v4-flash",
+    "durationSeconds": 10.7,
+    "branch": "main",
+    "commit": "7af9ed6878bc699359eb9cdb67162303c0739584",
+    "citations": [
+      "project/docs/client-api.md",
+      "project/docs/api/openapi.json",
+      "mcp://project/get_git_branch"
+    ],
+    "historyIsolation": true,
+    "screenshot": "data/day31-myfamily-selected.jpg"
+  },
+  "gitBranchFixReport": "docs/day-31-git-branches-results.json",
+  "gitBranchesUi": {
+    "passed": true,
+    "browser": "Safari",
+    "provider": "cloud",
+    "durationSeconds": 1.8,
+    "localTotal": 1,
+    "remoteTotal": 35,
+    "screenshot": "data/day31-branches-safari.jpg"
+  }
+}

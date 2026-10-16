@@ -1,0 +1,264 @@
+{
+  "createdAt": "2026-10-15T05:17:00.302Z",
+  "provider": "cloud",
+  "results": [
+    {
+      "question": "Как устроен проект: где интерфейс и сервер, как его запустить и какая сейчас git-ветка?",
+      "passed": true,
+      "missing": [],
+      "expected": "answered",
+      "status": "answered",
+      "model": "deepseek-v4-flash",
+      "durationMs": 9366,
+      "answer": "React-интерфейс находится в каталоге src/, приложение запускает src/main.tsx, а навигацией по разделам управляет src/App.tsx. [1]\n\nСерверная логика на TypeScript находится в server/, где server/index.ts запускает основной Express API на 127.0.0.1:8787 и подключает маршруты, AgentService и планировщик. [2]\n\nДля запуска нужен Node.js 24+, зависимости устанавливает npm install, а npm run dev запускает Vite и основной API вместе. [3]\n\nКоманда npm start собирает приложение и запускает его на http://127.0.0.1:8787. [4]\n\nПри разработке Vite показывает интерфейс на http://127.0.0.1:5173 и перенаправляет запросы /api в тот же локальный сервер с планировщиком. [5]\n\nТекущая git-ветка — day-31, коммит e93170c9d7c47e6558c992394311e4edb1442260, состояние не detached. [6]",
+      "citations": [
+        {
+          "id": 1,
+          "source": "docs/project-architecture.md",
+          "section": "Структура проекта и точки входа",
+          "chunkId": "structured-52ff3b0d40499384",
+          "quote": "- `src/` — React-интерфейс. `src/main.tsx` запускает приложение, `src/App.tsx` управляет навигацией по разделам."
+        },
+        {
+          "id": 2,
+          "source": "docs/project-architecture.md",
+          "section": "Структура проекта и точки входа",
+          "chunkId": "structured-52ff3b0d40499384",
+          "quote": "- `server/` — серверная логика TypeScript. `server/index.ts` запускает основной Express API на `127.0.0.1:8787`, подключает маршруты, AgentService и планировщик."
+        },
+        {
+          "id": 3,
+          "source": "docs/project-architecture.md",
+          "section": "Запуск и проверка",
+          "chunkId": "structured-6dab26afdf11d268",
+          "quote": "Нужен Node.js 24+. `npm install` устанавливает зависимости. `npm run dev` запускает Vite и основной API вместе."
+        },
+        {
+          "id": 4,
+          "source": "docs/project-architecture.md",
+          "section": "Запуск и проверка",
+          "chunkId": "structured-6dab26afdf11d268",
+          "quote": "`npm start` собирает приложение и запускает его на `http://127.0.0.1:8787`."
+        },
+        {
+          "id": 5,
+          "source": "docs/day-18.md",
+          "section": "При первой настройке, если .env ещё нет:",
+          "chunkId": "structured-1c8479f95a54ef42",
+          "quote": "Для разработки: `npm run dev`. Vite показывает интерфейс на `http://127.0.0.1:5173`, а запросы `/api` перенаправляет в тот же локальный сервер с планировщиком."
+        },
+        {
+          "id": 6,
+          "source": "mcp://project/get_git_branch",
+          "section": "get_git_branch",
+          "chunkId": "mcp-get_git_branch",
+          "quote": "{\n  \"branch\": \"day-31\",\n  \"commit\": \"e93170c9d7c47e6558c992394311e4edb1442260\",\n  \"detached\": false\n}"
+        }
+      ],
+      "verification": {
+        "status": "passed",
+        "attempts": 1,
+        "judgments": [
+          {
+            "claimId": 1,
+            "supported": true,
+            "reason": "Цитата 1 полностью подтверждает расположение React-интерфейса в src/, запуск через src/main.tsx и навигацию через src/App.tsx."
+          },
+          {
+            "claimId": 2,
+            "supported": true,
+            "reason": "Цитата 2 полностью подтверждает серверную логику в server/, запуск server/index.ts, Express API на 127.0.0.1:8787 и подключение маршрутов, AgentService и планировщика."
+          },
+          {
+            "claimId": 3,
+            "supported": true,
+            "reason": "Цитата 3 подтверждает Node.js 24+, npm install и npm run dev, запускающий Vite и основной API вместе."
+          },
+          {
+            "claimId": 4,
+            "supported": true,
+            "reason": "Цитата 4 дословно подтверждает, что npm start собирает приложение и запускает его на http://127.0.0.1:8787."
+          },
+          {
+            "claimId": 5,
+            "supported": true,
+            "reason": "Цитата 5 подтверждает Vite на http://127.0.0.1:5173 и перенаправление /api в тот же локальный сервер с планировщиком."
+          },
+          {
+            "claimId": 6,
+            "supported": true,
+            "reason": "Цитата 6 подтверждает ветку day-31, указанный коммит и detached=false."
+          }
+        ]
+      },
+      "retrievedDocuments": [
+        {
+          "source": "docs/project-architecture.md",
+          "section": "Структура проекта и точки входа",
+          "score": 0.618483762550196
+        },
+        {
+          "source": "docs/project-architecture.md",
+          "section": "Запуск и проверка",
+          "score": 0.5762740248624486
+        },
+        {
+          "source": "docs/day-18.md",
+          "section": "При первой настройке, если .env ещё нет:",
+          "score": 0.5622204247311476
+        },
+        {
+          "source": "README.md",
+          "section": "Структура",
+          "score": 0.5429199088109433
+        }
+      ],
+      "mcpTools": [
+        "get_git_branch",
+        "list_project_files",
+        "get_git_diff"
+      ]
+    },
+    {
+      "question": "Какой HTTP endpoint отвечает на вопросы ассистенту разработчика и какие поля он принимает?",
+      "passed": true,
+      "missing": [],
+      "expected": "answered",
+      "status": "answered",
+      "model": "deepseek-v4-flash",
+      "durationMs": 8288,
+      "answer": "Запросы ассистента разработчика обрабатываются маршрутом POST /api/developer/help. [1]\n\nEndpoint /help принимает тело с обязательным полем input (строка от 1 до 4000 символов) и необязательным provider со значениями cloud или local (по умолчанию cloud). [2]\n\nПример тела запроса к /help: {\"input\":\"/help Как устроен проект?\",\"provider\":\"cloud\"}. [3]\n\nОтвет 200 на /help содержит question, provider, model, indexRunId, answer, grounding (claims, citations, verification), sources, trace, context (capturedAt, receipts), durationMs. [4]\n\nВозможные ошибки /help: 400 — некорректный запрос или команда, 409 — занят или индекс устарел, 503 — нет индекса, провайдера или MCP-контекста, 502 — ошибка генерации. [5]",
+      "citations": [
+        {
+          "id": 1,
+          "source": "docs/project-architecture.md",
+          "section": "RAG и ассистент разработчика",
+          "chunkId": "structured-8f3d8c674fa020da",
+          "quote": "Запросы обрабатываются маршрутом `POST /api/developer/help`."
+        },
+        {
+          "id": 2,
+          "source": "docs/developer-api.json",
+          "section": "developer api",
+          "chunkId": "structured-ba2e336db432a871",
+          "quote": "\"/help\": { \"post\": { \"summary\": \"Вопрос о проекте по RAG и текущему MCP-контексту\", \"requestBody\": { \"required\": true, \"content\": { \"application/json\": { \"schema\": { \"type\": \"object\", \"required\": [\"input\"], \"additionalProperties\": false, \"properties\": { \"input\": { \"type\": \"string\", \"minLength\": 1, \"maxLength\": 4000, \"examples\": [\"/help\", \"/help Как устроен проект?\"] }, \"provider\": { \"type\": \"string\", \"enum\": [\"cloud\", \"local\"], \"default\": \"cloud\" } } } } } }"
+        },
+        {
+          "id": 3,
+          "source": "docs/day-31.md",
+          "section": "API",
+          "chunkId": "structured-e867972a10dc677e",
+          "quote": "- `POST /help`, тело `{\"input\":\"/help Как устроен проект?\",\"provider\":\"cloud\"}`; provider — `cloud` или `local`."
+        },
+        {
+          "id": 4,
+          "source": "docs/developer-api.json",
+          "section": "developer api",
+          "chunkId": "structured-92d4b2a920e3fa67",
+          "quote": "\"200\": { \"description\": \"question, provider, model, indexRunId, answer, grounding (claims, citations, verification), sources, trace, context (capturedAt, receipts), durationMs\" }"
+        },
+        {
+          "id": 5,
+          "source": "docs/developer-api.json",
+          "section": "developer api",
+          "chunkId": "structured-92d4b2a920e3fa67",
+          "quote": "\"400\": { \"description\": \"Некорректный запрос или команда\" }, \"409\": { \"description\": \"Занят или индекс устарел\" }, \"503\": { \"description\": \"Нет индекса, провайдера или MCP-контекста\" }, \"502\": { \"description\": \"Ошибка генерации\" }"
+        }
+      ],
+      "verification": {
+        "status": "passed",
+        "attempts": 1,
+        "judgments": [
+          {
+            "claimId": 1,
+            "supported": true,
+            "reason": "Цитата 1 прямо подтверждает, что запросы обрабатываются маршрутом POST /api/developer/help."
+          },
+          {
+            "claimId": 2,
+            "supported": true,
+            "reason": "Цитата 2 подтверждает обязательное поле input (string, minLength 1, maxLength 4000) и необязательное provider с enum cloud/local и default cloud."
+          },
+          {
+            "claimId": 3,
+            "supported": true,
+            "reason": "Цитата 3 содержит указанное тело запроса с input и provider cloud."
+          },
+          {
+            "claimId": 4,
+            "supported": true,
+            "reason": "Цитата 4 перечисляет все указанные поля ответа 200."
+          },
+          {
+            "claimId": 5,
+            "supported": true,
+            "reason": "Цитата 5 содержит все перечисленные коды ошибок с соответствующими описаниями."
+          }
+        ]
+      },
+      "retrievedDocuments": [
+        {
+          "source": "docs/day-31.md",
+          "section": "API",
+          "score": 0.52535032232852
+        },
+        {
+          "source": "docs/developer-api.json",
+          "section": "developer api",
+          "score": 0.5160476171004275
+        },
+        {
+          "source": "docs/developer-api.json",
+          "section": "developer api",
+          "score": 0.4996473634357506
+        },
+        {
+          "source": "docs/project-architecture.md",
+          "section": "RAG и ассистент разработчика",
+          "score": 0.555347719439822
+        }
+      ],
+      "mcpTools": [
+        "get_git_branch",
+        "list_project_files",
+        "get_git_diff"
+      ]
+    },
+    {
+      "question": "Какие настройки Kubernetes production-кластера и SLA 99.99% используются в этом проекте?",
+      "passed": true,
+      "missing": [],
+      "expected": "unknown",
+      "status": "unknown",
+      "model": "deepseek-v4-flash",
+      "durationMs": 5963,
+      "answer": "Не знаю: в найденных документах недостаточно подтверждённых сведений для ответа.",
+      "citations": [],
+      "verification": {
+        "status": "abstained",
+        "attempts": 1,
+        "judgments": []
+      },
+      "retrievedDocuments": [
+        {
+          "source": "docs/day-31.md",
+          "section": "API",
+          "score": 0.4510972141455444
+        }
+      ],
+      "mcpTools": [
+        "get_git_branch",
+        "list_project_files",
+        "get_git_diff"
+      ]
+    }
+  ],
+  "validation": {
+    "relatedAutomatedTests": 40,
+    "typecheck": "passed",
+    "fixes": [
+      "DeepSeek reranking uses the native RagRetriever array contract; Ollama keeps its schema-enforced keyed format.",
+      "Answer requests include the retrieved documentation and live MCP evidence in their system context."
+    ]
+  }
+}

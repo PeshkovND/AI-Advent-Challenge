@@ -1,0 +1,43 @@
+.developer-context h2 { margin: 28px 0 12px; font-size: 12px; color: #777d90; }
+.developer-context > strong { font-size: 14px; overflow-wrap: anywhere; }
+.developer-root { display: block; overflow-wrap: anywhere; margin-top: 8px; }
+.developer-context > p.developer-index-state { margin: 18px 0 8px; color: #a77a31; font-size: 11px; }
+.developer-context > p.developer-index-state.ready { color: #2a8864; }
+.developer-context > small { color: #9498a6; line-height: 1.8; font-size: 10px; }
+.developer-index-button { margin: 14px 0; padding: 9px; border: 1px solid #dbddea; background: white; color: #555b77; border-radius: 9px; font-size: 11px; }
+.developer-documents { color: #7b8195; font-size: 10px; min-height: 0; overflow: auto; }
+.developer-documents summary { cursor: pointer; padding: 8px 0; }
+.developer-documents ul { padding-left: 14px; max-height: 220px; overflow: auto; line-height: 1.8; overflow-wrap: anywhere; }
+.developer-mcp-badge { margin-top: 22px; font-size: 11px; color: #646ba0; }
+.developer-mcp-badge small { display: block; margin-top: 5px; font-size: 10px; color: #9297a9; }
+.developer-header-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.developer-header-actions select, .developer-header-actions button { max-width: 180px; padding: 7px; border: 1px solid #e1e3ed; border-radius: 8px; background: white; color: #646b80; font-size: 11px; }
+.developer-answer-meta { display: block; margin-bottom: 12px; color: #9298a8; font-size: 10px; }
+.developer-receipts { margin-top: 12px; color: #9096a7; font-size: 10px; }
+.developer-receipts summary { cursor: pointer; }
+.developer-receipts pre { overflow: auto; max-height: 250px; max-width: 100%; white-space: pre-wrap; overflow-wrap: anywhere; background: #f6f7fa; padding: 12px; border-radius: 8px; }
+.developer-receipts section { margin-top: 10px; }
+.developer-notice { color: #7d8398; font-size: 11px; }
+.developer-notice button { padding: 4px 8px; border: 1px solid #dedfee; border-radius: 6px; background: white; color: #6669aa; }
+.developer-folder-dialog { width: min(590px, calc(100vw - 40px)); max-height: calc(100dvh - 40px); box-sizing: border-box; overflow: auto; border: 1px solid #e1e3ed; border-radius: 18px; padding: 24px; color: #363d53; background: #fff; box-shadow: 0 24px 100px #22263933; }
+.developer-folder-dialog::backdrop { background: #1c223c66; backdrop-filter: blur(3px); }
+.developer-folder-dialog header { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
+.developer-folder-dialog h2 { margin: 0; font-size: 18px; }
+.developer-folder-dialog p { font-size: 12px; color: #7d8398; line-height: 1.5; }
+.developer-folder-dialog button { cursor: pointer; border: 1px solid #e1e3ed; border-radius: 8px; background: #fff; padding: 8px 12px; color: #575f79; font: inherit; font-size: 12px; }
+.developer-folder-dialog button:disabled { opacity: .5; cursor: default; }
+.developer-folder-dialog button:focus-visible, .developer-folder-dialog input:focus-visible { outline: 2px solid #8172d1; outline-offset: 2px; }
+.developer-folder-path label { display: block; font-size: 11px; margin: 16px 0 8px; color: #7b8195; }
+.developer-folder-path > div { display: flex; gap: 8px; }
+.developer-folder-path input { min-width: 0; flex: 1; border: 1px solid #dfe2ed; border-radius: 8px; padding: 9px; color: #363d53; font: inherit; font-size: 12px; }
+.developer-folder-dialog nav { display: flex; gap: 8px; margin: 14px 0; }
+.developer-folder-list { height: 240px; overflow: auto; padding: 4px; border: 1px solid #eaecf3; border-radius: 10px; }
+.developer-folder-list > button { display: flex; width: 100%; align-items: center; gap: 12px; text-align: left; border: 0; padding: 10px; overflow-wrap: anywhere; }
+.developer-folder-list > button:hover { background: #f3f2fb; }
+.developer-folder-list > button span:first-child { color: #9085cb; font-size: 20px; }
+.developer-folder-list > button span:last-child { margin-left: auto; color: #a2a6b5; }
+.developer-folder-list > p { padding: 10px; }
+.developer-folder-dialog > small { display: block; color: #9298a8; font-size: 11px; line-height: 1.6; margin-top: 14px; }
+.developer-folder-dialog footer { display: flex; justify-content: flex-end; gap: 10px; margin-top: 22px; }
+.developer-folder-dialog .developer-folder-confirm { background: #7466bc; color: white; border-color: #7466bc; }
+@media (max-width: 700px) { .developer-page .rag-chat-header { flex-wrap: wrap; padding: 14px; } .developer-header-actions { gap: 4px; } .developer-header-actions select { max-width: 145px; } }

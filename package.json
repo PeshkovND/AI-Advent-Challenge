@@ -6,6 +6,10 @@
   "scripts": {
     "dev": "concurrently -k \"vite\" \"npm run dev:server\"",
     "dev:server": "tsx watch server/index.ts",
+    "developer:index": "node --import tsx server/developer-cli.ts --index",
+    "developer:cli": "node --import tsx server/developer-cli.ts",
+    "developer:check": "node --import tsx server/developer-check.ts",
+    "test:developer": "node --import tsx --test server/developer-assistant.test.ts",
     "start": "npm run build && npm run start:server",
     "start:server": "NODE_ENV=production tsx server/index.ts",
     "agents:cli": "tsx server/agent-cli.ts",

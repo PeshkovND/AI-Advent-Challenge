@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { compareLocalRag, localRagSettings } from './local-rag-service'
+import { compareLocalRag, localRagSettings, modelClient } from './local-rag-service'
 import { demoQuestions, demoModes, demoAgentConfig } from '../src/rag-demo-config'
 import { ragQuestions } from '../src/rag-questions'
 import { speedSummary } from '../src/local-rag-types'
@@ -153,6 +153,51 @@ test('local reranker rejects missing keys and invalid grades instead of inventin
   }
 })
 
+test('cloud reranker keeps native chunk IDs and incomplete arrays for shared retrieval validation', async () => {
+  const originalKey = process.env.DEEPSEEK_API_KEY
+  process.env.DEEPSEEK_API_KEY = 'test-key'
+  try {
+    const items = [{ chunkId: 'structured-original-1', relevance: 3, reason: 'Direct evidence' }]
+    const prompt = [{ role: 'system' as const, content: 'Верни только JSON с массивом items и исходными chunkId.' },
+      { role: 'user' as const, content: JSON.stringify({ question: 'Search?', expectedCount: 2, candidates: [
+        { chunkId: 'structured-original-1', text: 'First passage' }, { chunkId: 'structured-original-2', text: 'Second passage' },
+      ] }) }]
+    const client = modelClient('cloud', undefined, (async (url, init) => {
+      assert.equal(String(url), 'https://api.deepseek.com/chat/completions')
+      const body = JSON.parse(String(init?.body))
+      assert.deepEqual(body.messages, prompt)
+      assert.deepEqual(body.response_format, { type: 'json_object' })
+      assert.equal(body.format, undefined)
+      return Response.json({ choices: [{ message: { content: JSON.stringify({ items }) } }] })
+    }) as typeof fetch)
+    const response = await client.complete(prompt, 'rerank')
+    assert.deepEqual(JSON.parse(response.content), { items })
+  } finally { if (originalKey === undefined) delete process.env.DEEPSEEK_API_KEY; else process.env.DEEPSEEK_API_KEY = originalKey }
+})
+
+test('cloud reranker batches large prompts without local aliases or lost grades', async () => {
+  const originalKey = process.env.DEEPSEEK_API_KEY
+  process.env.DEEPSEEK_API_KEY = 'test-key'
+  try {
+    const candidates = Array.from({ length: 20 }, (_, i) => ({ chunkId: 'structured-original-' + i, text: 'документ '.repeat(600) }))
+    let batches = 0
+    const client = modelClient('cloud', undefined, (async (_url, init) => {
+      const body = JSON.parse(String(init?.body))
+      const batch = JSON.parse(body.messages[body.messages.length - 1].content)
+      assert.equal(batch.expectedCount, batch.candidates.length)
+      assert.ok(batch.candidates.every((item: { chunkId: string }) => item.chunkId.startsWith('structured-original-')))
+      const estimate = body.messages.reduce((n: number, item: { content: string }) => n + new TextEncoder().encode(item.content).length + 64, 0)
+      assert.ok(estimate + body.max_tokens + 512 <= localRagSettings().context)
+      batches++
+      return Response.json({ choices: [{ message: { content: JSON.stringify({ items: batch.candidates.map((item: { chunkId: string }) => ({ chunkId: item.chunkId, relevance: 3, reason: 'Evidence' })) }) } }] })
+    }) as typeof fetch)
+    const response = await client.complete([{ role: 'system', content: 'Верни ВСЕ 20 переданных chunkId.' },
+      { role: 'user', content: JSON.stringify({ question: 'Search?', expectedCount: 20, candidates }) }], 'rerank')
+    assert.ok(batches > 1)
+    assert.deepEqual(JSON.parse(response.content).items.map((item: { chunkId: string }) => item.chunkId), candidates.map((item) => item.chunkId))
+  } finally { if (originalKey === undefined) delete process.env.DEEPSEEK_API_KEY; else process.env.DEEPSEEK_API_KEY = originalKey }
+})
+
 test('local generation rechecks premature unknown and keeps verifier after a supported answer', async () => {
   let answers = 0
   const result = await compareLocalRag('Search?', false, 'structured', 'existing-index', undefined, {
@@ -222,4 +267,25 @@ test('local verifier binds multiple required judgments to their original claims'
   })
   assert.equal(result.local.grounding?.status, 'answered')
   assert.deepEqual(result.local.grounding?.verification.judgments.map((item) => item.claimId), [1, 2])
+})
+
+test('local verifier preserves the required whole-answer check, including a negative verdict', async () => {
+  const taskCheck = { goalAligned: true, constraintsRespected: true, answersQuestion: false, reason: 'Only the current branch was returned.' }
+  const client = modelClient('local', undefined, (async (_url, init) => {
+    const body = JSON.parse(String(init?.body))
+    assert.deepEqual(body.format.required, ['items', 'taskCheck'])
+    assert.deepEqual(body.format.properties.taskCheck.required, ['goalAligned', 'constraintsRespected', 'answersQuestion', 'reason'])
+    return Response.json({ message: { content: JSON.stringify({ items: { '1': { supported: true, reason: 'True fact.' } }, taskCheck }) } })
+  }) as typeof fetch)
+  const response = await client.complete([{ role: 'system', content: 'Проверь соответствие. Верни только JSON: items и taskCheck.' },
+    { role: 'user', content: JSON.stringify({ taskCheckRequired: true, claims: [{ claimId: 1 }] }) }], 'verify')
+  assert.deepEqual(JSON.parse(response.content), { items: [{ claimId: 1, supported: true, reason: 'True fact.' }], taskCheck })
+})
+
+test('local verifier cannot silently drop a missing or malformed whole-answer check', async () => {
+  for (const taskCheck of [undefined, {}, { goalAligned: true, constraintsRespected: true, answersQuestion: 'true', reason: 'Wrong type' }]) {
+    const client = modelClient('local', undefined, (async () => Response.json({ message: { content: JSON.stringify({ items: { '1': { supported: true, reason: 'True fact.' } }, taskCheck }) } })) as typeof fetch)
+    await assert.rejects(client.complete([{ role: 'system', content: 'Проверь соответствие.' },
+      { role: 'user', content: JSON.stringify({ taskCheckRequired: true, claims: [{ claimId: 1 }] }) }], 'verify'), /соответствие ответа вопросу/)
+  }
 })

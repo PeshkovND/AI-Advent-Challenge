@@ -2,6 +2,7 @@ import 'dotenv/config'
 import './network-config'
 import { createLocalLlmRouter } from './local-llm-router'
 import { createLocalRagRouter } from './local-rag-router'
+import { createDeveloperRouter } from './developer-router'
 import { createLlmOptimizationRouter } from './llm-optimization-router'
 import express, { Response } from 'express'
 import { resolve } from 'node:path'
@@ -245,6 +246,7 @@ const modelDefinitions: ModelDefinition[] = [
 app.use(express.json({ limit: '1mb' }))
 app.use('/api/local-llm', createLocalLlmRouter())
 app.use('/api/local-rag', createLocalRagRouter())
+app.use('/api/developer', createDeveloperRouter())
 app.use('/api/llm-optimization', createLlmOptimizationRouter())
 app.use('/api/agents', createAgentRouter(agentService))
 app.get('/api/rag/index', (_request, response) => {

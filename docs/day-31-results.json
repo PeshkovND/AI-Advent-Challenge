@@ -1,0 +1,218 @@
+{
+  "createdAt": "2026-10-15T05:04:56.696Z",
+  "results": [
+    {
+      "question": "Как устроен проект: где интерфейс и сервер, как его запустить и какая сейчас git-ветка?",
+      "passed": true,
+      "missing": [],
+      "expected": "answered",
+      "status": "answered",
+      "model": "qwen3.5:4b",
+      "durationMs": 52738,
+      "answer": "Интерфейс находится в каталоге `src/` (React), а серверная логика — в `server/` (TypeScript). [1]\n\nДля запуска разработки используется команда `npm run dev`, которая запускает Vite и основной API. Для сборки и запуска продакшн-версии используется `npm start`, адрес по умолчанию — `http://127.0.0.1:8787`. [2]\n\nТекущая ветка проекта — `day-31`. [3]",
+      "citations": [
+        {
+          "id": 1,
+          "source": "docs/project-architecture.md",
+          "section": "Структура проекта и точки входа",
+          "chunkId": "structured-52ff3b0d40499384",
+          "quote": "- `src/` — React-интерфейс. `src/main.tsx` запускает приложение, `src/App.tsx` управляет навигацией по разделам.\n- `server/` — серверная логика TypeScript. `server/index.ts` запускает основной Express API на `127.0.0.1:8787`, подключает маршруты, AgentService и планировщик.\n- `docs/` — документация проекта, описание заданий, API и результаты экспериментов. Документы `day-N.md` фиксируют историю развития соответствующего дня.\n- `data/` — локальные SQLite-индексы, история агентов и результаты; каталог исключён из Git.\n- `scripts/` — вспомогательные сценарии, включая проверку приватного сервиса с Windows.\n- `vite.config.ts` — сборка основного веб-интерфейса и прокси API для разработки.\n- `package.json` — зависимости, команды запуска, тестирования и индексации."
+        },
+        {
+          "id": 2,
+          "source": "docs/project-architecture.md",
+          "section": "Запуск и проверка",
+          "chunkId": "structured-6dab26afdf11d268",
+          "quote": "Нужен Node.js 24+. `npm install` устанавливает зависимости. `npm run dev` запускает Vite и основной API вместе. `npm start` собирает приложение и запускает его на `http://127.0.0.1:8787`. Ключи хранятся в `.env`, пример настроек — `.env.example`."
+        },
+        {
+          "id": 3,
+          "source": "mcp://project/get_git_branch",
+          "section": "get_git_branch",
+          "chunkId": "mcp-get_git_branch",
+          "quote": "MCP get_git_branch, время 2026-10-15T05:01:53.138Z:\n{\n  \"branch\": \"day-31\",\n  \"commit\": \"e93170c9d7c47e6558c992394311e4edb1442260\",\n  \"detached\": false\n}"
+        }
+      ],
+      "verification": {
+        "status": "passed",
+        "attempts": 1,
+        "judgments": [
+          {
+            "claimId": 1,
+            "supported": true,
+            "reason": "Цитата прямо указывает на расположение React-интерфейса в src/ и серверной логики TypeScript в server/."
+          },
+          {
+            "claimId": 2,
+            "supported": true,
+            "reason": "Цитата подтверждает использование команды npm run dev для запуска Vite и API, а также npm start для запуска на порту 8787."
+          },
+          {
+            "claimId": 3,
+            "supported": true,
+            "reason": "Данные из MCP-запроса get_git_branch явно указывают текущую ветку как day-31."
+          }
+        ]
+      },
+      "retrievedDocuments": [
+        {
+          "source": "docs/project-architecture.md",
+          "section": "Структура проекта и точки входа",
+          "score": 0.618483762550196
+        },
+        {
+          "source": "docs/project-architecture.md",
+          "section": "Запуск и проверка",
+          "score": 0.5762740248624486
+        },
+        {
+          "source": "docs/day-27.md",
+          "section": "В другом терминале из корня проекта:",
+          "score": 0.5712628180090932
+        },
+        {
+          "source": "docs/day-18.md",
+          "section": "При первой настройке, если .env ещё нет:",
+          "score": 0.5622204247311476
+        }
+      ],
+      "mcpTools": [
+        "get_git_branch",
+        "list_project_files",
+        "get_git_diff"
+      ]
+    },
+    {
+      "question": "Какой HTTP endpoint отвечает на вопросы ассистенту разработчика и какие поля он принимает?",
+      "passed": true,
+      "missing": [],
+      "expected": "answered",
+      "status": "answered",
+      "model": "qwen3.5:4b",
+      "durationMs": 79115,
+      "answer": "HTTP endpoint `/api/developer/help` (метод `POST`) отвечает на вопросы ассистенту разработчику. [1][2][3]\n\nEndpoint принимает тело запроса в формате JSON с обязательным полем `input` (строка, длина от 1 до 4000 символов) и опциональным полем `provider` (значение `cloud` или `local`, по умолчанию `cloud`). [2][3]",
+      "citations": [
+        {
+          "id": 1,
+          "source": "docs/project-architecture.md",
+          "section": "RAG и ассистент разработчика",
+          "chunkId": "structured-8f3d8c674fa020da",
+          "quote": "Ассистент разработчика использует `server/developer-assistant.ts`, отдельный `data/developer-rag.sqlite` и manifest с отпечатком документации. В корпус входят README, `docs`, `project/docs` и API/схемы. Команда `/help` без вопроса объясняет структуру проекта, `/help <вопрос>` ищет ответ по документации и свежим результатам MCP. Индекс обновляется кнопкой в разделе «Ассистент разработчика» или командой `npm run developer:index`. Запросы обрабатываются маршрутом `POST /api/developer/help`. У каждого ответа есть цитаты документов или MCP-источников."
+        },
+        {
+          "id": 2,
+          "source": "docs/day-31.md",
+          "section": "API",
+          "chunkId": "structured-6a8e7fbb639504bf",
+          "quote": "- `GET /status` — модель, актуальность, документы и метаданные индекса.\n- `POST /index`, тело `{}` — построить индекс.\n- `POST /help`, тело `{\"input\":\"/help Как устроен проект?\",\"provider\":\"cloud\"}`; provider — `cloud` или `local`.\n- Ошибки: 400 — команда/тело, 409 — занят или устаревший индекс, 503 — нет индекса/MCP/модели, 502 — ошибка внешней генерации."
+        },
+        {
+          "id": 3,
+          "source": "docs/developer-api.json",
+          "section": "developer api",
+          "chunkId": "structured-ba2e336db432a871",
+          "quote": "и documents\" }, \"409\": { \"description\": \"Ассистент занят или документы изменились при индексации\" }, \"502\": { \"description\": \"Ошибка Ollama/хранилища\" } } } },\n    \"/help\": { \"post\": { \"summary\": \"Вопрос о проекте по RAG и текущему MCP-контексту\", \"requestBody\": { \"required\": true, \"content\": { \"application/json\": { \"schema\": { \"type\": \"object\", \"required\": [\"input\"], \"additionalProperties\": false, \"properties\": { \"input\": { \"type\": \"string\", \"minLength\": 1, \"maxLength\": 4000, \"examples\": [\"/help\", \"/help Как устроен проект?\"] }, \"provider\": { \"type\": \"string\", \"enum\": [\"cloud\", \"local\"], \"default\": \"cloud\" } } } } } }, \"responses\": { \"200\": { \"description\": \"question, provider, model, indexRunId, answer, grounding (claims, citations, verification), sources, trace, context"
+        }
+      ],
+      "verification": {
+        "status": "passed",
+        "attempts": 2,
+        "judgments": [
+          {
+            "claimId": 1,
+            "supported": true,
+            "reason": "Цитата из docs/project-architecture.md прямо указывает на маршрут POST /api/developer/help и его назначение обработки вопросов ассистенту разработчика."
+          },
+          {
+            "claimId": 2,
+            "supported": true,
+            "reason": "Цитаты из day-31.md и developer-api.json подтверждают наличие обязательного поля input (строка от 1 до 4000 символов) и опционального поля provider с enum [cloud, local] и дефолтным значением cloud."
+          }
+        ]
+      },
+      "retrievedDocuments": [
+        {
+          "source": "docs/project-architecture.md",
+          "section": "RAG и ассистент разработчика",
+          "score": 0.555347719439822
+        },
+        {
+          "source": "docs/day-31.md",
+          "section": "API",
+          "score": 0.5259235557600256
+        },
+        {
+          "source": "docs/developer-api.json",
+          "section": "developer api",
+          "score": 0.5160476171004275
+        },
+        {
+          "source": "docs/developer-api.json",
+          "section": "developer api",
+          "score": 0.4996473634357506
+        }
+      ],
+      "mcpTools": [
+        "get_git_branch",
+        "list_project_files",
+        "get_git_diff"
+      ]
+    },
+    {
+      "question": "Какие настройки Kubernetes production-кластера и SLA 99.99% используются в этом проекте?",
+      "passed": true,
+      "missing": [],
+      "expected": "unknown",
+      "status": "unknown",
+      "model": "qwen3.5:4b",
+      "durationMs": 51985,
+      "answer": "Не знаю: в найденных документах недостаточно подтверждённых сведений для ответа.",
+      "citations": [],
+      "verification": {
+        "status": "abstained",
+        "attempts": 1,
+        "judgments": []
+      },
+      "retrievedDocuments": [
+        {
+          "source": "docs/day-29.md",
+          "section": "Текущий профиль",
+          "score": 0.47683370981644146
+        },
+        {
+          "source": "docs/day-30.md",
+          "section": "Ограничения",
+          "score": 0.44980641869807525
+        },
+        {
+          "source": "docs/day-30.md",
+          "section": "Ограничения",
+          "score": 0.43120950630584404
+        },
+        {
+          "source": "docs/day-26.md",
+          "section": "Ограничение ресурсов",
+          "score": 0.4607568112023651
+        }
+      ],
+      "mcpTools": [
+        "get_git_branch",
+        "list_project_files",
+        "get_git_diff"
+      ]
+    }
+  ],
+  "validation": {
+    "developerTests": 7,
+    "ragRegressionTests": 62,
+    "typecheck": "passed",
+    "build": "passed",
+    "provider": "local Ollama",
+    "cloudLiveCheck": {
+      "status": "passed",
+      "model": "deepseek-v4-flash",
+      "scenarios": 3,
+      "report": "docs/day-31-cloud-results.json"
+    }
+  }
+}

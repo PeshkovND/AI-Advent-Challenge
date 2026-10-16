@@ -43,7 +43,7 @@ export type RagGrounding = {
   claims: RagClaim[]
   clarification?: string
   reason?: 'weak-context' | 'insufficient-evidence' | 'unsupported-answer'
-  verification: { status: 'passed' | 'abstained'; attempts: number; judgments: Array<{ claimId: number; supported: boolean; reason: string }>; taskCheck?: RagTaskCheck }
+  verification: { status: 'passed' | 'abstained'; method?: 'tool-data'; attempts: number; judgments: Array<{ claimId: number; supported: boolean; reason: string }>; taskCheck?: RagTaskCheck }
   usage: RagUsage
 }
 export type RagResult = { indexRunId: string; sources: RagSource[]; trace?: RagTrace; grounding?: RagGrounding }

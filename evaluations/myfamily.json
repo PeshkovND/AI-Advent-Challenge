@@ -1,0 +1,75 @@
+[
+  {
+    "question": "/help Есть ли среди известных удалённых веток origin/develop и где находится точка входа MyFamily?",
+    "expected": "answered",
+    "required": ["origin/develop", "AppDelegate"],
+    "requiredSources": ["mcp://project/list_git_branches", "project/docs/project-architecture.md"],
+    "mcpCitation": false
+  },
+  {
+    "question": "/help какие есть ветки в репозитории",
+    "expected": "answered",
+    "required": [],
+    "mcpCitation": false,
+    "branchInventory": true
+  },
+  {
+    "question": "/help Какой стек использует MyFamily, какая минимальная iOS, где точка входа и какая сейчас git-ветка?",
+    "expected": "answered",
+    "required": [
+      "Swift",
+      "UIKit",
+      "15",
+      "AppDelegate"
+    ],
+    "mcpCitation": true
+  },
+  {
+    "question": "/help Как связаны App, UmbrellaPackage и AppModulesPackage и где находится контейнер зависимостей?",
+    "expected": "answered",
+    "required": [
+      "UmbrellaPackage",
+      "AppModulesPackage",
+      "AppContainer"
+    ],
+    "mcpCitation": false
+  },
+  {
+    "question": "/help Какие HTTP-метод, путь и параметры использует обновление токена авторизации?",
+    "expected": "answered",
+    "required": [
+      "POST",
+      "/auth/refresh-token",
+      "uuid",
+      "refreshToken"
+    ],
+    "mcpCitation": false
+  },
+  {
+    "question": "/help Где AppAuthService хранит Credentials, как проверяет авторизованность и какие поля нужны для заполненного профиля?",
+    "expected": "answered",
+    "required": [
+      "DefaultsStorage",
+      "expirationDate",
+      "firstName",
+      "lastName",
+      "displayName"
+    ],
+    "mcpCitation": false
+  },
+  {
+    "question": "/help Реализованы ли полноценные Home, Store, Profile и переход после ввода телефона в SignInCoordinator?",
+    "expected": "answered",
+    "required": [
+      "TitleStubViewController",
+      "SignInCoordinator"
+    ],
+    "mcpCitation": false
+  },
+  {
+    "question": "/help Какой точный production SLA и пароль базы PostgreSQL используются у MyFamily?",
+    "expected": "unknown",
+    "required": [],
+    "mcpCitation": false
+  }
+]

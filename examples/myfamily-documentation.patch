@@ -1,0 +1,473 @@
+diff --git a/README.md b/README.md
+index c4f89d5..a300510 100644
+--- a/README.md
++++ b/README.md
+@@ -1,78 +1,40 @@
+-# Table of Content
++# MyFamily
+ 
+-- [App description](#App-description)
+-- [Project Setup](#Project-Setup)
+-- [Technical Roadmap](#Technical-Roadmap)
+-- [iOS Team](#iOS-Team)
+-- [Links](#Links)
++MyFamily — заготовка iOS-приложения на Swift и UIKit с модульной архитектурой, MVVM, Coordinator и Combine. В текущем коде есть приветственный экран, ввод телефона, сервисы авторизации, сетевой слой и дизайн-система. Главный экран, магазин, профиль, создание профиля и onboarding содержат заглушки; готовые семейные функции из названия репозитория не следуют.
+ 
+-## App description
++Документация подготовлена по исходному коду репозитория PeshkovND/MyFamily, commit `548ee58` (`init app`), 16 октября 2026 года. Сборка iOS и доступность backend этой проверкой не подтверждены.
+ 
+-TBD
++## Быстрый старт
+ 
+-### App key features
++1. Установите Xcode с iOS SDK. В `Package.swift` указан Swift tools 5.7, минимальная платформа — iOS 15. В build phase есть ограничение версии Xcode: см. [запуск](project/docs/setup.md).
++2. Откройте `XcodeProject/App.xcodeproj`.
++3. Выберите схему `AppDevelopment` и доступный iOS Simulator. Swift Package Manager должен разрешить зависимости.
++4. Для устройства задайте собственные `DEVELOPMENT_TEAM` и `PRODUCT_BUNDLE_IDENTIFIER` в `XcodeProject/App/xcconfigs/`.
++5. Замените шаблонные `APP_API_STAGING` и `APP_API_PRODUCTION` на адреса своего backend перед проверкой сетевой авторизации.
+ 
+-TBD
++## Структура
+ 
++- `XcodeProject/App/Source/Infrastructure/` — `AppDelegate`, корневой `AppCoordinator` и контейнер зависимостей `AppContainer`.
++- `XcodeProject/Packages/AppModulesPackage/` — основные модули и тесты Swift Package Manager.
++- `XcodeProject/Packages/UmbrellaPackage/` — пакет, объединяющий внутренние модули для App target.
++- `XcodeProject/App/xcconfigs/` — четыре конфигурации сборки и API-окружения.
++- `project/docs/` — актуальные руководства по архитектуре, запуску, данным, ограничениям и частичное OpenAPI-описание в `api/openapi.json`.
++- `Docs/Architecture.md` — исходное описание архитектурных слоёв шаблона.
++- `QuickStartGuide/` — исходное руководство по шаблону; примеры в нём требуют сверки с текущим кодом.
++- `Tools/` — SwiftLint 0.52.2 и исторические Xcode-шаблоны экранов.
+ 
+-### About project
++## Документация
+ 
+-Check out project websites - TBD
++- [Архитектура и точки входа](project/docs/project-architecture.md)
++- [Запуск, схемы, настройки и тесты](project/docs/setup.md)
++- [Клиентский API авторизации и профиля](project/docs/client-api.md)
++- [Частичное OpenAPI-описание клиента](project/docs/api/openapi.json)
++- [Модели данных и хранение](project/docs/data-models.md)
++- [Реализованные сценарии и ограничения](project/docs/implementation-status.md)
++- [Исходное описание слоёв](Docs/Architecture.md)
+ 
++Документация описывает текущий checkout. Наличие фабрики HTTP-запроса или модели данных само по себе не означает готовый экран, работающий backend или завершённый пользовательский сценарий.
+ 
+-## Project Setup
++## Документация для ассистента
+ 
+-### Used Environment
+-
+-- macOS {Version}
+-- Xcode: {Version}
+-- Swift: {Version}
+-
+-
+-### Supported platforms
+-
+-Project uses iOS `15.0` as deployment target (minimal iOS version) which defines the list of [compatible devices](https://support.apple.com/en-en/guide/iphone/iphe3fa5df43/15.0/ios/15.0). So the app can be run on devices since `iPhone 6s`.
+-
+-The app is targeted to be run primarily on iPhones. iPad/iPod are supported in Compatibility mode which means that is the app is not univarsal and adaptive layuot is not supported for iPad/iPod. MacOs is not supported as well.
+-
+-Device orientatation is resticted to `Portrait` mode without handling of rotation.
+-
+-
+-### Initial setup 
+-
+-Clone project to some folder. For example, open `Terminal.app` and run the command:
+-````bash
+-git clone git@github.com:{project url}
+-````
+-Project uses [Swift Package Manager (SPM)](https://swift.org/package-manager/) as a primary dependency manager. SPM installs its dependencies automatically when you open project.
+-
+-After that, open project using project file `XcodeProject/App.xcodeproj`.
+-
+-Used 3rd party libraries and frameworks:
+-- [SPM dependency list](XcodeProject/App.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved)
+-
+-### [Outdated] Xcode templates
+-*⚠️ Only works for App target, not SPM modules*
+-
+-To install xcode templates for screen run command from terminal:
+-```bash
+-sudo cp -r Tools/ScreenXcodeTemplate.xctemplate "/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/Library/Xcode/Templates/Project Templates/iOS/Application"
+-```
+-
+-## Technical Roadmap
+-
+-- [ ] TBD
+-
+-
+-## iOS Team
+-
+-- {First last name, email}
+-
+-## Links
+-- [App Architecture](Docs/Architecture.md)
+-- [API Docs](TBD)
+-- [AppStore Connect](https://appstoreconnect.apple.com/)
+-- [Apple Developer Console](https://developer.apple.com/account/#/membership)
+-- [Slack](TBD)
+-- [JIRA Board](TBD)
+-- [CI/CD](TBD)
+\ No newline at end of file
++Для RAG используйте корневой `README.md` и каталог `project/docs/`, включая `project/docs/api/openapi.json`. Исходный `Docs/Architecture.md` дополняет их историческим описанием слоёв. Состояние Git (текущая ветка, commit и изменения) нужно получать при каждом вопросе через MCP, а не брать из документации. Ветка и commit здесь намеренно не выдаются за текущее состояние checkout.
+diff --git a/project/docs/api/openapi.json b/project/docs/api/openapi.json
+new file mode 100644
+index 0000000..d8296a5
+--- /dev/null
++++ b/project/docs/api/openapi.json
+@@ -0,0 +1,164 @@
++{
++  "openapi": "3.1.0",
++  "info": {
++    "title": "MyFamily client API (partial, inferred)",
++    "version": "548ee58",
++    "description": "Восстановлено по HttpRequestFactory.swift. Доступность backend и его полный контракт не проверены."
++  },
++  "paths": {
++    "/auth/request": {
++      "post": {
++        "summary": "Запросить SMS-код",
++        "responses": {
++          "2XX": {
++            "description": "Ожидаемый клиентом успешный ответ; конкретный HTTP-код backend не подтверждён."
++          },
++          "default": {
++            "description": "HttpResponse/ResponseErrorMapper обрабатывают сетевые и API-ошибки."
++          }
++        },
++        "requestBody": {
++          "required": true,
++          "content": {
++            "application/json": {
++              "schema": {
++                "type": "object",
++                "properties": {
++                  "uuid": {
++                    "type": "string"
++                  },
++                  "number": {
++                    "type": "string"
++                  },
++                  "access": {
++                    "type": "string",
++                    "const": "user"
++                  }
++                },
++                "required": [
++                  "uuid",
++                  "number",
++                  "access"
++                ]
++              }
++            }
++          }
++        }
++      }
++    },
++    "/auth/confirm": {
++      "post": {
++        "summary": "Подтвердить SMS-код",
++        "responses": {
++          "2XX": {
++            "description": "Ожидаемый клиентом успешный ответ; конкретный HTTP-код backend не подтверждён."
++          },
++          "default": {
++            "description": "HttpResponse/ResponseErrorMapper обрабатывают сетевые и API-ошибки."
++          }
++        },
++        "requestBody": {
++          "required": true,
++          "content": {
++            "application/json": {
++              "schema": {
++                "type": "object",
++                "properties": {
++                  "uuid": {
++                    "type": "string"
++                  },
++                  "number": {
++                    "type": "string"
++                  },
++                  "access": {
++                    "type": "string",
++                    "const": "user"
++                  },
++                  "code": {
++                    "type": "string"
++                  }
++                },
++                "required": [
++                  "uuid",
++                  "number",
++                  "access",
++                  "code"
++                ]
++              }
++            }
++          }
++        }
++      }
++    },
++    "/auth/refresh-token": {
++      "post": {
++        "summary": "Обновить токены",
++        "responses": {
++          "2XX": {
++            "description": "Ожидаемый клиентом успешный ответ; конкретный HTTP-код backend не подтверждён."
++          },
++          "default": {
++            "description": "HttpResponse/ResponseErrorMapper обрабатывают сетевые и API-ошибки."
++          }
++        },
++        "requestBody": {
++          "required": true,
++          "content": {
++            "application/json": {
++              "schema": {
++                "type": "object",
++                "properties": {
++                  "uuid": {
++                    "type": "string"
++                  },
++                  "refreshToken": {
++                    "type": "string"
++                  }
++                },
++                "required": [
++                  "uuid",
++                  "refreshToken"
++                ]
++              }
++            }
++          }
++        }
++      }
++    },
++    "/auth/logout": {
++      "post": {
++        "summary": "Выйти из аккаунта",
++        "responses": {
++          "2XX": {
++            "description": "Ожидаемый клиентом успешный ответ; конкретный HTTP-код backend не подтверждён."
++          },
++          "default": {
++            "description": "HttpResponse/ResponseErrorMapper обрабатывают сетевые и API-ошибки."
++          }
++        }
++      }
++    },
++    "/profile": {
++      "get": {
++        "summary": "Получить профиль (метод getUseProfile в клиенте)",
++        "responses": {
++          "2XX": {
++            "description": "Ожидаемый клиентом успешный ответ; конкретный HTTP-код backend не подтверждён."
++          },
++          "default": {
++            "description": "HttpResponse/ResponseErrorMapper обрабатывают сетевые и API-ошибки."
++          }
++        }
++      }
++    }
++  },
++  "x-client-upload": {
++    "path": "/profile/avatar",
++    "implementation": "AlamofireHttpClient.sendUploadImageRequest → Session.upload",
++    "method": "Alamofire default; not explicitly set in application source",
++    "multipartField": "avatar",
++    "fileName": "image.jpg",
++    "contentType": "image/jpeg"
++  },
++  "x-source": "XcodeProject/Packages/AppModulesPackage/Sources/AppServices/Sources/API/HttpRequestFactory.swift"
++}
+diff --git a/project/docs/client-api.md b/project/docs/client-api.md
+new file mode 100644
+index 0000000..9a5beec
+--- /dev/null
++++ b/project/docs/client-api.md
+@@ -0,0 +1,32 @@
++# Клиентский API MyFamily
++
++Это описание восстановлено по Swift-клиенту, а не получено из backend. Оно подтверждает форму создаваемых запросов, но не работоспособность сервера. Backend-реализации в репозитории нет.
++
++## Где искать код
++
++`XcodeProject/Packages/AppModulesPackage/Sources/AppServices/Sources/API/HttpRequestFactory.swift` определяет пути, HTTP-методы и параметры. `HttpClient/AlamofireHttpClient.swift` отправляет обычные запросы. `Services/AuthService.swift` реализует requestAuth, confirm, refreshToken и logout. Сетевые модели находятся в `API/NetworkPayloads/AuthorizedUserPayload.swift`.
++
++## Авторизация
++
++| HTTP | Путь | JSON-параметры | Метод фабрики |
++| --- | --- | --- | --- |
++| POST | /auth/request | uuid, number, access="user" | requestAuth(uuid:number:) |
++| POST | /auth/confirm | uuid, number, access="user", code | confirmAuth(uuid:number:code:) |
++| POST | /auth/refresh-token | uuid, refreshToken | refreshToken(uuid:refreshToken:) |
++| POST | /auth/logout | Без параметров тела в HttpRequest<Params.None> | logout() |
++
++uuid — идентификатор устройства, number — номер телефона, code — SMS-код. AuthService сначала читает сохранённый deviceId, затем использует identifierForVendor либо UUID и сохраняет результат. SignInViewModel удаляет символы форматирования номера и добавляет countryCode из GlobalConfig перед requestAuth.
++
++Запросы с параметрами используют JSONParameterEncoder. Base URL добавляется замыканием baseUrlProviding; его предоставляет Env через AppContainer. Endpoint для обновления токена — именно POST /auth/refresh-token; поле refreshToken передаётся вместе с uuid.
++
++## Профиль и изображение
++
++Фабрика `getUseProfile()` создаёт GET /profile. Название метода с Use сохранено как в исходном коде. AccountRepository.fetchProfile вызывает этот запрос и обновляет AccountHolder после преобразования ответа NetworkMapper.
++
++`uploadAvatar(data:)` создаёт UploadImageHttpRequest с endpoint /profile/avatar и multipart-полем avatar. У части задаются fileName image.jpg и MIME image/jpeg. AlamofireHttpClient.sendUploadImageRequest вызывает session.upload с multipartFormData и URL, оставляя HTTP-метод значением по умолчанию Alamofire. В частичном OpenAPI этот путь вынесен в x-client-upload: явный HTTP-метод в собственном Swift-коде не задан.
++
++## Ответы и ограничения контракта
++
++AuthorizedUserPayload содержит alreadyRegistered, profile, settings и token. TokenPayload содержит accessToken, refreshToken, expiresIn (String). Это клиентские ожидаемые поля, а не подтверждённый контракт работающего backend. HTTP success-коды, production SLA и полный набор серверных ошибок здесь не установлены.
++
++Частичная машиночитаемая схема — `project/docs/api/openapi.json`; путь /profile/avatar указан там как неподтверждённая операция без выдуманного HTTP-метода. Данные моделей подробнее описаны в `project/docs/data-models.md`.
+diff --git a/project/docs/data-models.md b/project/docs/data-models.md
+new file mode 100644
+index 0000000..51e0380
+--- /dev/null
++++ b/project/docs/data-models.md
+@@ -0,0 +1,25 @@
++# Модели данных и хранение MyFamily
++
++## Доменные модели AppEntities
++
++Account — Codable-структура с alreadyRegistered (Bool), profile (Account.Profile) и settings (Account.Settings). Profile хранит id, createdAt и updatedAt (Date), firstName, lastName, displayName, phoneNumber и необязательное avatarImage. Settings содержит mute (Bool).
++
++Credentials — Codable-структура с accessToken, refreshToken и expirationDate (Date). Токены — значения модели, а не реальные секреты в документации. Источник: `XcodeProject/Packages/AppModulesPackage/Sources/AppEntities/Sources/Account.swift`.
++
++UserProfile содержит идентификатор, роль, телефон, имена и три варианта Avatar; равенство и hash определяются по id. PhoneContact содержит personId, firstName, lastName, phoneNumber и необязательные thumbnailImageData. Image содержит small, medium и original; каждый Image.Info содержит width, height и url. Источники — соответствующие файлы AppEntities/Sources.
++
++FriendRequestStatus перечисляет approved, ingoing, outgoing и null; FoundUsersByPhoneNumber объединяет UserProfile, friendRequest и originalNumber. Наличие этих моделей не доказывает готовность семейных или социальных экранов.
++
++## Сетевые payload и преобразование
++
++AuthorizedUserPayload: alreadyRegistered, profile, settings, token. ProfilePayload: id, createdAt, updatedAt, phoneNumber; firstName, lastName, displayName и avatar могут отсутствовать. TokenPayload: accessToken, refreshToken, expiresIn. В payload даты и expiresIn имеют тип String; в доменных Credentials и Account.Profile используются Date. Преобразование выполняет NetworkMapper.
++
++Account/Profile — внутренние модели приложения. Их нельзя автоматически считать JSON Schema серверного API: состав и типы сетевых payload отличаются. Источник — `AppServices/Sources/API/NetworkPayloads/AuthorizedUserPayload.swift`.
++
++## Хранилища и авторизация
++
++AppContainer создаёт MemoryStorage, DefaultsStorage и отдельное debugStorage. DefaultsStorage работает поверх UserDefaults с suiteName на основе bundle id. AppAuthService сохраняет Account, Credentials и deviceId через DefaultsStorage.
++
++Credentials сейчас хранятся в DefaultsStorage/UserDefaults. В saveCredentials есть комментарий IMPLEMENT: Replace with secure storage; Keychain для этого пути не реализован. Это текущее состояние кода, а не рекомендация хранить production-токены в UserDefaults.
++
++В AppAuthService hasAuthorizedUser проверяет наличие credentials и условие expirationDate > Date(). hasFilledProfile требует непустые firstName, lastName и displayName профиля. Logout удаляет локальные account/credentials, а callbacks позволяют AppCoordinator вернуться к WelcomeFlow. FakeAuthService предназначен для разработки; AppContainer по умолчанию предоставляет AppAuthService.
+diff --git a/project/docs/implementation-status.md b/project/docs/implementation-status.md
+new file mode 100644
+index 0000000..d2c0705
+--- /dev/null
++++ b/project/docs/implementation-status.md
+@@ -0,0 +1,21 @@
++# Реализованные сценарии и ограничения MyFamily
++
++## Что уже есть в исходном коде
++
++Есть модульный каркас UIKit-приложения, дизайн-система, WelcomeFlow, экран ввода телефона SignInFlow, нормализация и валидация номера, requestAuth через SignInInteractor, AppAuthService, AlamofireHttpClient, фабрика HTTP-запросов, хранилища, координаторы и debug menu. Это статическое описание кода, а не результат выполнения приложения.
++
++## Где используются заглушки
++
++HomeCoordinator создаёт UITabBarController с тремя TitleStubViewController: Home Screen, Store Screen и My Profile Screen. Профиль и магазин не являются завершёнными пользовательскими экранами.
++
++В AppCoordinator.startCreateProfileFlow и startOnboardingFlow используется StubFlowCoordinator. Наличие ветвления по заполненности профиля не означает готовый экран создания профиля или завершённый onboarding.
++
++В SignInViewModel успешный запрос SMS отправляет событие `.continue`. SignInCoordinator обрабатывает его только `print("succes")`. Экран ввода SMS и отправка события `.finish(authState:)` в этом обработчике не реализованы; полный сценарий авторизации до HomeFlow не завершён. В SignInInteractor и AuthService при этом есть методы confirm — инфраструктура запроса присутствует отдельно от UI-перехода.
++
++## Обнаруженные пробелы перед сборкой
++
++В AppDesignSystemTests указан resourcePath Resources, но такого каталога в Tests текущего checkout нет. Это замечание статического просмотра, а не опубликованный результат компиляции. UserProfilePayload объявлен в конце AccountRepository.swift; загрузка изображения реализована методом sendUploadImageRequest в AlamofireHttpClient.swift.
++
++Build phase ограничивает Xcode значением XCODE_VERSION_ACTUAL ≤ 1520. Адреса API в xcconfig ещё имеют шаблонные значения. Credentials сохраняются в UserDefaults; переход на secure storage отмечен TODO. Перед утверждением готовности к релизу нужны отдельные проверки сборки, backend, пользовательских сценариев и хранения токенов.
++
++Исходное руководство QuickStartGuide содержит примеры шаблона. При расхождении с исходным кодом используйте текущие Swift-файлы и эту документацию, подготовленную по commit 548ee58.
+diff --git a/project/docs/project-architecture.md b/project/docs/project-architecture.md
+new file mode 100644
+index 0000000..22e842f
+--- /dev/null
++++ b/project/docs/project-architecture.md
+@@ -0,0 +1,43 @@
++# Архитектура MyFamily
++
++## Технологии и слои
++
++MyFamily использует Swift, UIKit, Combine, MVVM и Coordinator. Минимальная версия iOS — 15.0. Манифесты Swift Package Manager используют Swift tools 5.7. Источник: `XcodeProject/Packages/AppModulesPackage/Package.swift` и `XcodeProject/Packages/UmbrellaPackage/Package.swift`.
++
++Основные слои: приложение App → UmbrellaPackage → AppModulesPackage → внешние зависимости. UmbrellaPackage объединяет девять внутренних модулей в одну библиотеку для приложения.
++
++## Модули
++
++| Модуль | Назначение |
++| --- | --- |
++| Utilities | Общие расширения, логирование, таймер, обработка клавиатуры и вспомогательные инструменты UIKit. |
++| AppEntities | Account, Credentials, UserProfile, PhoneContact, Image, Avatar и AppError. |
++| AppDesignSystem | Цвета, шрифты, строки, иконки, форматирование телефона и UI-компоненты. |
++| AppBaseFlow | Базовые View, ViewController, ViewModel и Coordinator, общая конфигурация. |
++| AppServices | HTTP-клиент Alamofire, авторизация, окружения, хранилища, загрузка изображений, камера и контакты. |
++| WelcomeFlow | Приветственный экран и событие перехода ко входу. |
++| SignInFlow | Экран ввода телефона, ViewModel, SignInInteractor, SignInCoordinator и AccountRepository. |
++| HomeFlow | Tab bar с тремя экранами-заглушками Home, Store и Profile. |
++| AppDevTools | Debug menu, feature toggles, FakeAuthService, StubFlowCoordinator и демонстрационные экраны. |
++
++Источники: `AppModulesPackage/Package.swift` и соответствующие каталоги `Sources/<Module>/Sources`. Внешние зависимости: IQKeyboardManagerSwift, TweeTextField, Alamofire, SDWebImage, SDWebImageWebPCoder, SnapKit и JGProgressHUD.
++
++## Точки входа и зависимости
++
++Точка входа — `@main AppDelegate` в `XcodeProject/App/Source/Infrastructure/AppDelegate.swift`. При запуске AppDelegate включает WebP coder и менеджер клавиатуры, затем вызывает `appCoordinator.start()`.
++
++`AppContainer.swift` создаёт Env, MemoryStorage, DefaultsStorage, debugStorage, AlamofireHttpClient, AppAuthService, HttpRequestFactory и NetworkMapper. HTTP-клиент использует AuthenticationInterceptor с OAuthAuthenticator. HttpRequestFactory получает base URL через замыкание `env.apiBaseUrlString`. AuthService получает HTTP-клиент лениво, чтобы избежать цикла инициализации.
++
++`AppContainer.provideAuthService()` возвращает настоящий AppAuthService. FakeAuthService объявлен отдельно и по умолчанию этим методом не возвращается.
++
++## Навигация
++
++Корневая навигация находится в `AppCoordinator.swift`. Сначала создаётся UIWindow с UINavigationController. Debug-toggle onboarding может сразу направить в onboarding. Обычно отсутствие авторизованного пользователя ведёт в WelcomeFlow; авторизованный пользователь направляется к созданию профиля либо onboarding/Home в зависимости от состояния профиля и сохранённого признака onboarding.
++
++WelcomeCoordinator отправляет событие signIn, по которому AppCoordinator открывает SignInCoordinator. Завершение signIn/signUp предусмотрено в корневом координаторе, но текущий обработчик `.continue` внутри SignInCoordinator только печатает `succes`; полного перехода после SMS в этом checkout нет.
++
++## Устройство экрана
++
++Экран разделяется на Context (события, состояния и ошибки), ContentView (UIKit layout), ViewController (binding и отображение состояния) и ViewModel (логика представления). Для обращения к сервисам используются interactor/repository. В SignInFlow это SignInViewModel → SignInInteractor → AuthService. Combine связывает события и обновления состояния.
++
++См. также `project/docs/implementation-status.md`: координаторы и модели описывают инфраструктуру, а не гарантируют завершённость всех экранов.
+diff --git a/project/docs/setup.md b/project/docs/setup.md
+new file mode 100644
+index 0000000..f095004
+--- /dev/null
++++ b/project/docs/setup.md
+@@ -0,0 +1,39 @@
++# Запуск и тестирование MyFamily
++
++## Требования
++
++Нужны macOS, полный Xcode с iOS SDK и Swift Package Manager. В манифестах указан Swift tools 5.7 и iOS 15.0. Корневой проект — `XcodeProject/App.xcodeproj`; UIKit-модули следует собирать для iOS, а не обычной командой `swift test` для macOS.
++
++Build phase `XcodeProject/BuildPhaseScripts/ensure_xcode_version.sh` задаёт `XCODE_VERSION_CONSTRAINT="1520"` и отклоняет `XCODE_VERSION_ACTUAL > 1520`. Хотя текст ошибки говорит о равенстве, проверка в скрипте проверяет верхнюю границу. Совместимость более нового Xcode требует отдельной проверки и осознанного изменения этого скрипта.
++
++## Схемы и конфигурации
++
++| Схема | Run / Test / Analyze | Profile / Archive |
++| --- | --- | --- |
++| AppDevelopment | Debug | QaRelease |
++| AppProduction | DebugProduction | ProductionRelease |
++
++Настройки лежат в `XcodeProject/App/xcconfigs/Debug.xcconfig`, `QaRelease.xcconfig`, `DebugProduction.xcconfig`, `ProductionRelease.xcconfig`. Значимые параметры: APP_DISPLAY_NAME, APP_BUILD_TYPE, APP_API_STAGING, APP_API_PRODUCTION, PRODUCT_BUNDLE_IDENTIFIER и DEVELOPMENT_TEAM. Для физического устройства нужны собственные signing-настройки.
++
++Env читает значения через InfoPlist. При buildType production используется productionApi; в остальных случаях — выбранный в debugStorage API либо stagingApi по умолчанию. Текущие адреса API в xcconfig являются значениями шаблона и не подтверждают доступность рабочего backend.
++
++## Порядок запуска
++
++Откройте `XcodeProject/App.xcodeproj`, выберите AppDevelopment и iOS Simulator, дождитесь разрешения Swift Package Manager и выполните Run. Перед сетевой проверкой укажите свой backend. Для проверки командной строкой сначала получите доступные схемы и устройства:
++
++```bash
++xcodebuild -list -project XcodeProject/App.xcodeproj
++xcodebuild -showdestinations -project XcodeProject/App.xcodeproj -scheme AppDevelopment
++```
++
++После выбора существующего simulator destination можно запускать build/test с его идентификатором. Команды здесь описывают процедуру; успешная сборка текущего checkout не заявляется.
++
++## Автоматические тесты и инструменты
++
++В AppModulesPackage объявлены AppDesignSystemTests и AppServicesTests. Тесты дизайн-системы проверяют форматирование телефона; тесты сервисов — AppError и разбор HTTP/validation errors на JSON fixtures. AppDevelopment.xcscheme перечисляет оба test target. AppProduction.xcscheme не содержит аналогичного списка тестов.
++
++Для AppDesignSystemTests в Package.swift указан resourcePath Resources, но в текущем каталоге Tests такого каталога нет. Это необходимо проверить при подготовке сборки. Список дополнительных обнаруженных пробелов описан в `project/docs/implementation-status.md`.
++
++Build phase `run_swiftlint.sh` использует бинарник SwiftLint 0.52.2 из Tools и запускает lint для конфигурации Debug. Старые Xcode templates в Tools описаны в исходном README как устаревшие и ограниченные App target.
++
++В среде подготовки этой документации активны только Command Line Tools; `xcodebuild -version` требует полный Xcode. Поэтому результат проверки RAG/MCP-ассистента не является результатом сборки или UI-тестов iOS-приложения.

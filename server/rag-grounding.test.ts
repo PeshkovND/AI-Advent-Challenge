@@ -237,3 +237,26 @@ test('partial mode does not hide an unavailable verifier after an initial partia
     return { content: JSON.stringify({ items: [{ claimId: 1, supported: true, reason: 'Direct' }, { claimId: 2, supported: false, reason: 'Unproved' }] }), usage }
   }, undefined, undefined, { allowPartial: true }), /verifier unavailable/)
 })
+
+test('question coverage cannot be bypassed by true claims or partial mode', async () => {
+  let answers = 0
+  const grounded = await answerWithGrounding(question, messages, [source], async (input, stage) => {
+    if (stage === 'answer') { answers++; return { content: payload(), usage } }
+    assert.equal(JSON.parse(input[input.length - 1].content).taskCheckRequired, true)
+    return { content: JSON.stringify({ ...JSON.parse(verdict()), taskCheck: {
+      goalAligned: true, constraintsRespected: true, answersQuestion: false, reason: 'Верный факт не отвечает на исходный вопрос.',
+    } }), usage }
+  }, undefined, undefined, { checkQuestion: true, allowPartial: true })
+  assert.equal(answers, 2)
+  assert.equal(grounded.status, 'unknown')
+  assert.equal(grounded.reason, 'unsupported-answer')
+  assert.equal(grounded.verification.taskCheck?.answersQuestion, false)
+  assert.equal(grounded.partial, undefined)
+  assert.deepEqual(grounded.citations, [])
+})
+
+test('question coverage requires a well-formed whole-answer verdict', async () => {
+  await assert.rejects(answerWithGrounding(question, messages, [source], async (_input, stage) => ({
+    content: stage === 'answer' ? payload() : verdict(), usage,
+  }), undefined, undefined, { checkQuestion: true }))
+})
