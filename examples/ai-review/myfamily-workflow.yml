@@ -1,0 +1,30 @@
+name: AI code review
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: ai-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    if: ${{ !github.event.pull_request.draft }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      # Target repository only. Its dependencies and PR code are never executed.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      # Versioned Action contains the bundled reviewer and needs no npm install.
+      - uses: PeshkovND/AI-Advent-Challenge@ai-review-v1.0.0
+        with:
+          api-key: ${{ secrets.DEEPSEEK_API_KEY }}

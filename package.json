@@ -12,7 +12,8 @@
     "test:developer": "node --import tsx --test server/developer-assistant.test.ts",
     "review:pr": "node --import tsx server/code-review-cli.ts",
     "review:demo": "node --import tsx server/code-review-demo.ts",
-    "test:review": "node --import tsx --test server/code-review.test.ts",
+    "review:action:build": "node scripts/build-review-action.mjs",
+    "test:review": "node --import tsx --test server/code-review.test.ts server/code-review-action.test.ts",
     "start": "npm run build && npm run start:server",
     "start:server": "NODE_ENV=production tsx server/index.ts",
     "agents:cli": "tsx server/agent-cli.ts",
@@ -76,6 +77,7 @@
     "@types/react-dom": "^19.1.7",
     "@vitejs/plugin-react": "^5.0.4",
     "concurrently": "^9.2.1",
+    "esbuild": "0.28.2",
     "tsx": "^4.20.3",
     "typescript": "^5.9.2",
     "vite": "^7.1.2"

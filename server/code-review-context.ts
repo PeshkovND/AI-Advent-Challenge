@@ -17,7 +17,7 @@ export function bytePrefix(text: string, limit: number) {
 export function reviewPath(path: string) {
   const publicPath = publicProjectPath(path) || /^\.github\/workflows\/[\w.-]+\.ya?ml$/.test(path) && publicProjectPath(path.slice(1))
   return publicPath && !/(?:^|\/)(?:package-lock\.json|yarn\.lock|pnpm-lock\.yaml)$/.test(path)
-    && /\.(?:[cm]?[jt]sx?|md|markdown|txt|css|html|json|ya?ml|sql|graphql|prisma|py|swift|go|rs|sh)$/.test(path)
+    && /\.(?:[cm]?[jt]sx?|md|markdown|txt|css|html|json|ya?ml|sql|graphql|prisma|py|swift|go|rs|sh|pbxproj|xcconfig|plist|entitlements|xcscheme|xcworkspacedata)$/i.test(path)
 }
 export const isReviewDocumentation = (path: string) => /(?:^|\/)(?:readme[^/]*|docs\/.*|api\/.*|schemas?\/.*)$/i.test(path)
 
