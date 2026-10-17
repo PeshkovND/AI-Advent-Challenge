@@ -118,6 +118,66 @@ test('model failure keeps reports and signals action failure instead of approvin
   } finally { f.close() }
 })
 
+test('Action publishes a native review and compact summary; API rejection retains the full report and fails the run', async () => {
+  for (const rejectReview of [false, true]) {
+    const f = fixture()
+    try {
+      const writes: Array<{ path: string; body: any }> = []
+      const request = (async (url, init) => {
+        const path = new URL(String(url)).pathname, method = init?.method || 'GET'
+        assert.equal((init?.headers as Record<string, string>).Authorization, 'Bearer fixture-github-key')
+        assert.ok(!String(init?.body).includes('fixture-model-key'))
+        if (method !== 'GET') writes.push({ path, body: JSON.parse(String(init?.body)) })
+        if (path.endsWith('/pulls/7')) return Response.json({ state: 'open', base: { sha: f.base }, head: { sha: f.head } })
+        if (path.endsWith('/files')) return Response.json([{ filename: 'Invoice.swift', status: 'modified', patch: f.git('diff', f.base, f.head, '--', 'Invoice.swift') }])
+        if (method === 'GET' && path.endsWith('/comments')) return Response.json([])
+        if (path.endsWith('/reviews')) return rejectReview ? Response.json({ message: 'private API error' }, { status: 422 })
+          : Response.json({ html_url: 'https://github.com/example/MyFamily/pull/7#pullrequestreview-100' })
+        assert.ok(path.endsWith('/issues/7/comments'))
+        return Response.json({ html_url: 'https://github.com/example/MyFamily/pull/7#issuecomment-200' })
+      }) as typeof fetch
+      const result = await runReviewAction({ ...f.env, REVIEW_PUBLISH_COMMENT: 'true' }, { complete, request })
+      assert.equal(result.failed, rejectReview)
+      const native = writes.find(({ path }) => path.endsWith('/reviews'))!.body
+      assert.equal(native.commit_id, f.head); assert.equal(native.event, 'COMMENT')
+      assert.equal(native.comments.length, 1)
+      assert.equal(native.comments[0].path, 'Invoice.swift'); assert.equal(native.comments[0].line, 1); assert.equal(native.comments[0].side, 'RIGHT')
+      const publication = JSON.parse(readFileSync(join(result.directory, 'publication.json'), 'utf8'))
+      assert.equal(publication.failed, rejectReview)
+      const comment = writes.find(({ path }) => path.endsWith('/issues/7/comments'))!.body.body
+      assert.equal(readFileSync(join(result.directory, 'comment.md'), 'utf8'), comment)
+      assert.match(readFileSync(join(result.directory, 'review.md'), 'utf8'), /Неверная сумма/)
+      assert.match(readFileSync(f.env.GITHUB_STEP_SUMMARY!, 'utf8'), /Неверная сумма/)
+      if (rejectReview) {
+        assert.equal(publication.httpStatus, 422)
+        assert.match(comment, /Не удалось опубликовать/); assert.match(comment, /Неверная сумма/)
+        assert.ok(!comment.includes('private API error'))
+      } else {
+        assert.equal(publication.created, 1)
+        assert.match(comment, /pullrequestreview-100/); assert.ok(!comment.includes('Неверная сумма'))
+        assert.match(readFileSync(f.env.GITHUB_OUTPUT!, 'utf8'), /inline-comments=1/)
+      }
+    } finally { f.close() }
+  }
+})
+
+test('inline-comments false preserves the full issue comment without native review API calls', async () => {
+  const f = fixture()
+  try {
+    const request = (async (url, init) => {
+      const path = new URL(String(url)).pathname
+      if (path.endsWith('/pulls/7')) return Response.json({ state: 'open', base: { sha: f.base }, head: { sha: f.head } })
+      assert.ok(path.endsWith('/issues/7/comments'))
+      if (!init?.method || init.method === 'GET') return Response.json([])
+      assert.match(JSON.parse(String(init.body)).body, /Неверная сумма/)
+      return Response.json({ html_url: 'https://github.com/example/MyFamily/pull/7#issuecomment-200' })
+    }) as typeof fetch
+    const result = await runReviewAction({ ...f.env, REVIEW_PUBLISH_COMMENT: 'true', REVIEW_INLINE_COMMENTS: 'false' }, { complete, request })
+    assert.equal(result.failed, false)
+    assert.ok(!existsSync(join(result.directory, 'publication.json')))
+  } finally { f.close() }
+})
+
 test('committed bundle runs without source files, node_modules, tsx or keys in an external iOS checkout', () => {
   const f = fixture()
   try {

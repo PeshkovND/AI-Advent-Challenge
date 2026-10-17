@@ -7,6 +7,8 @@ import { z } from 'zod'
 import { CodeReviewAssistant, renderReview, reviewComment } from './code-review'
 import { collectReviewContext, retrieveReviewSources, ReviewRepository } from './code-review-context'
 import type { RagCompletion } from './rag-retrieval'
+import { ActionError, publishInlineReview, publishReviewComment, type InlinePublication } from './code-review-github'
+export { ActionError, publishReviewComment, publishInlineReview } from './code-review-github'
 
 const execute = promisify(execFile)
 const sha = z.string().regex(/^[a-f0-9]{40,64}$/)
@@ -20,7 +22,6 @@ const eventSchema = z.object({
 type PrEvent = z.infer<typeof eventSchema>
 type Environment = NodeJS.ProcessEnv
 type Dependencies = { complete?: RagCompletion; request?: typeof fetch }
-export class ActionError extends Error {}
 
 function flag(value: string | undefined, fallback: boolean) {
   if (value === undefined || value === '') return fallback
@@ -50,7 +51,8 @@ export function actionSettings(env: Environment) {
   if (!prepareOnly && !key) throw new ActionError('api-key is required. Pass secrets.DEEPSEEK_API_KEY from the caller repository.')
   const token = env.REVIEW_GITHUB_TOKEN?.trim()
   if (event && !token) throw new ActionError('github-token is required for PR object access.')
-  return { root, base, head, key, token, event, prepareOnly, publish, model: env.REVIEW_MODEL || 'deepseek-v4-flash' }
+  return { root, base, head, key, token, event, prepareOnly, publish,
+    inline: flag(env.REVIEW_INLINE_COMMENTS, true), model: env.REVIEW_MODEL || 'deepseek-v4-flash' }
 }
 function output(env: Environment, key: string, value: string | number) {
   if (!env.GITHUB_OUTPUT) return
@@ -78,34 +80,6 @@ async function ensurePrObjects(settings: ReturnType<typeof actionSettings>, env:
   }
 }
 
-export async function publishReviewComment(event: PrEvent, report: { base: string; head: string }, body: string,
-  env: Environment, request: typeof fetch = fetch, signal?: AbortSignal) {
-  const api = new URL(env.GITHUB_API_URL || 'https://api.github.com')
-  if (api.protocol !== 'https:' || api.username || api.password) throw new ActionError('GITHUB_API_URL must use HTTPS.')
-  const call = async (path: string, method = 'GET', data?: unknown) => {
-    const response = await request(new URL(api.href.replace(/\/$/, '') + path), { method,
-      headers: { Authorization: `Bearer ${env.REVIEW_GITHUB_TOKEN}`, Accept: 'application/vnd.github+json', 'Content-Type': 'application/json' },
-      ...(data ? { body: JSON.stringify(data) } : {}), signal })
-    if (!response.ok) throw new ActionError(`GitHub API returned HTTP ${response.status}. Check pull-requests: write permission.`)
-    return response.json()
-  }
-  const prefix = `/repos/${event.repository.full_name}`
-  const current = await call(`${prefix}/pulls/${event.number}`)
-  if (current.state !== 'open' || current.head.sha !== report.head || current.base.sha !== report.base) return ''
-  let existing: { id: number } | undefined
-  for (let page = 1; ; page++) {
-    const comments = await call(`${prefix}/issues/${event.number}/comments?per_page=100&page=${page}`) as Array<{ id: number; user?: { login: string }; body?: string }>
-    existing = comments.find((comment) => comment.user?.login === 'github-actions[bot]' && comment.body?.startsWith('<!-- day-32-ai-review -->'))
-    if (existing || comments.length < 100) break
-  }
-  // Recheck after pagination so an updated PR does not receive a stale comment.
-  const latest = await call(`${prefix}/pulls/${event.number}`)
-  if (latest.state !== 'open' || latest.head.sha !== report.head || latest.base.sha !== report.base) return ''
-  const result = existing ? await call(`${prefix}/issues/comments/${existing.id}`, 'PATCH', { body })
-    : await call(`${prefix}/issues/${event.number}/comments`, 'POST', { body })
-  return String(result.html_url || '')
-}
-
 /** Target checkout is data only. This module never imports its files or its .env. */
 export async function runReviewAction(env: Environment = process.env, dependencies: Dependencies = {}) {
   const settings = actionSettings(env)
@@ -128,14 +102,45 @@ export async function runReviewAction(env: Environment = process.env, dependenci
   try {
     const report = await new CodeReviewAssistant({ root: settings.root, complete: dependencies.complete,
       model: dependencies.complete ? settings.model : undefined }).review(settings.base, settings.head, signal)
-    const markdown = renderReview(report), comment = reviewComment(markdown)
+    const markdown = renderReview(report)
+    let comment = reviewComment(markdown)
     for (const [name, content] of [['review.md', markdown], ['review.json', JSON.stringify(report, null, 2) + '\n'], ['comment.md', comment]]) {
       writeFileSync(resolve(directory, name), content, { mode: 0o600 })
     }
     output(env, 'status', report.status); output(env, 'findings', report.findings.length); output(env, 'reviewed-files', report.reviewedFiles)
     if (env.GITHUB_STEP_SUMMARY) appendFileSync(env.GITHUB_STEP_SUMMARY, comment)
-    if (settings.publish) output(env, 'comment-url', await publishReviewComment(settings.event!, report, comment, env, dependencies.request, signal))
-    return { directory, status: report.status, failed: report.files.some((file) => Boolean(file.error)) }
+    let publicationFailed = false
+    if (settings.publish) {
+      let inline: InlinePublication | undefined
+      if (settings.inline) {
+        let httpStatus: number | undefined
+        try { inline = await publishInlineReview(settings.event!, report, env, dependencies.request, signal) }
+        catch (error) {
+          signal.throwIfAborted(); publicationFailed = true
+          httpStatus = error instanceof ActionError ? error.status : undefined
+          console.error(`Native GitHub review publication failed${httpStatus ? ` (HTTP ${httpStatus})` : ''}. Full reports are preserved.`)
+        }
+        writeFileSync(resolve(directory, 'publication.json'), JSON.stringify({ ...inline, failed: publicationFailed, httpStatus }, null, 2) + '\n')
+        if (inline) {
+          output(env, 'review-url', inline.reviewUrl)
+          output(env, 'inline-comments', inline.created + inline.updated + inline.unchanged)
+          const lines = ['<!-- day-32-ai-review -->', '# Автоматическое AI-ревью кода', '',
+            `HEAD: \`${report.head}\` · статус: **${report.status}**`, '',
+            `Рассмотрено файлов: ${report.reviewedFiles}/${report.totalFiles}. Замечаний: ${report.findings.length}.`, '',
+            `Обсуждений у строк кода: ${inline.created + inline.updated + inline.unchanged} (новых: ${inline.created}, обновлено: ${inline.updated}).`]
+          if (inline.reviewUrl) lines.push('', `[Открыть ревью у строк кода](${inline.reviewUrl})`)
+          if (inline.skipped) lines.push('', `Замечаний без доступной привязки в GitHub diff или сверх лимита: ${inline.skipped}. Они сохранены в полном отчёте.`)
+          if (inline.stale) lines.push('', 'PR изменился во время публикации; часть обсуждений не опубликована. Запустите ревью для актуального commit.')
+          if (report.status !== 'complete') lines.push('', `Покрытие ограничено: содержимое ${report.limitedFiles.length} файлов передано частично, пропущено ${report.skipped.length} файлов. Подробности — в полном отчёте.`)
+          lines.push('', 'Полный текст, источники RAG и ограничения сохранены в Job Summary и артефакте этого запуска.')
+          comment = lines.join('\n') + '\n'
+        }
+        if (publicationFailed) comment += '\n\nНе удалось опубликовать обсуждения у строк кода. Полный отчёт сохранён; проверьте журнал Action.\n'
+        writeFileSync(resolve(directory, 'comment.md'), comment, { mode: 0o600 })
+      }
+      output(env, 'comment-url', await publishReviewComment(settings.event!, report, comment, env, dependencies.request, signal))
+    }
+    return { directory, status: report.status, failed: publicationFailed || report.files.some((file) => Boolean(file.error)) }
   } finally {
     if (previous.key === undefined) delete process.env.DEEPSEEK_API_KEY; else process.env.DEEPSEEK_API_KEY = previous.key
     if (previous.model === undefined) delete process.env.DEEPSEEK_MODEL; else process.env.DEEPSEEK_MODEL = previous.model

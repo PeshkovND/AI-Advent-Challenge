@@ -28,6 +28,9 @@ inputs:
   publish-comment:
     description: Publish or update a PR comment (requires pull_request_target)
     default: 'true'
+  inline-comments:
+    description: Publish findings as native GitHub review threads (false keeps the full issue comment only)
+    default: 'true'
   prepare-only:
     description: Collect diff and RAG without calling the model or publishing
     default: 'false'
@@ -54,6 +57,12 @@ outputs:
   comment-url:
     description: URL of the created or updated PR comment (empty when not published)
     value: ${{ steps.review.outputs.comment-url }}
+  review-url:
+    description: URL of the native GitHub review or an existing inline thread
+    value: ${{ steps.review.outputs.review-url }}
+  inline-comments:
+    description: Number of inline threads created, updated or reused by this run
+    value: ${{ steps.review.outputs.inline-comments }}
 
 runs:
   using: composite
@@ -75,6 +84,7 @@ runs:
         REVIEW_HEAD: ${{ inputs.head }}
         REVIEW_MODEL: ${{ inputs.model }}
         REVIEW_PUBLISH_COMMENT: ${{ inputs.publish-comment }}
+        REVIEW_INLINE_COMMENTS: ${{ inputs.inline-comments }}
         REVIEW_PREPARE_ONLY: ${{ inputs.prepare-only }}
       run: node "$REVIEW_ACTION_PATH/dist-action/index.cjs"
 

@@ -13,7 +13,7 @@
     "review:pr": "node --import tsx server/code-review-cli.ts",
     "review:demo": "node --import tsx server/code-review-demo.ts",
     "review:action:build": "node scripts/build-review-action.mjs",
-    "test:review": "node --import tsx --test server/code-review.test.ts server/code-review-action.test.ts",
+    "test:review": "node --import tsx --test server/code-review.test.ts server/code-review-action.test.ts server/code-review-github.test.ts",
     "start": "npm run build && npm run start:server",
     "start:server": "NODE_ENV=production tsx server/index.ts",
     "agents:cli": "tsx server/agent-cli.ts",

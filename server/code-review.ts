@@ -121,6 +121,16 @@ export class CodeReviewAssistant {
 
 // Escape model Markdown/HTML and prevent embedded images and GitHub mentions.
 const safe = (text: string) => text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/@/g, '@\u200b').replace(/([\\`*_{}\[\]()#!|~])/g, '\\$1')
+export function renderInlineFinding(finding: ReviewFinding, sources: ReviewSource[]) {
+  const categories = { bug: 'Потенциальный баг', architecture: 'Архитектура', recommendation: 'Рекомендация' }
+  const lines = [`**[${finding.severity}] ${safe(finding.title)}**`, '', categories[finding.category], '',
+    safe(finding.explanation), '', `**Исправление:** ${safe(finding.suggestion)}`]
+  for (const citation of finding.citations) {
+    const source = sources.find((entry) => entry.id === citation.sourceId)
+    lines.push('', `Источник ${safe(source?.path || citation.sourceId)}:`, `> ${safe(citation.quote).replace(/\n/g, '\n> ')}`)
+  }
+  return lines.join('\n')
+}
 export function renderReview(report: ReviewReport) {
   const lines = ['<!-- day-32-ai-review -->', '# Автоматическое AI-ревью кода',
     `HEAD: \`${report.head}\` · merge-base: \`${report.mergeBase}\``,

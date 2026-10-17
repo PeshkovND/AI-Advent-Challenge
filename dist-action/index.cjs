@@ -20419,6 +20419,23 @@ var CodeReviewAssistant = class {
   }
 };
 var safe = (text) => text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/@/g, "@\u200B").replace(/([\\`*_{}\[\]()#!|~])/g, "\\$1");
+function renderInlineFinding(finding, sources) {
+  const categories = { bug: "\u041F\u043E\u0442\u0435\u043D\u0446\u0438\u0430\u043B\u044C\u043D\u044B\u0439 \u0431\u0430\u0433", architecture: "\u0410\u0440\u0445\u0438\u0442\u0435\u043A\u0442\u0443\u0440\u0430", recommendation: "\u0420\u0435\u043A\u043E\u043C\u0435\u043D\u0434\u0430\u0446\u0438\u044F" };
+  const lines = [
+    `**[${finding.severity}] ${safe(finding.title)}**`,
+    "",
+    categories[finding.category],
+    "",
+    safe(finding.explanation),
+    "",
+    `**\u0418\u0441\u043F\u0440\u0430\u0432\u043B\u0435\u043D\u0438\u0435:** ${safe(finding.suggestion)}`
+  ];
+  for (const citation of finding.citations) {
+    const source = sources.find((entry) => entry.id === citation.sourceId);
+    lines.push("", `\u0418\u0441\u0442\u043E\u0447\u043D\u0438\u043A ${safe(source?.path || citation.sourceId)}:`, `> ${safe(citation.quote).replace(/\n/g, "\n> ")}`);
+  }
+  return lines.join("\n");
+}
 function renderReview(report) {
   const lines = [
     "<!-- day-32-ai-review -->",
@@ -20459,6 +20476,147 @@ function renderReview(report) {
 }
 var reviewComment = (markdown) => Buffer.byteLength(markdown) <= 55e3 ? markdown : bytePrefix(markdown, 54e3) + "\n\n\u041E\u0442\u0447\u0451\u0442 \u043E\u0431\u0440\u0435\u0437\u0430\u043D \u0434\u043B\u044F \u043A\u043E\u043C\u043C\u0435\u043D\u0442\u0430\u0440\u0438\u044F. \u041F\u043E\u043B\u043D\u044B\u0439 review.md \u0438 review.json \u043D\u0430\u0445\u043E\u0434\u044F\u0442\u0441\u044F \u0432 \u0430\u0440\u0442\u0435\u0444\u0430\u043A\u0442\u0435 ai-code-review \u044D\u0442\u043E\u0433\u043E \u0437\u0430\u043F\u0443\u0441\u043A\u0430.\n";
 
+// server/code-review-github.ts
+var import_node_crypto2 = require("node:crypto");
+var ActionError = class extends Error {
+  constructor(message, status) {
+    super(message);
+    this.status = status;
+  }
+  status;
+};
+function githubClient(env, request, signal) {
+  const api = new URL(env.GITHUB_API_URL || "https://api.github.com");
+  if (api.protocol !== "https:" || api.username || api.password) throw new ActionError("GITHUB_API_URL must use HTTPS.");
+  return async (path, method = "GET", data) => {
+    const response = await request(new URL(api.href.replace(/\/$/, "") + path), {
+      method,
+      headers: { Authorization: `Bearer ${env.REVIEW_GITHUB_TOKEN?.trim()}`, Accept: "application/vnd.github+json", "Content-Type": "application/json" },
+      ...data ? { body: JSON.stringify(data) } : {},
+      signal
+    });
+    if (!response.ok) throw new ActionError(`GitHub API returned HTTP ${response.status}. Check pull-requests: write permission.`, response.status);
+    return response.json();
+  };
+}
+async function pages(call, path, maxPages = Infinity) {
+  const result = [];
+  for (let page = 1; page <= maxPages; page++) {
+    const items = await call(`${path}?per_page=100&page=${page}`);
+    result.push(...items);
+    if (items.length < 100) return result;
+  }
+  return result;
+}
+var currentRevision = (pull, report) => pull.state === "open" && pull.head.sha === report.head && pull.base.sha === report.base;
+async function publishReviewComment(event, report, body, env, request = fetch, signal) {
+  const call = githubClient(env, request, signal), prefix = `/repos/${event.repository.full_name}`;
+  if (!currentRevision(await call(`${prefix}/pulls/${event.number}`), report)) return "";
+  let existing;
+  for (let page = 1; ; page++) {
+    const comments = await call(`${prefix}/issues/${event.number}/comments?per_page=100&page=${page}`);
+    existing = comments.find((comment) => comment.user?.login === "github-actions[bot]" && comment.body?.startsWith("<!-- day-32-ai-review -->"));
+    if (existing || comments.length < 100) break;
+  }
+  if (!currentRevision(await call(`${prefix}/pulls/${event.number}`), report)) return "";
+  const result = existing ? await call(`${prefix}/issues/comments/${existing.id}`, "PATCH", { body }) : await call(`${prefix}/issues/${event.number}/comments`, "POST", { body });
+  return String(result.html_url || "");
+}
+function githubDiffLocations(patch) {
+  const locations = /* @__PURE__ */ new Map();
+  let left = 0, right = 0, active = false;
+  for (const line of patch.split("\n")) {
+    const hunk = /^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/.exec(line);
+    if (hunk) {
+      left = Number(hunk[1]);
+      right = Number(hunk[2]);
+      active = true;
+      continue;
+    }
+    if (!active) continue;
+    if (line.startsWith("-")) locations.set(`LEFT:${left++}`, line.slice(1));
+    else if (line.startsWith("+")) locations.set(`RIGHT:${right++}`, line.slice(1));
+    else if (line.startsWith(" ")) {
+      locations.set(`RIGHT:${right++}`, line.slice(1));
+      left++;
+    }
+  }
+  return locations;
+}
+function planInlineComments(report, files, limit = 50) {
+  const groups = /* @__PURE__ */ new Map();
+  let skipped = 0;
+  const severity = { high: 0, medium: 1, low: 2 };
+  const findings = report.findings.slice().sort((a, b) => severity[a.severity] - severity[b.severity]);
+  const locations = new Map(files.map((file2) => [file2.filename, githubDiffLocations(file2.patch || "")]));
+  for (const finding of findings) {
+    const file2 = files.find((file3) => file3.filename === finding.path || finding.side === "LEFT" && file3.status === "renamed" && file3.previous_filename === finding.path);
+    const text = file2 && locations.get(file2.filename)?.get(`${finding.side}:${finding.line}`);
+    if (!file2 || text === void 0 || !finding.citations.some((citation) => citation.sourceId === "diff" && text.includes(citation.quote))) {
+      skipped++;
+      continue;
+    }
+    const key = JSON.stringify([file2.filename, finding.side, finding.line]);
+    const existing = groups.get(key);
+    const body = renderInlineFinding(finding, report.files.find((entry) => entry.path === finding.path)?.sources || []);
+    if (existing) {
+      existing.body += "\n\n---\n\n" + body;
+      continue;
+    }
+    if (groups.size >= limit) {
+      skipped++;
+      continue;
+    }
+    const id = (0, import_node_crypto2.createHash)("sha256").update(JSON.stringify([file2.filename, finding.side, text])).digest("hex").slice(0, 24);
+    const marker = `<!-- day-32-ai-inline:${id} -->`;
+    groups.set(key, { path: file2.filename, line: finding.line, side: finding.side, marker, body: `${marker}
+${body}` });
+  }
+  for (const comment of groups.values()) if (Buffer.byteLength(comment.body) > 55e3) {
+    comment.body = bytePrefix(comment.body, 54e3) + "\n\n\u041F\u043E\u043B\u043D\u044B\u0439 \u0442\u0435\u043A\u0441\u0442 \u2014 \u0432 \u0430\u0440\u0442\u0435\u0444\u0430\u043A\u0442\u0435 AI-\u0440\u0435\u0432\u044C\u044E \u044D\u0442\u043E\u0433\u043E \u0437\u0430\u043F\u0443\u0441\u043A\u0430.\n";
+  }
+  return { comments: [...groups.values()], skipped };
+}
+async function publishInlineReview(event, report, env, request = fetch, signal) {
+  const result = { reviewUrl: "", created: 0, updated: 0, unchanged: 0, skipped: 0, stale: false };
+  const call = githubClient(env, request, signal), prefix = `/repos/${event.repository.full_name}`;
+  const isCurrent = async () => currentRevision(await call(`${prefix}/pulls/${event.number}`), report);
+  if (!await isCurrent()) return { ...result, stale: true };
+  const files = await pages(call, `${prefix}/pulls/${event.number}/files`, 30);
+  const plan = planInlineComments(report, files);
+  result.skipped = plan.skipped;
+  if (!plan.comments.length) return result;
+  const existing = await pages(call, `${prefix}/pulls/${event.number}/comments`);
+  const pending = [];
+  for (const comment of plan.comments) {
+    const previous = existing.find((entry) => !entry.in_reply_to_id && entry.user?.login === "github-actions[bot]" && entry.path === comment.path && entry.line === comment.line && entry.side === comment.side && entry.body.startsWith(comment.marker));
+    if (!previous) {
+      pending.push(comment);
+      continue;
+    }
+    result.reviewUrl ||= previous.html_url;
+    if (previous.body === comment.body) {
+      result.unchanged++;
+      continue;
+    }
+    if (!await isCurrent()) return { ...result, stale: true };
+    await call(`${prefix}/pulls/comments/${previous.id}`, "PATCH", { body: comment.body });
+    result.updated++;
+  }
+  if (pending.length) {
+    if (!await isCurrent()) return { ...result, stale: true };
+    const review = await call(`${prefix}/pulls/${event.number}/reviews`, "POST", {
+      commit_id: report.head,
+      event: "COMMENT",
+      body: `AI-\u0440\u0435\u0432\u044C\u044E: ${pending.length} \u043E\u0431\u0441\u0443\u0436\u0434\u0435\u043D\u0438\u0439 \u043F\u0440\u0438\u0432\u044F\u0437\u0430\u043D\u044B \u043A \u0441\u0442\u0440\u043E\u043A\u0430\u043C diff. \u041E\u0431\u0449\u0438\u0439 \u043E\u0442\u0447\u0451\u0442 \u0438 \u043E\u0433\u0440\u0430\u043D\u0438\u0447\u0435\u043D\u0438\u044F \u0434\u043E\u0441\u0442\u0443\u043F\u043D\u044B \u0432 \u043A\u043E\u043C\u043C\u0435\u043D\u0442\u0430\u0440\u0438\u0438 AI-\u0440\u0435\u0432\u044C\u044E \u0438 \u0430\u0440\u0442\u0435\u0444\u0430\u043A\u0442\u0435 \u0437\u0430\u043F\u0443\u0441\u043A\u0430.`,
+      comments: pending.map(({ path, line, side, body }) => ({ path, line, side, body }))
+    });
+    result.reviewUrl = review.html_url;
+    result.created = pending.length;
+  }
+  return result;
+}
+
 // server/code-review-action.ts
 var execute3 = (0, import_node_util3.promisify)(import_node_child_process3.execFile);
 var sha = external_exports.string().regex(/^[a-f0-9]{40,64}$/);
@@ -20472,8 +20630,6 @@ var eventSchema = external_exports.object({
     base: external_exports.object({ sha, repo: external_exports.object({ full_name: repositoryName }) })
   })
 });
-var ActionError = class extends Error {
-};
 function flag(value, fallback) {
   if (value === void 0 || value === "") return fallback;
   if (value !== "true" && value !== "false") throw new ActionError("Boolean inputs must be true or false.");
@@ -20502,7 +20658,18 @@ function actionSettings(env) {
   if (!prepareOnly && !key) throw new ActionError("api-key is required. Pass secrets.DEEPSEEK_API_KEY from the caller repository.");
   const token = env.REVIEW_GITHUB_TOKEN?.trim();
   if (event && !token) throw new ActionError("github-token is required for PR object access.");
-  return { root, base, head, key, token, event, prepareOnly, publish, model: env.REVIEW_MODEL || "deepseek-v4-flash" };
+  return {
+    root,
+    base,
+    head,
+    key,
+    token,
+    event,
+    prepareOnly,
+    publish,
+    inline: flag(env.REVIEW_INLINE_COMMENTS, true),
+    model: env.REVIEW_MODEL || "deepseek-v4-flash"
+  };
 }
 function output2(env, key, value) {
   if (!env.GITHUB_OUTPUT) return;
@@ -20546,33 +20713,6 @@ async function ensurePrObjects(settings, env, signal) {
     }
   }
 }
-async function publishReviewComment(event, report, body, env, request = fetch, signal) {
-  const api = new URL(env.GITHUB_API_URL || "https://api.github.com");
-  if (api.protocol !== "https:" || api.username || api.password) throw new ActionError("GITHUB_API_URL must use HTTPS.");
-  const call = async (path, method = "GET", data) => {
-    const response = await request(new URL(api.href.replace(/\/$/, "") + path), {
-      method,
-      headers: { Authorization: `Bearer ${env.REVIEW_GITHUB_TOKEN}`, Accept: "application/vnd.github+json", "Content-Type": "application/json" },
-      ...data ? { body: JSON.stringify(data) } : {},
-      signal
-    });
-    if (!response.ok) throw new ActionError(`GitHub API returned HTTP ${response.status}. Check pull-requests: write permission.`);
-    return response.json();
-  };
-  const prefix = `/repos/${event.repository.full_name}`;
-  const current = await call(`${prefix}/pulls/${event.number}`);
-  if (current.state !== "open" || current.head.sha !== report.head || current.base.sha !== report.base) return "";
-  let existing;
-  for (let page = 1; ; page++) {
-    const comments = await call(`${prefix}/issues/${event.number}/comments?per_page=100&page=${page}`);
-    existing = comments.find((comment) => comment.user?.login === "github-actions[bot]" && comment.body?.startsWith("<!-- day-32-ai-review -->"));
-    if (existing || comments.length < 100) break;
-  }
-  const latest = await call(`${prefix}/pulls/${event.number}`);
-  if (latest.state !== "open" || latest.head.sha !== report.head || latest.base.sha !== report.base) return "";
-  const result = existing ? await call(`${prefix}/issues/comments/${existing.id}`, "PATCH", { body }) : await call(`${prefix}/issues/${event.number}/comments`, "POST", { body });
-  return String(result.html_url || "");
-}
 async function runReviewAction(env = process.env, dependencies = {}) {
   const settings = actionSettings(env);
   const directory = (0, import_node_fs.mkdtempSync)((0, import_node_path2.resolve)(env.RUNNER_TEMP, "ai-code-review-"));
@@ -20600,7 +20740,8 @@ async function runReviewAction(env = process.env, dependencies = {}) {
       complete: dependencies.complete,
       model: dependencies.complete ? settings.model : void 0
     }).review(settings.base, settings.head, signal);
-    const markdown = renderReview(report), comment = reviewComment(markdown);
+    const markdown = renderReview(report);
+    let comment = reviewComment(markdown);
     for (const [name, content] of [["review.md", markdown], ["review.json", JSON.stringify(report, null, 2) + "\n"], ["comment.md", comment]]) {
       (0, import_node_fs.writeFileSync)((0, import_node_path2.resolve)(directory, name), content, { mode: 384 });
     }
@@ -20608,8 +20749,46 @@ async function runReviewAction(env = process.env, dependencies = {}) {
     output2(env, "findings", report.findings.length);
     output2(env, "reviewed-files", report.reviewedFiles);
     if (env.GITHUB_STEP_SUMMARY) (0, import_node_fs.appendFileSync)(env.GITHUB_STEP_SUMMARY, comment);
-    if (settings.publish) output2(env, "comment-url", await publishReviewComment(settings.event, report, comment, env, dependencies.request, signal));
-    return { directory, status: report.status, failed: report.files.some((file2) => Boolean(file2.error)) };
+    let publicationFailed = false;
+    if (settings.publish) {
+      let inline;
+      if (settings.inline) {
+        let httpStatus;
+        try {
+          inline = await publishInlineReview(settings.event, report, env, dependencies.request, signal);
+        } catch (error62) {
+          signal.throwIfAborted();
+          publicationFailed = true;
+          httpStatus = error62 instanceof ActionError ? error62.status : void 0;
+          console.error(`Native GitHub review publication failed${httpStatus ? ` (HTTP ${httpStatus})` : ""}. Full reports are preserved.`);
+        }
+        (0, import_node_fs.writeFileSync)((0, import_node_path2.resolve)(directory, "publication.json"), JSON.stringify({ ...inline, failed: publicationFailed, httpStatus }, null, 2) + "\n");
+        if (inline) {
+          output2(env, "review-url", inline.reviewUrl);
+          output2(env, "inline-comments", inline.created + inline.updated + inline.unchanged);
+          const lines = [
+            "<!-- day-32-ai-review -->",
+            "# \u0410\u0432\u0442\u043E\u043C\u0430\u0442\u0438\u0447\u0435\u0441\u043A\u043E\u0435 AI-\u0440\u0435\u0432\u044C\u044E \u043A\u043E\u0434\u0430",
+            "",
+            `HEAD: \`${report.head}\` \xB7 \u0441\u0442\u0430\u0442\u0443\u0441: **${report.status}**`,
+            "",
+            `\u0420\u0430\u0441\u0441\u043C\u043E\u0442\u0440\u0435\u043D\u043E \u0444\u0430\u0439\u043B\u043E\u0432: ${report.reviewedFiles}/${report.totalFiles}. \u0417\u0430\u043C\u0435\u0447\u0430\u043D\u0438\u0439: ${report.findings.length}.`,
+            "",
+            `\u041E\u0431\u0441\u0443\u0436\u0434\u0435\u043D\u0438\u0439 \u0443 \u0441\u0442\u0440\u043E\u043A \u043A\u043E\u0434\u0430: ${inline.created + inline.updated + inline.unchanged} (\u043D\u043E\u0432\u044B\u0445: ${inline.created}, \u043E\u0431\u043D\u043E\u0432\u043B\u0435\u043D\u043E: ${inline.updated}).`
+          ];
+          if (inline.reviewUrl) lines.push("", `[\u041E\u0442\u043A\u0440\u044B\u0442\u044C \u0440\u0435\u0432\u044C\u044E \u0443 \u0441\u0442\u0440\u043E\u043A \u043A\u043E\u0434\u0430](${inline.reviewUrl})`);
+          if (inline.skipped) lines.push("", `\u0417\u0430\u043C\u0435\u0447\u0430\u043D\u0438\u0439 \u0431\u0435\u0437 \u0434\u043E\u0441\u0442\u0443\u043F\u043D\u043E\u0439 \u043F\u0440\u0438\u0432\u044F\u0437\u043A\u0438 \u0432 GitHub diff \u0438\u043B\u0438 \u0441\u0432\u0435\u0440\u0445 \u043B\u0438\u043C\u0438\u0442\u0430: ${inline.skipped}. \u041E\u043D\u0438 \u0441\u043E\u0445\u0440\u0430\u043D\u0435\u043D\u044B \u0432 \u043F\u043E\u043B\u043D\u043E\u043C \u043E\u0442\u0447\u0451\u0442\u0435.`);
+          if (inline.stale) lines.push("", "PR \u0438\u0437\u043C\u0435\u043D\u0438\u043B\u0441\u044F \u0432\u043E \u0432\u0440\u0435\u043C\u044F \u043F\u0443\u0431\u043B\u0438\u043A\u0430\u0446\u0438\u0438; \u0447\u0430\u0441\u0442\u044C \u043E\u0431\u0441\u0443\u0436\u0434\u0435\u043D\u0438\u0439 \u043D\u0435 \u043E\u043F\u0443\u0431\u043B\u0438\u043A\u043E\u0432\u0430\u043D\u0430. \u0417\u0430\u043F\u0443\u0441\u0442\u0438\u0442\u0435 \u0440\u0435\u0432\u044C\u044E \u0434\u043B\u044F \u0430\u043A\u0442\u0443\u0430\u043B\u044C\u043D\u043E\u0433\u043E commit.");
+          if (report.status !== "complete") lines.push("", `\u041F\u043E\u043A\u0440\u044B\u0442\u0438\u0435 \u043E\u0433\u0440\u0430\u043D\u0438\u0447\u0435\u043D\u043E: \u0441\u043E\u0434\u0435\u0440\u0436\u0438\u043C\u043E\u0435 ${report.limitedFiles.length} \u0444\u0430\u0439\u043B\u043E\u0432 \u043F\u0435\u0440\u0435\u0434\u0430\u043D\u043E \u0447\u0430\u0441\u0442\u0438\u0447\u043D\u043E, \u043F\u0440\u043E\u043F\u0443\u0449\u0435\u043D\u043E ${report.skipped.length} \u0444\u0430\u0439\u043B\u043E\u0432. \u041F\u043E\u0434\u0440\u043E\u0431\u043D\u043E\u0441\u0442\u0438 \u2014 \u0432 \u043F\u043E\u043B\u043D\u043E\u043C \u043E\u0442\u0447\u0451\u0442\u0435.`);
+          lines.push("", "\u041F\u043E\u043B\u043D\u044B\u0439 \u0442\u0435\u043A\u0441\u0442, \u0438\u0441\u0442\u043E\u0447\u043D\u0438\u043A\u0438 RAG \u0438 \u043E\u0433\u0440\u0430\u043D\u0438\u0447\u0435\u043D\u0438\u044F \u0441\u043E\u0445\u0440\u0430\u043D\u0435\u043D\u044B \u0432 Job Summary \u0438 \u0430\u0440\u0442\u0435\u0444\u0430\u043A\u0442\u0435 \u044D\u0442\u043E\u0433\u043E \u0437\u0430\u043F\u0443\u0441\u043A\u0430.");
+          comment = lines.join("\n") + "\n";
+        }
+        if (publicationFailed) comment += "\n\n\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u043E\u043F\u0443\u0431\u043B\u0438\u043A\u043E\u0432\u0430\u0442\u044C \u043E\u0431\u0441\u0443\u0436\u0434\u0435\u043D\u0438\u044F \u0443 \u0441\u0442\u0440\u043E\u043A \u043A\u043E\u0434\u0430. \u041F\u043E\u043B\u043D\u044B\u0439 \u043E\u0442\u0447\u0451\u0442 \u0441\u043E\u0445\u0440\u0430\u043D\u0451\u043D; \u043F\u0440\u043E\u0432\u0435\u0440\u044C\u0442\u0435 \u0436\u0443\u0440\u043D\u0430\u043B Action.\n";
+        (0, import_node_fs.writeFileSync)((0, import_node_path2.resolve)(directory, "comment.md"), comment, { mode: 384 });
+      }
+      output2(env, "comment-url", await publishReviewComment(settings.event, report, comment, env, dependencies.request, signal));
+    }
+    return { directory, status: report.status, failed: publicationFailed || report.files.some((file2) => Boolean(file2.error)) };
   } finally {
     if (previous.key === void 0) delete process.env.DEEPSEEK_API_KEY;
     else process.env.DEEPSEEK_API_KEY = previous.key;
