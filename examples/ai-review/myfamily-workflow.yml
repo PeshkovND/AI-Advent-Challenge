@@ -25,6 +25,6 @@ jobs:
           persist-credentials: false
 
       # Versioned Action contains the bundled reviewer and needs no npm install.
-      - uses: PeshkovND/AI-Advent-Challenge@ai-review-v1.0.0
+      - uses: PeshkovND/AI-Advent-Challenge@ai-review-v1.0.1
         with:
           api-key: ${{ secrets.DEEPSEEK_API_KEY }}

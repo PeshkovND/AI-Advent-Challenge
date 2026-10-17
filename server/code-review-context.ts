@@ -19,7 +19,8 @@ export function reviewPath(path: string) {
   return publicPath && !/(?:^|\/)(?:package-lock\.json|yarn\.lock|pnpm-lock\.yaml)$/.test(path)
     && /\.(?:[cm]?[jt]sx?|md|markdown|txt|css|html|json|ya?ml|sql|graphql|prisma|py|swift|go|rs|sh|pbxproj|xcconfig|plist|entitlements|xcscheme|xcworkspacedata)$/i.test(path)
 }
-export const isReviewDocumentation = (path: string) => /(?:^|\/)(?:readme[^/]*|docs\/.*|api\/.*|schemas?\/.*)$/i.test(path)
+export const isReviewDocumentation = (path: string) => /\.(?:md|markdown|txt|json|ya?ml)$/i.test(path)
+  && /(?:^|\/)(?:readme[^/]*|docs\/.*|api\/.*|schemas?\/.*)$/i.test(path)
 
 export class ReviewRepository {
   constructor(readonly root: string, readonly signal?: AbortSignal) {}

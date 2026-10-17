@@ -5,7 +5,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync, symlinkSync, renameSync 
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { CodeReviewAssistant, parseReviewResponse, patchLocations, renderReview, reviewComment, reviewPayload, type ReviewFinding } from './code-review'
-import { collectReviewContext, retrieveReviewSources, reviewPath, reviewLimits, type ReviewContext } from './code-review-context'
+import { collectReviewContext, retrieveReviewSources, isReviewDocumentation, reviewPath, reviewLimits, type ReviewContext } from './code-review-context'
 import type { RagCompletion } from './rag-retrieval'
 import { modelClient } from './local-rag-service'
 
@@ -31,6 +31,25 @@ const usage = { inputTokens: 0, promptTokens: 0, completionTokens: 0, totalToken
 const finding: ReviewFinding = { category: 'bug', severity: 'high', path: 'src/math.ts', line: 2, side: 'RIGHT',
   title: 'Сумма заменена разностью', explanation: 'Для total(10, 5) результат станет 5 вместо 15.', suggestion: 'Вернуть сложение аргументов.',
   citations: [{ sourceId: 'diff', quote: 'return a - b' }] }
+
+test('Swift files inside API or Docs stay code, preserving documentation retrieval slots for actual documents', async () => {
+  assert.equal(isReviewDocumentation('Sources/AppServices/Sources/API/ResponseErrorMapper.swift'), false)
+  assert.equal(isReviewDocumentation('Docs/Example.swift'), false)
+  assert.equal(isReviewDocumentation('Docs/Architecture.md'), true)
+  assert.equal(isReviewDocumentation('project/docs/api/openapi.json'), true)
+  const f = fixture()
+  try {
+    f.git('checkout', '--detach', f.base)
+    f.write('Sources/API/Arithmetic.swift', 'func total(a: Int, b: Int) -> Int { a + b }\n')
+    const base = f.commit()
+    f.write('src/math.ts', 'export function total(a: number, b: number) {\n  return a - b\n}\n')
+    const context = await collectReviewContext(f.root, base, f.commit())
+    const sources = retrieveReviewSources(context.files[0], context.corpus)
+    assert.ok(sources.some(({ kind }) => kind === 'documentation'))
+    assert.ok(sources.filter(({ kind }) => kind === 'documentation').every(({ path }) => /\.(md|markdown|txt|json|ya?ml)$/i.test(path)))
+    assert.ok(context.corpus.some(({ source }) => source === 'Sources/API/Arithmetic.swift'))
+  } finally { f.close() }
+})
 
 test('immutable PR context uses merge-base; RAG retrieves real docs and unchanged code without Ollama', async () => {
   const f = fixture()

@@ -20175,7 +20175,7 @@ function reviewPath(path) {
   const publicPath = publicProjectPath(path) || /^\.github\/workflows\/[\w.-]+\.ya?ml$/.test(path) && publicProjectPath(path.slice(1));
   return publicPath && !/(?:^|\/)(?:package-lock\.json|yarn\.lock|pnpm-lock\.yaml)$/.test(path) && /\.(?:[cm]?[jt]sx?|md|markdown|txt|css|html|json|ya?ml|sql|graphql|prisma|py|swift|go|rs|sh|pbxproj|xcconfig|plist|entitlements|xcscheme|xcworkspacedata)$/i.test(path);
 }
-var isReviewDocumentation = (path) => /(?:^|\/)(?:readme[^/]*|docs\/.*|api\/.*|schemas?\/.*)$/i.test(path);
+var isReviewDocumentation = (path) => /\.(?:md|markdown|txt|json|ya?ml)$/i.test(path) && /(?:^|\/)(?:readme[^/]*|docs\/.*|api\/.*|schemas?\/.*)$/i.test(path);
 var ReviewRepository = class {
   constructor(root, signal) {
     this.root = root;

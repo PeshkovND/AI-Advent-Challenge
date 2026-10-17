@@ -15,7 +15,7 @@ npm run test:review
 
 Для автозапуска нужно добавить workflow в default branch проверяемого проекта и настроить в нём repository secret `DEEPSEEK_API_KEY`. Reviewer поставляется подключаемым Action. Проверяется код PR без его исполнения. План, архитектура, ограничения и настройка: [docs/day-32.md](docs/day-32.md). [Пример реального ревью DeepSeek](docs/day-32-example-review.md).
 
-**Подключение к другим проектам, включая MyFamily:** `uses: PeshkovND/AI-Advent-Challenge@ai-review-v1.0.0`. Action содержит готовый JavaScript bundle и не требует `npm install` в проверяемом проекте. [Инструкция и входы Action](docs/ai-review-action.md), [готовый workflow для MyFamily](examples/ai-review/myfamily-workflow.yml).
+**Подключение к другим проектам, включая MyFamily:** `uses: PeshkovND/AI-Advent-Challenge@ai-review-v1.0.1`. Action содержит готовый JavaScript bundle и не требует `npm install` в проверяемом проекте. [Инструкция и входы Action](docs/ai-review-action.md), [готовый workflow для MyFamily](examples/ai-review/myfamily-workflow.yml).
 
 ## Ассистент разработчика — День 31
 

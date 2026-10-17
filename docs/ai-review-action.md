@@ -36,12 +36,12 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - uses: PeshkovND/AI-Advent-Challenge@ai-review-v1.0.0
+      - uses: PeshkovND/AI-Advent-Challenge@ai-review-v1.0.1
         with:
           api-key: ${{ secrets.DEEPSEEK_API_KEY }}
 ```
 
-`ai-review-v1.0.0` — отдельная версия Action. Она доступна независимо от слияния ветки `day-32` в `main` этого репозитория. Для закрепления точного кода можно заменить тег полным SHA: `git ls-remote https://github.com/PeshkovND/AI-Advent-Challenge.git 'refs/tags/ai-review-v1.0.0^{}'` показывает commit annotated tag. Версия поставляется как Git tag, публикация в Marketplace не требуется.
+`ai-review-v1.0.1` — рекомендуемая patch-версия Action. Она доступна независимо от слияния ветки `day-32` в `main` этого репозитория. Для закрепления точного кода можно заменить тег полным SHA: `git ls-remote https://github.com/PeshkovND/AI-Advent-Challenge.git 'refs/tags/ai-review-v1.0.1^{}'` показывает commit annotated tag. Версия поставляется как Git tag, публикация в Marketplace не требуется.
 
 Опубликованная версия `ai-review-v1.0.0` указывает на `e8ecc59d061e2be1d9000d9b9cc1b1c9a8e39d6e`. Для фиксации на неизменяемом SHA: `uses: PeshkovND/AI-Advent-Challenge@e8ecc59d061e2be1d9000d9b9cc1b1c9a8e39d6e`.
 
