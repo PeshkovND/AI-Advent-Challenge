@@ -1,0 +1,233 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Developer Assistant API",
+    "version": "1.1.0",
+    "description": "Основной loopback Express-сервер DeepChat. Документация и свежий MCP Git-контекст. Выбор папок относится к файловой системе сервера. Только loopback Host/Origin."
+  },
+  "servers": [
+    {
+      "url": "http://127.0.0.1:8787/api/developer"
+    }
+  ],
+  "paths": {
+    "/status": {
+      "get": {
+        "summary": "Состояние индекса и список документов",
+        "responses": {
+          "200": {
+            "description": "project, index (null или метаданные), stale, documents, cloudAvailable, localModel, cloudModel, busy"
+          },
+          "503": {
+            "description": "Ошибка чтения корпуса или индекса"
+          }
+        },
+        "parameters": [
+          {
+            "in": "query",
+            "name": "projectId",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9-]{0,63}$",
+              "default": "current",
+              "description": "ID сохранённого проекта из GET /projects или POST /projects/open."
+            }
+          }
+        ]
+      }
+    },
+    "/index": {
+      "post": {
+        "summary": "Построить отдельный RAG-индекс документации",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "projectId": {
+                    "type": "string",
+                    "pattern": "^[a-z0-9][a-z0-9-]{0,63}$",
+                    "default": "current",
+                    "description": "ID сохранённого проекта; пути принимаются отдельно в POST /projects/open."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "index и documents"
+          },
+          "409": {
+            "description": "Ассистент занят или документы изменились при индексации"
+          },
+          "502": {
+            "description": "Ошибка Ollama/хранилища"
+          }
+        }
+      }
+    },
+    "/help": {
+      "post": {
+        "summary": "Вопрос о проекте по RAG и текущему MCP-контексту",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "input"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "input": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 4000,
+                    "examples": [
+                      "/help",
+                      "/help Как устроен проект?"
+                    ]
+                  },
+                  "provider": {
+                    "type": "string",
+                    "enum": [
+                      "cloud",
+                      "local"
+                    ],
+                    "default": "cloud"
+                  },
+                  "projectId": {
+                    "type": "string",
+                    "pattern": "^[a-z0-9][a-z0-9-]{0,63}$",
+                    "default": "current",
+                    "description": "ID сохранённого проекта; пути принимаются отдельно в POST /projects/open."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "question, provider, model, indexRunId, answer, grounding (claims, citations, verification), sources, trace, context (capturedAt, receipts), durationMs"
+          },
+          "400": {
+            "description": "Некорректный запрос или команда"
+          },
+          "409": {
+            "description": "Занят или индекс устарел"
+          },
+          "503": {
+            "description": "Нет индекса, провайдера или MCP-контекста"
+          },
+          "502": {
+            "description": "Ошибка генерации"
+          },
+          "404": {
+            "description": "Неизвестный ID проекта"
+          }
+        }
+      }
+    },
+    "/projects": {
+      "get": {
+        "summary": "Недавние локальные проекты",
+        "responses": {
+          "200": {
+            "description": "defaultProjectId и projects: массив {id,name,root}; root — локальный путь."
+          }
+        }
+      }
+    },
+    "/folders": {
+      "post": {
+        "summary": "Список локальных папок для диалога",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "path": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 4096,
+                    "description": "Абсолютный путь, ~/path или путь относительно папки приложения. По умолчанию /folders открывает домашнюю папку."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "path, parent (null для корня), home, directories (имена видимых папок), truncated (лимит 2000)"
+          },
+          "400": {
+            "description": "Некорректное тело или путь к файлу"
+          },
+          "403": {
+            "description": "Нет доступа к папке или внешний Host/Origin"
+          },
+          "404": {
+            "description": "Папка не найдена"
+          },
+          "503": {
+            "description": "Локальный реестр недоступен"
+          }
+        }
+      }
+    },
+    "/projects/open": {
+      "post": {
+        "summary": "Открыть любую локальную папку и сохранить проект",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "path": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 4096,
+                    "description": "Абсолютный путь, ~/path или путь относительно папки приложения. По умолчанию /folders открывает домашнюю папку."
+                  }
+                },
+                "required": [
+                  "path"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "project: {id,name,root}, defaultProjectId, projects; без индексации и изменения файлов проекта"
+          },
+          "400": {
+            "description": "Некорректное тело или путь к файлу"
+          },
+          "403": {
+            "description": "Нет доступа к папке или внешний Host/Origin"
+          },
+          "404": {
+            "description": "Папка не найдена"
+          },
+          "503": {
+            "description": "Локальный реестр недоступен"
+          }
+        }
+      }
+    }
+  }
+}

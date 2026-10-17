@@ -1,0 +1,2175 @@
+{
+  "question": "какие есть ветки в репозитории",
+  "issue": "A current-branch fact was returned in place of a branch inventory.",
+  "fix": {
+    "tool": "list_git_branches",
+    "refs": [
+      "refs/heads",
+      "refs/remotes"
+    ],
+    "symbolicRefsExcluded": true,
+    "networkFetch": false,
+    "planner": "question-only",
+    "enumeration": "exact MCP data with code-validated citations",
+    "generalQuestions": "RAG plus claim grounding and whole-answer taskCheck"
+  },
+  "validation": {
+    "testsPassed": 73,
+    "typecheck": "passed",
+    "build": "passed",
+    "localHttp": {
+      "passed": true,
+      "durationMs": 3644,
+      "method": "tool-data"
+    },
+    "cloudQuestionOnly": {
+      "passed": true,
+      "durationMs": 1739,
+      "externalCalls": 1,
+      "transmitted": "question-only intent selection; no project documents or branch names"
+    },
+    "cloudRegressionsPassed": 8,
+    "cloudRegressionsTotal": 8,
+    "disclosureGuard": "Simple enumeration verified without branch-name disclosure; mixed questions tested under explicit expanded consent.",
+    "ui": {
+      "passed": true,
+      "browser": "Safari",
+      "provider": "cloud",
+      "durationSeconds": 1.8,
+      "localTotal": 1,
+      "remoteTotal": 35,
+      "screenshot": "data/day31-branches-safari.jpg"
+    }
+  },
+  "local": {
+    "question": "какие есть ветки в репозитории",
+    "provider": "local",
+    "model": "qwen3.5:4b",
+    "indexRunId": "442e1170-4fdc-4d23-aa8e-176851e82858",
+    "answer": "Локальные ветки: показано 1, всего 1; список полный.\n- main [1]\n\nИзвестные удалённые ветки: показано 35, всего 35; список полный.\n- origin/Feature/Families\n- origin/Feature/NeuralChecking\n- origin/Feature/deletingPosts\n- origin/bugfix/freezes\n- origin/bugfix/news-screen-broken-layout\n- origin/bugfix/swiftdata-crashes\n- origin/develop\n- origin/feature/add-post\n- origin/feature/audio-video-cache\n- origin/feature/comments-in-posts\n- origin/feature/crashlytics\n- origin/feature/date-date-for-ui\n- origin/feature/donate\n- origin/feature/edit-profile\n- origin/feature/family-screen\n- origin/feature/family-screen-mock-removing\n- origin/feature/firebase-client\n- origin/feature/geolocation\n- origin/feature/map-screen\n- origin/feature/map-screen-mock-removing\n- origin/feature/network-errors-handling\n- origin/feature/news-screen-layout\n- origin/feature/news-screen-mock-removing\n- origin/feature/post-screen-mock-removing\n- origin/feature/profile-screen\n- origin/feature/profile-screen-mock-removing\n- origin/feature/profile-shortcut\n- origin/feature/push-notifications\n- origin/feature/share-posts\n- origin/feature/sign-in-screen-layout\n- origin/feature/swift-data\n- origin/feature/tabbar-configuration\n- origin/feature/vk-id\n- origin/main\n- origin/refactor/global-refactoring [2][3]\n\nУдалённые ветки — remote-tracking refs локальной копии Git. Fetch и запрос к серверу не выполнялись; список на сервере мог измениться. Символические указатели вроде origin/HEAD не являются отдельными ветками. [4]",
+    "grounding": {
+      "status": "answered",
+      "claims": [
+        {
+          "id": 1,
+          "text": "Локальные ветки: показано 1, всего 1; список полный.\n- main",
+          "citationIds": [
+            1
+          ]
+        },
+        {
+          "id": 2,
+          "text": "Известные удалённые ветки: показано 35, всего 35; список полный.\n- origin/Feature/Families\n- origin/Feature/NeuralChecking\n- origin/Feature/deletingPosts\n- origin/bugfix/freezes\n- origin/bugfix/news-screen-broken-layout\n- origin/bugfix/swiftdata-crashes\n- origin/develop\n- origin/feature/add-post\n- origin/feature/audio-video-cache\n- origin/feature/comments-in-posts\n- origin/feature/crashlytics\n- origin/feature/date-date-for-ui\n- origin/feature/donate\n- origin/feature/edit-profile\n- origin/feature/family-screen\n- origin/feature/family-screen-mock-removing\n- origin/feature/firebase-client\n- origin/feature/geolocation\n- origin/feature/map-screen\n- origin/feature/map-screen-mock-removing\n- origin/feature/network-errors-handling\n- origin/feature/news-screen-layout\n- origin/feature/news-screen-mock-removing\n- origin/feature/post-screen-mock-removing\n- origin/feature/profile-screen\n- origin/feature/profile-screen-mock-removing\n- origin/feature/profile-shortcut\n- origin/feature/push-notifications\n- origin/feature/share-posts\n- origin/feature/sign-in-screen-layout\n- origin/feature/swift-data\n- origin/feature/tabbar-configuration\n- origin/feature/vk-id\n- origin/main\n- origin/refactor/global-refactoring",
+          "citationIds": [
+            2,
+            3
+          ]
+        },
+        {
+          "id": 3,
+          "text": "Удалённые ветки — remote-tracking refs локальной копии Git. Fetch и запрос к серверу не выполнялись; список на сервере мог измениться. Символические указатели вроде origin/HEAD не являются отдельными ветками.",
+          "citationIds": [
+            4
+          ]
+        }
+      ],
+      "citations": [
+        {
+          "id": 1,
+          "source": "mcp://project/list_git_branches",
+          "section": "list_git_branches",
+          "chunkId": "mcp-list_git_branches",
+          "quote": "Локальные ветки: показано 1, всего 1; список полный.\n- main"
+        },
+        {
+          "id": 2,
+          "source": "mcp://project/list_git_branches",
+          "section": "list_git_branches",
+          "chunkId": "mcp-list_git_branches",
+          "quote": "Известные удалённые ветки: показано 35, всего 35; список полный.\n- origin/Feature/Families\n- origin/Feature/NeuralChecking\n- origin/Feature/deletingPosts\n- origin/bugfix/freezes\n- origin/bugfix/news-screen-broken-layout\n- origin/bugfix/swiftdata-crashes\n- origin/develop\n- origin/feature/add-post\n- origin/feature/audio-video-cache\n- origin/feature/comments-in-posts\n- origin/feature/crashlytics\n- origin/feature/date-date-for-ui\n- origin/feature/donate\n- origin/feature/edit-profile\n- origin/feature/family-screen\n- origin/feature/family-screen-mock-removing\n- origin/feature/firebase-client\n- origin/feature/geolocation\n- origin/feature/map-screen\n- origin/feature/map-screen-mock-removing\n- origin/feature/network-errors-handling\n- origin/feature/news-screen-layout\n- origin/feature/news-screen-mock-removing\n- origin/feature/post-screen-mock-removing\n- origin/feature/profile-screen\n- origin/feature/profile-screen-mock-removing\n- origin/feature/profile-shortcut\n- origin/feature/push-notifications\n- origin/feature/share-posts\n- origin/feature/sign-in-screen-layout\n- origin/feature/swift-data"
+        },
+        {
+          "id": 3,
+          "source": "mcp://project/list_git_branches",
+          "section": "list_git_branches",
+          "chunkId": "mcp-list_git_branches",
+          "quote": "- origin/feature/tabbar-configuration\n- origin/feature/vk-id\n- origin/main\n- origin/refactor/global-refactoring"
+        },
+        {
+          "id": 4,
+          "source": "mcp://project/list_git_branches",
+          "section": "list_git_branches",
+          "chunkId": "mcp-list_git_branches",
+          "quote": "Удалённые ветки — remote-tracking refs локальной копии Git. Fetch и запрос к серверу не выполнялись; список на сервере мог измениться. Символические указатели вроде origin/HEAD не являются отдельными ветками."
+        }
+      ],
+      "answer": "Локальные ветки: показано 1, всего 1; список полный.\n- main [1]\n\nИзвестные удалённые ветки: показано 35, всего 35; список полный.\n- origin/Feature/Families\n- origin/Feature/NeuralChecking\n- origin/Feature/deletingPosts\n- origin/bugfix/freezes\n- origin/bugfix/news-screen-broken-layout\n- origin/bugfix/swiftdata-crashes\n- origin/develop\n- origin/feature/add-post\n- origin/feature/audio-video-cache\n- origin/feature/comments-in-posts\n- origin/feature/crashlytics\n- origin/feature/date-date-for-ui\n- origin/feature/donate\n- origin/feature/edit-profile\n- origin/feature/family-screen\n- origin/feature/family-screen-mock-removing\n- origin/feature/firebase-client\n- origin/feature/geolocation\n- origin/feature/map-screen\n- origin/feature/map-screen-mock-removing\n- origin/feature/network-errors-handling\n- origin/feature/news-screen-layout\n- origin/feature/news-screen-mock-removing\n- origin/feature/post-screen-mock-removing\n- origin/feature/profile-screen\n- origin/feature/profile-screen-mock-removing\n- origin/feature/profile-shortcut\n- origin/feature/push-notifications\n- origin/feature/share-posts\n- origin/feature/sign-in-screen-layout\n- origin/feature/swift-data\n- origin/feature/tabbar-configuration\n- origin/feature/vk-id\n- origin/main\n- origin/refactor/global-refactoring [2][3]\n\nУдалённые ветки — remote-tracking refs локальной копии Git. Fetch и запрос к серверу не выполнялись; список на сервере мог измениться. Символические указатели вроде origin/HEAD не являются отдельными ветками. [4]",
+      "sources": [
+        {
+          "source": "mcp://project/list_git_branches",
+          "section": "list_git_branches",
+          "chunkId": "mcp-list_git_branches"
+        }
+      ],
+      "usage": {
+        "inputTokens": 1495,
+        "promptTokens": 233,
+        "completionTokens": 15,
+        "totalTokens": 248
+      },
+      "verification": {
+        "status": "passed",
+        "method": "tool-data",
+        "attempts": 1,
+        "judgments": [
+          {
+            "claimId": 1,
+            "supported": true,
+            "reason": "Точный текст источника MCP; цитаты проверены кодом."
+          },
+          {
+            "claimId": 2,
+            "supported": true,
+            "reason": "Точный текст источника MCP; цитаты проверены кодом."
+          },
+          {
+            "claimId": 3,
+            "supported": true,
+            "reason": "Точный текст источника MCP; цитаты проверены кодом."
+          }
+        ],
+        "taskCheck": {
+          "goalAligned": true,
+          "constraintsRespected": true,
+          "answersQuestion": true,
+          "reason": "Сценарий перечисления Git-веток; имена и счётчики скопированы из MCP с явным ограничением области и полноты."
+        }
+      }
+    },
+    "sources": [
+      {
+        "source": "mcp://project/list_git_branches",
+        "title": "Текущий контекст проекта",
+        "section": "list_git_branches",
+        "chunkId": "mcp-list_git_branches",
+        "strategy": "structured",
+        "score": 1,
+        "text": "MCP list_git_branches, время 2026-10-16T08:00:03.994Z:\nЛокальные ветки: показано 1, всего 1; список полный.\n- main\n\nИзвестные удалённые ветки: показано 35, всего 35; список полный.\n- origin/Feature/Families\n- origin/Feature/NeuralChecking\n- origin/Feature/deletingPosts\n- origin/bugfix/freezes\n- origin/bugfix/news-screen-broken-layout\n- origin/bugfix/swiftdata-crashes\n- origin/develop\n- origin/feature/add-post\n- origin/feature/audio-video-cache\n- origin/feature/comments-in-posts\n- origin/feature/crashlytics\n- origin/feature/date-date-for-ui\n- origin/feature/donate\n- origin/feature/edit-profile\n- origin/feature/family-screen\n- origin/feature/family-screen-mock-removing\n- origin/feature/firebase-client\n- origin/feature/geolocation\n- origin/feature/map-screen\n- origin/feature/map-screen-mock-removing\n- origin/feature/network-errors-handling\n- origin/feature/news-screen-layout\n- origin/feature/news-screen-mock-removing\n- origin/feature/post-screen-mock-removing\n- origin/feature/profile-screen\n- origin/feature/profile-screen-mock-removing\n- origin/feature/profile-shortcut\n- origin/feature/push-notifications\n- origin/feature/share-posts\n- origin/feature/sign-in-screen-layout\n- origin/feature/swift-data\n- origin/feature/tabbar-configuration\n- origin/feature/vk-id\n- origin/main\n- origin/refactor/global-refactoring\n\nУдалённые ветки — remote-tracking refs локальной копии Git. Fetch и запрос к серверу не выполнялись; список на сервере мог измениться. Символические указатели вроде origin/HEAD не являются отдельными ветками."
+      }
+    ],
+    "context": {
+      "capturedAt": "2026-10-16T08:00:03.994Z",
+      "receipts": [
+        {
+          "name": "get_git_branch",
+          "result": {
+            "branch": "main",
+            "commit": "7af9ed6878bc699359eb9cdb67162303c0739584",
+            "detached": false
+          }
+        },
+        {
+          "name": "list_project_files",
+          "result": {
+            "files": [
+              "Docs/Architecture.md",
+              "QuickStartGuide/QuickStart.md",
+              "README.md",
+              "Tools/ScreenXcodeTemplate.xctemplate/Files/___FILEBASENAME___ContentView.swift",
+              "Tools/ScreenXcodeTemplate.xctemplate/Files/___FILEBASENAME___Context.swift",
+              "Tools/ScreenXcodeTemplate.xctemplate/Files/___FILEBASENAME___ViewController.swift",
+              "Tools/ScreenXcodeTemplate.xctemplate/Files/___FILEBASENAME___ViewModel.swift",
+              "Tools/ScreenXcodeTemplate.xctemplate/TemplateIcon.png",
+              "Tools/ScreenXcodeTemplate.xctemplate/TemplateIcon@2x.png",
+              "Tools/ScreenXcodeTemplate.xctemplate/TemplateInfo.plist",
+              "Tools/Swiftlint/swiftlint-0.52.2-macos/bin/swiftlint",
+              "XcodeProject/App.xcodeproj/project.pbxproj",
+              "XcodeProject/App.xcodeproj/project.xcworkspace/contents.xcworkspacedata",
+              "XcodeProject/App.xcodeproj/project.xcworkspace/xcshareddata/IDETemplateMacros.plist",
+              "XcodeProject/App.xcodeproj/project.xcworkspace/xcshareddata/IDEWorkspaceChecks.plist",
+              "XcodeProject/App.xcodeproj/project.xcworkspace/xcshareddata/WorkspaceSettings.xcsettings",
+              "XcodeProject/App.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved",
+              "XcodeProject/App.xcodeproj/project.xcworkspace/xcuserdata/andreyarzhannikov.xcuserdatad/UserInterfaceState.xcuserstate",
+              "XcodeProject/App.xcodeproj/project.xcworkspace/xcuserdata/nikitapeshkov.xcuserdatad/IDEFindNavigatorScopes.plist",
+              "XcodeProject/App.xcodeproj/project.xcworkspace/xcuserdata/nikitapeshkov.xcuserdatad/UserInterfaceState.xcuserstate",
+              "XcodeProject/App.xcodeproj/xcshareddata/xcschemes/AppDevelopment.xcscheme",
+              "XcodeProject/App.xcodeproj/xcshareddata/xcschemes/AppProduction.xcscheme",
+              "XcodeProject/App.xcodeproj/xcuserdata/andrey_arzhannikov.xcuserdatad/xcschemes/xcschememanagement.plist",
+              "XcodeProject/App.xcodeproj/xcuserdata/andreyarzhannikov.xcuserdatad/xcdebugger/Breakpoints_v2.xcbkptlist",
+              "XcodeProject/App.xcodeproj/xcuserdata/andreyarzhannikov.xcuserdatad/xcschemes/xcschememanagement.plist",
+              "XcodeProject/App.xcodeproj/xcuserdata/nikitapeshkov.xcuserdatad/xcschemes/xcschememanagement.plist",
+              "XcodeProject/App/Resources/Assets.xcassets/AccentColor.colorset/Contents.json",
+              "XcodeProject/App/Resources/Assets.xcassets/AppIcon.appiconset/Contents.json",
+              "XcodeProject/App/Resources/Assets.xcassets/Contents.json",
+              "XcodeProject/App/Source/Infrastructure/AppContainer.swift",
+              "XcodeProject/App/Source/Infrastructure/AppCoordinator.swift",
+              "XcodeProject/App/Source/Infrastructure/AppDelegate.swift",
+              "XcodeProject/App/SupportingFiles/Base.lproj/LaunchScreen.storyboard",
+              "XcodeProject/App/SupportingFiles/Info.plist",
+              "XcodeProject/App/SupportingFiles/InfoPlist.strings",
+              "XcodeProject/App/xcconfigs/Debug.xcconfig",
+              "XcodeProject/App/xcconfigs/DebugProduction.xcconfig",
+              "XcodeProject/App/xcconfigs/ProductionRelease.xcconfig",
+              "XcodeProject/App/xcconfigs/QaRelease.xcconfig",
+              "XcodeProject/BuildPhaseScripts/ensure_xcode_version.sh",
+              "XcodeProject/BuildPhaseScripts/run_swiftlint.sh",
+              "XcodeProject/Packages/AppModulesPackage/Package.swift",
+              "XcodeProject/Packages/AppModulesPackage/README.md",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppBaseFlow/README.md",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppBaseFlow/Sources/BaseCollectionViewAdaptable.swift",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppBaseFlow/Sources/BaseCollectionViewCell.swift",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppBaseFlow/Sources/BaseTableViewCell.swift",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppBaseFlow/Sources/BaseUIError.swift",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppBaseFlow/Sources/BaseView.swift",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppBaseFlow/Sources/BaseViewController.swift",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppBaseFlow/Sources/BaseViewModel.swift",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppBaseFlow/Sources/Configuration.swift",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppBaseFlow/Sources/Coordinator.swift",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppDesignSystem/README.md",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppDesignSystem/Sources/Colors.swift",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppDesignSystem/Sources/Components/ActionButton/ActionButton.swift",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppDesignSystem/Sources/Components/ActionButton/ActionButtonPreview.swift",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppDesignSystem/Sources/Components/ActionButton/ActionButtonStyle.swift",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppDesignSystem/Sources/Components/Alerts.swift",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppDesignSystem/Sources/Components/Components.swift",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppDesignSystem/Sources/Components/InputTextField.swift",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppDesignSystem/Sources/Components/LoadingView.swift",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppDesignSystem/Sources/Components/RoundedImageView.swift",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppDesignSystem/Sources/DesignSystem.swift",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppDesignSystem/Sources/Formatter.swift",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppDesignSystem/Sources/Heplers/SafeResource.swift",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppDesignSystem/Sources/IconsLibrary.swift",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppDesignSystem/Sources/Resources/Assets.xcassets/Colors/Contents.json",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppDesignSystem/Sources/Resources/Assets.xcassets/Colors/backgorund_border_disabled.colorset/Contents.json",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppDesignSystem/Sources/Resources/Assets.xcassets/Colors/background_primary.colorset/Contents.json",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppDesignSystem/Sources/Resources/Assets.xcassets/Colors/background_secondary.colorset/Contents.json",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppDesignSystem/Sources/Resources/Assets.xcassets/Colors/background_secondary_disabled.colorset/Contents.json",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppDesignSystem/Sources/Resources/Assets.xcassets/Colors/background_secondary_variant.colorset/Contents.json",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppDesignSystem/Sources/Resources/Assets.xcassets/Colors/background_tertiary.colorset/Contents.json",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppDesignSystem/Sources/Resources/Assets.xcassets/Colors/fill_primary.colorset/Contents.json",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppDesignSystem/Sources/Resources/Assets.xcassets/Colors/fill_primary_variant.colorset/Contents.json",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppDesignSystem/Sources/Resources/Assets.xcassets/Colors/label_primary.colorset/Contents.json",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppDesignSystem/Sources/Resources/Assets.xcassets/Colors/label_primary_variant.colorset/Contents.json",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppDesignSystem/Sources/Resources/Assets.xcassets/Colors/label_secondary.colorset/Contents.json",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppDesignSystem/Sources/Resources/Assets.xcassets/Colors/label_secondary_variant.colorset/Contents.json",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppDesignSystem/Sources/Resources/Assets.xcassets/Contents.json",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppDesignSystem/Sources/Resources/Assets.xcassets/Icons/Contents.json",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppDesignSystem/Sources/Resources/Assets.xcassets/Icons/HomeTabbar/Contents.json",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppDesignSystem/Sources/Resources/Assets.xcassets/Icons/HomeTabbar/home_tabbar_explore.imageset/Contents.json",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppDesignSystem/Sources/Resources/Assets.xcassets/Icons/HomeTabbar/home_tabbar_explore.imageset/home_tabbar_explore@2x.png",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppDesignSystem/Sources/Resources/Assets.xcassets/Icons/HomeTabbar/home_tabbar_explore.imageset/home_tabbar_explore@3x.png",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppDesignSystem/Sources/Resources/Assets.xcassets/Icons/HomeTabbar/home_tabbar_profile.imageset/Contents.json",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppDesignSystem/Sources/Resources/Assets.xcassets/Icons/HomeTabbar/home_tabbar_profile.imageset/home_tabbar_profile@2x.png",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppDesignSystem/Sources/Resources/Assets.xcassets/Icons/HomeTabbar/home_tabbar_profile.imageset/home_tabbar_profile@3x.png",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppDesignSystem/Sources/Resources/Assets.xcassets/Icons/HomeTabbar/home_tabbar_store.imageset/Contents.json",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppDesignSystem/Sources/Resources/Assets.xcassets/Icons/HomeTabbar/home_tabbar_store.imageset/home_tabbar_store@2x.png",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppDesignSystem/Sources/Resources/Assets.xcassets/Icons/HomeTabbar/home_tabbar_store.imageset/home_tabbar_store@3x.png",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppDesignSystem/Sources/Resources/Localizable.strings",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppDesignSystem/Sources/Resources/Localizable.stringsdict",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppDesignSystem/Sources/Spacing.swift",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppDesignSystem/Sources/StringsLibrary.swift",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppDesignSystem/Sources/Styles.swift",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppDesignSystem/Sources/Typography.swift",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppDesignSystem/Tests/FormatPhoneNumberTest.swift",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppDevTools/README.md",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppDevTools/Sources/DebugFeatureToggling.swift",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppDevTools/Sources/DebugView.swift",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppDevTools/Sources/Demo/ColorPaletteViewController.swift",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppDevTools/Sources/Demo/InputTextFieldExamplesViewController.swift",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppDevTools/Sources/FakeAuthService.swift",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppDevTools/Sources/FeatureFlagsViewController.swift",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppDevTools/Sources/Flex.swift",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppDevTools/Sources/StubFlowCoordinator.swift",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppEntities/README.md",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppEntities/Sources/Account.swift",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppEntities/Sources/AppError.swift",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppEntities/Sources/Avatar.swift",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppEntities/Sources/PhoneContact.swift",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppEntities/Sources/UserProfile.swift",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppServices/README.md",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppServices/Sources/API/Authenticator.swift",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppServices/Sources/API/HttpRequestFactory.swift",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppServices/Sources/API/HttpResponse.swift",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppServices/Sources/API/NetworkMapper.swift",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppServices/Sources/API/NetworkPayloads/AuthorizedUserPayload.swift"
+            ],
+            "total": 184,
+            "truncated": true
+          }
+        },
+        {
+          "name": "get_git_diff",
+          "result": {
+            "staged": {
+              "changes": [],
+              "total": 0,
+              "truncated": false
+            },
+            "unstaged": {
+              "changes": [],
+              "total": 0,
+              "truncated": false
+            },
+            "scope": "tracked files; names and statuses only"
+          }
+        },
+        {
+          "name": "list_git_branches",
+          "result": {
+            "local": {
+              "branches": [
+                "main"
+              ],
+              "total": 1,
+              "truncated": false
+            },
+            "remote": {
+              "branches": [
+                "origin/Feature/Families",
+                "origin/Feature/NeuralChecking",
+                "origin/Feature/deletingPosts",
+                "origin/bugfix/freezes",
+                "origin/bugfix/news-screen-broken-layout",
+                "origin/bugfix/swiftdata-crashes",
+                "origin/develop",
+                "origin/feature/add-post",
+                "origin/feature/audio-video-cache",
+                "origin/feature/comments-in-posts",
+                "origin/feature/crashlytics",
+                "origin/feature/date-date-for-ui",
+                "origin/feature/donate",
+                "origin/feature/edit-profile",
+                "origin/feature/family-screen",
+                "origin/feature/family-screen-mock-removing",
+                "origin/feature/firebase-client",
+                "origin/feature/geolocation",
+                "origin/feature/map-screen",
+                "origin/feature/map-screen-mock-removing",
+                "origin/feature/network-errors-handling",
+                "origin/feature/news-screen-layout",
+                "origin/feature/news-screen-mock-removing",
+                "origin/feature/post-screen-mock-removing",
+                "origin/feature/profile-screen",
+                "origin/feature/profile-screen-mock-removing",
+                "origin/feature/profile-shortcut",
+                "origin/feature/push-notifications",
+                "origin/feature/share-posts",
+                "origin/feature/sign-in-screen-layout",
+                "origin/feature/swift-data",
+                "origin/feature/tabbar-configuration",
+                "origin/feature/vk-id",
+                "origin/main",
+                "origin/refactor/global-refactoring"
+              ],
+              "total": 35,
+              "truncated": false
+            },
+            "scope": "local branches and locally known remote-tracking branches; no fetch or network request; remote refs may be stale"
+          }
+        }
+      ]
+    },
+    "durationMs": 3644,
+    "projectId": "myfamily"
+  },
+  "cloud": {
+    "externalCalls": 1,
+    "transmitted": "question-only intent selection; no project documents or branch names",
+    "question": "какие есть ветки в репозитории",
+    "provider": "cloud",
+    "model": "deepseek-v4-flash",
+    "indexRunId": "442e1170-4fdc-4d23-aa8e-176851e82858",
+    "answer": "Локальные ветки: показано 1, всего 1; список полный.\n- main [1]\n\nИзвестные удалённые ветки: показано 35, всего 35; список полный.\n- origin/Feature/Families\n- origin/Feature/NeuralChecking\n- origin/Feature/deletingPosts\n- origin/bugfix/freezes\n- origin/bugfix/news-screen-broken-layout\n- origin/bugfix/swiftdata-crashes\n- origin/develop\n- origin/feature/add-post\n- origin/feature/audio-video-cache\n- origin/feature/comments-in-posts\n- origin/feature/crashlytics\n- origin/feature/date-date-for-ui\n- origin/feature/donate\n- origin/feature/edit-profile\n- origin/feature/family-screen\n- origin/feature/family-screen-mock-removing\n- origin/feature/firebase-client\n- origin/feature/geolocation\n- origin/feature/map-screen\n- origin/feature/map-screen-mock-removing\n- origin/feature/network-errors-handling\n- origin/feature/news-screen-layout\n- origin/feature/news-screen-mock-removing\n- origin/feature/post-screen-mock-removing\n- origin/feature/profile-screen\n- origin/feature/profile-screen-mock-removing\n- origin/feature/profile-shortcut\n- origin/feature/push-notifications\n- origin/feature/share-posts\n- origin/feature/sign-in-screen-layout\n- origin/feature/swift-data\n- origin/feature/tabbar-configuration\n- origin/feature/vk-id\n- origin/main\n- origin/refactor/global-refactoring [2][3]\n\nУдалённые ветки — remote-tracking refs локальной копии Git. Fetch и запрос к серверу не выполнялись; список на сервере мог измениться. Символические указатели вроде origin/HEAD не являются отдельными ветками. [4]",
+    "grounding": {
+      "status": "answered",
+      "claims": [
+        {
+          "id": 1,
+          "text": "Локальные ветки: показано 1, всего 1; список полный.\n- main",
+          "citationIds": [
+            1
+          ]
+        },
+        {
+          "id": 2,
+          "text": "Известные удалённые ветки: показано 35, всего 35; список полный.\n- origin/Feature/Families\n- origin/Feature/NeuralChecking\n- origin/Feature/deletingPosts\n- origin/bugfix/freezes\n- origin/bugfix/news-screen-broken-layout\n- origin/bugfix/swiftdata-crashes\n- origin/develop\n- origin/feature/add-post\n- origin/feature/audio-video-cache\n- origin/feature/comments-in-posts\n- origin/feature/crashlytics\n- origin/feature/date-date-for-ui\n- origin/feature/donate\n- origin/feature/edit-profile\n- origin/feature/family-screen\n- origin/feature/family-screen-mock-removing\n- origin/feature/firebase-client\n- origin/feature/geolocation\n- origin/feature/map-screen\n- origin/feature/map-screen-mock-removing\n- origin/feature/network-errors-handling\n- origin/feature/news-screen-layout\n- origin/feature/news-screen-mock-removing\n- origin/feature/post-screen-mock-removing\n- origin/feature/profile-screen\n- origin/feature/profile-screen-mock-removing\n- origin/feature/profile-shortcut\n- origin/feature/push-notifications\n- origin/feature/share-posts\n- origin/feature/sign-in-screen-layout\n- origin/feature/swift-data\n- origin/feature/tabbar-configuration\n- origin/feature/vk-id\n- origin/main\n- origin/refactor/global-refactoring",
+          "citationIds": [
+            2,
+            3
+          ]
+        },
+        {
+          "id": 3,
+          "text": "Удалённые ветки — remote-tracking refs локальной копии Git. Fetch и запрос к серверу не выполнялись; список на сервере мог измениться. Символические указатели вроде origin/HEAD не являются отдельными ветками.",
+          "citationIds": [
+            4
+          ]
+        }
+      ],
+      "citations": [
+        {
+          "id": 1,
+          "source": "mcp://project/list_git_branches",
+          "section": "list_git_branches",
+          "chunkId": "mcp-list_git_branches",
+          "quote": "Локальные ветки: показано 1, всего 1; список полный.\n- main"
+        },
+        {
+          "id": 2,
+          "source": "mcp://project/list_git_branches",
+          "section": "list_git_branches",
+          "chunkId": "mcp-list_git_branches",
+          "quote": "Известные удалённые ветки: показано 35, всего 35; список полный.\n- origin/Feature/Families\n- origin/Feature/NeuralChecking\n- origin/Feature/deletingPosts\n- origin/bugfix/freezes\n- origin/bugfix/news-screen-broken-layout\n- origin/bugfix/swiftdata-crashes\n- origin/develop\n- origin/feature/add-post\n- origin/feature/audio-video-cache\n- origin/feature/comments-in-posts\n- origin/feature/crashlytics\n- origin/feature/date-date-for-ui\n- origin/feature/donate\n- origin/feature/edit-profile\n- origin/feature/family-screen\n- origin/feature/family-screen-mock-removing\n- origin/feature/firebase-client\n- origin/feature/geolocation\n- origin/feature/map-screen\n- origin/feature/map-screen-mock-removing\n- origin/feature/network-errors-handling\n- origin/feature/news-screen-layout\n- origin/feature/news-screen-mock-removing\n- origin/feature/post-screen-mock-removing\n- origin/feature/profile-screen\n- origin/feature/profile-screen-mock-removing\n- origin/feature/profile-shortcut\n- origin/feature/push-notifications\n- origin/feature/share-posts\n- origin/feature/sign-in-screen-layout\n- origin/feature/swift-data"
+        },
+        {
+          "id": 3,
+          "source": "mcp://project/list_git_branches",
+          "section": "list_git_branches",
+          "chunkId": "mcp-list_git_branches",
+          "quote": "- origin/feature/tabbar-configuration\n- origin/feature/vk-id\n- origin/main\n- origin/refactor/global-refactoring"
+        },
+        {
+          "id": 4,
+          "source": "mcp://project/list_git_branches",
+          "section": "list_git_branches",
+          "chunkId": "mcp-list_git_branches",
+          "quote": "Удалённые ветки — remote-tracking refs локальной копии Git. Fetch и запрос к серверу не выполнялись; список на сервере мог измениться. Символические указатели вроде origin/HEAD не являются отдельными ветками."
+        }
+      ],
+      "answer": "Локальные ветки: показано 1, всего 1; список полный.\n- main [1]\n\nИзвестные удалённые ветки: показано 35, всего 35; список полный.\n- origin/Feature/Families\n- origin/Feature/NeuralChecking\n- origin/Feature/deletingPosts\n- origin/bugfix/freezes\n- origin/bugfix/news-screen-broken-layout\n- origin/bugfix/swiftdata-crashes\n- origin/develop\n- origin/feature/add-post\n- origin/feature/audio-video-cache\n- origin/feature/comments-in-posts\n- origin/feature/crashlytics\n- origin/feature/date-date-for-ui\n- origin/feature/donate\n- origin/feature/edit-profile\n- origin/feature/family-screen\n- origin/feature/family-screen-mock-removing\n- origin/feature/firebase-client\n- origin/feature/geolocation\n- origin/feature/map-screen\n- origin/feature/map-screen-mock-removing\n- origin/feature/network-errors-handling\n- origin/feature/news-screen-layout\n- origin/feature/news-screen-mock-removing\n- origin/feature/post-screen-mock-removing\n- origin/feature/profile-screen\n- origin/feature/profile-screen-mock-removing\n- origin/feature/profile-shortcut\n- origin/feature/push-notifications\n- origin/feature/share-posts\n- origin/feature/sign-in-screen-layout\n- origin/feature/swift-data\n- origin/feature/tabbar-configuration\n- origin/feature/vk-id\n- origin/main\n- origin/refactor/global-refactoring [2][3]\n\nУдалённые ветки — remote-tracking refs локальной копии Git. Fetch и запрос к серверу не выполнялись; список на сервере мог измениться. Символические указатели вроде origin/HEAD не являются отдельными ветками. [4]",
+      "sources": [
+        {
+          "source": "mcp://project/list_git_branches",
+          "section": "list_git_branches",
+          "chunkId": "mcp-list_git_branches"
+        }
+      ],
+      "usage": {
+        "inputTokens": 1495,
+        "promptTokens": 258,
+        "completionTokens": 14,
+        "totalTokens": 272
+      },
+      "verification": {
+        "status": "passed",
+        "method": "tool-data",
+        "attempts": 1,
+        "judgments": [
+          {
+            "claimId": 1,
+            "supported": true,
+            "reason": "Точный текст источника MCP; цитаты проверены кодом."
+          },
+          {
+            "claimId": 2,
+            "supported": true,
+            "reason": "Точный текст источника MCP; цитаты проверены кодом."
+          },
+          {
+            "claimId": 3,
+            "supported": true,
+            "reason": "Точный текст источника MCP; цитаты проверены кодом."
+          }
+        ],
+        "taskCheck": {
+          "goalAligned": true,
+          "constraintsRespected": true,
+          "answersQuestion": true,
+          "reason": "Сценарий перечисления Git-веток; имена и счётчики скопированы из MCP с явным ограничением области и полноты."
+        }
+      }
+    },
+    "sources": [
+      {
+        "source": "mcp://project/list_git_branches",
+        "title": "Текущий контекст проекта",
+        "section": "list_git_branches",
+        "chunkId": "mcp-list_git_branches",
+        "strategy": "structured",
+        "score": 1,
+        "text": "MCP list_git_branches, время 2026-10-16T07:57:08.991Z:\nЛокальные ветки: показано 1, всего 1; список полный.\n- main\n\nИзвестные удалённые ветки: показано 35, всего 35; список полный.\n- origin/Feature/Families\n- origin/Feature/NeuralChecking\n- origin/Feature/deletingPosts\n- origin/bugfix/freezes\n- origin/bugfix/news-screen-broken-layout\n- origin/bugfix/swiftdata-crashes\n- origin/develop\n- origin/feature/add-post\n- origin/feature/audio-video-cache\n- origin/feature/comments-in-posts\n- origin/feature/crashlytics\n- origin/feature/date-date-for-ui\n- origin/feature/donate\n- origin/feature/edit-profile\n- origin/feature/family-screen\n- origin/feature/family-screen-mock-removing\n- origin/feature/firebase-client\n- origin/feature/geolocation\n- origin/feature/map-screen\n- origin/feature/map-screen-mock-removing\n- origin/feature/network-errors-handling\n- origin/feature/news-screen-layout\n- origin/feature/news-screen-mock-removing\n- origin/feature/post-screen-mock-removing\n- origin/feature/profile-screen\n- origin/feature/profile-screen-mock-removing\n- origin/feature/profile-shortcut\n- origin/feature/push-notifications\n- origin/feature/share-posts\n- origin/feature/sign-in-screen-layout\n- origin/feature/swift-data\n- origin/feature/tabbar-configuration\n- origin/feature/vk-id\n- origin/main\n- origin/refactor/global-refactoring\n\nУдалённые ветки — remote-tracking refs локальной копии Git. Fetch и запрос к серверу не выполнялись; список на сервере мог измениться. Символические указатели вроде origin/HEAD не являются отдельными ветками."
+      }
+    ],
+    "context": {
+      "capturedAt": "2026-10-16T07:57:08.991Z",
+      "receipts": [
+        {
+          "name": "get_git_branch",
+          "result": {
+            "branch": "main",
+            "commit": "7af9ed6878bc699359eb9cdb67162303c0739584",
+            "detached": false
+          }
+        },
+        {
+          "name": "list_project_files",
+          "result": {
+            "files": [
+              "Docs/Architecture.md",
+              "QuickStartGuide/QuickStart.md",
+              "README.md",
+              "Tools/ScreenXcodeTemplate.xctemplate/Files/___FILEBASENAME___ContentView.swift",
+              "Tools/ScreenXcodeTemplate.xctemplate/Files/___FILEBASENAME___Context.swift",
+              "Tools/ScreenXcodeTemplate.xctemplate/Files/___FILEBASENAME___ViewController.swift",
+              "Tools/ScreenXcodeTemplate.xctemplate/Files/___FILEBASENAME___ViewModel.swift",
+              "Tools/ScreenXcodeTemplate.xctemplate/TemplateIcon.png",
+              "Tools/ScreenXcodeTemplate.xctemplate/TemplateIcon@2x.png",
+              "Tools/ScreenXcodeTemplate.xctemplate/TemplateInfo.plist",
+              "Tools/Swiftlint/swiftlint-0.52.2-macos/bin/swiftlint",
+              "XcodeProject/App.xcodeproj/project.pbxproj",
+              "XcodeProject/App.xcodeproj/project.xcworkspace/contents.xcworkspacedata",
+              "XcodeProject/App.xcodeproj/project.xcworkspace/xcshareddata/IDETemplateMacros.plist",
+              "XcodeProject/App.xcodeproj/project.xcworkspace/xcshareddata/IDEWorkspaceChecks.plist",
+              "XcodeProject/App.xcodeproj/project.xcworkspace/xcshareddata/WorkspaceSettings.xcsettings",
+              "XcodeProject/App.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved",
+              "XcodeProject/App.xcodeproj/project.xcworkspace/xcuserdata/andreyarzhannikov.xcuserdatad/UserInterfaceState.xcuserstate",
+              "XcodeProject/App.xcodeproj/project.xcworkspace/xcuserdata/nikitapeshkov.xcuserdatad/IDEFindNavigatorScopes.plist",
+              "XcodeProject/App.xcodeproj/project.xcworkspace/xcuserdata/nikitapeshkov.xcuserdatad/UserInterfaceState.xcuserstate",
+              "XcodeProject/App.xcodeproj/xcshareddata/xcschemes/AppDevelopment.xcscheme",
+              "XcodeProject/App.xcodeproj/xcshareddata/xcschemes/AppProduction.xcscheme",
+              "XcodeProject/App.xcodeproj/xcuserdata/andrey_arzhannikov.xcuserdatad/xcschemes/xcschememanagement.plist",
+              "XcodeProject/App.xcodeproj/xcuserdata/andreyarzhannikov.xcuserdatad/xcdebugger/Breakpoints_v2.xcbkptlist",
+              "XcodeProject/App.xcodeproj/xcuserdata/andreyarzhannikov.xcuserdatad/xcschemes/xcschememanagement.plist",
+              "XcodeProject/App.xcodeproj/xcuserdata/nikitapeshkov.xcuserdatad/xcschemes/xcschememanagement.plist",
+              "XcodeProject/App/Resources/Assets.xcassets/AccentColor.colorset/Contents.json",
+              "XcodeProject/App/Resources/Assets.xcassets/AppIcon.appiconset/Contents.json",
+              "XcodeProject/App/Resources/Assets.xcassets/Contents.json",
+              "XcodeProject/App/Source/Infrastructure/AppContainer.swift",
+              "XcodeProject/App/Source/Infrastructure/AppCoordinator.swift",
+              "XcodeProject/App/Source/Infrastructure/AppDelegate.swift",
+              "XcodeProject/App/SupportingFiles/Base.lproj/LaunchScreen.storyboard",
+              "XcodeProject/App/SupportingFiles/Info.plist",
+              "XcodeProject/App/SupportingFiles/InfoPlist.strings",
+              "XcodeProject/App/xcconfigs/Debug.xcconfig",
+              "XcodeProject/App/xcconfigs/DebugProduction.xcconfig",
+              "XcodeProject/App/xcconfigs/ProductionRelease.xcconfig",
+              "XcodeProject/App/xcconfigs/QaRelease.xcconfig",
+              "XcodeProject/BuildPhaseScripts/ensure_xcode_version.sh",
+              "XcodeProject/BuildPhaseScripts/run_swiftlint.sh",
+              "XcodeProject/Packages/AppModulesPackage/Package.swift",
+              "XcodeProject/Packages/AppModulesPackage/README.md",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppBaseFlow/README.md",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppBaseFlow/Sources/BaseCollectionViewAdaptable.swift",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppBaseFlow/Sources/BaseCollectionViewCell.swift",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppBaseFlow/Sources/BaseTableViewCell.swift",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppBaseFlow/Sources/BaseUIError.swift",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppBaseFlow/Sources/BaseView.swift",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppBaseFlow/Sources/BaseViewController.swift",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppBaseFlow/Sources/BaseViewModel.swift",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppBaseFlow/Sources/Configuration.swift",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppBaseFlow/Sources/Coordinator.swift",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppDesignSystem/README.md",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppDesignSystem/Sources/Colors.swift",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppDesignSystem/Sources/Components/ActionButton/ActionButton.swift",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppDesignSystem/Sources/Components/ActionButton/ActionButtonPreview.swift",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppDesignSystem/Sources/Components/ActionButton/ActionButtonStyle.swift",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppDesignSystem/Sources/Components/Alerts.swift",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppDesignSystem/Sources/Components/Components.swift",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppDesignSystem/Sources/Components/InputTextField.swift",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppDesignSystem/Sources/Components/LoadingView.swift",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppDesignSystem/Sources/Components/RoundedImageView.swift",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppDesignSystem/Sources/DesignSystem.swift",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppDesignSystem/Sources/Formatter.swift",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppDesignSystem/Sources/Heplers/SafeResource.swift",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppDesignSystem/Sources/IconsLibrary.swift",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppDesignSystem/Sources/Resources/Assets.xcassets/Colors/Contents.json",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppDesignSystem/Sources/Resources/Assets.xcassets/Colors/backgorund_border_disabled.colorset/Contents.json",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppDesignSystem/Sources/Resources/Assets.xcassets/Colors/background_primary.colorset/Contents.json",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppDesignSystem/Sources/Resources/Assets.xcassets/Colors/background_secondary.colorset/Contents.json",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppDesignSystem/Sources/Resources/Assets.xcassets/Colors/background_secondary_disabled.colorset/Contents.json",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppDesignSystem/Sources/Resources/Assets.xcassets/Colors/background_secondary_variant.colorset/Contents.json",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppDesignSystem/Sources/Resources/Assets.xcassets/Colors/background_tertiary.colorset/Contents.json",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppDesignSystem/Sources/Resources/Assets.xcassets/Colors/fill_primary.colorset/Contents.json",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppDesignSystem/Sources/Resources/Assets.xcassets/Colors/fill_primary_variant.colorset/Contents.json",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppDesignSystem/Sources/Resources/Assets.xcassets/Colors/label_primary.colorset/Contents.json",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppDesignSystem/Sources/Resources/Assets.xcassets/Colors/label_primary_variant.colorset/Contents.json",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppDesignSystem/Sources/Resources/Assets.xcassets/Colors/label_secondary.colorset/Contents.json",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppDesignSystem/Sources/Resources/Assets.xcassets/Colors/label_secondary_variant.colorset/Contents.json",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppDesignSystem/Sources/Resources/Assets.xcassets/Contents.json",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppDesignSystem/Sources/Resources/Assets.xcassets/Icons/Contents.json",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppDesignSystem/Sources/Resources/Assets.xcassets/Icons/HomeTabbar/Contents.json",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppDesignSystem/Sources/Resources/Assets.xcassets/Icons/HomeTabbar/home_tabbar_explore.imageset/Contents.json",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppDesignSystem/Sources/Resources/Assets.xcassets/Icons/HomeTabbar/home_tabbar_explore.imageset/home_tabbar_explore@2x.png",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppDesignSystem/Sources/Resources/Assets.xcassets/Icons/HomeTabbar/home_tabbar_explore.imageset/home_tabbar_explore@3x.png",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppDesignSystem/Sources/Resources/Assets.xcassets/Icons/HomeTabbar/home_tabbar_profile.imageset/Contents.json",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppDesignSystem/Sources/Resources/Assets.xcassets/Icons/HomeTabbar/home_tabbar_profile.imageset/home_tabbar_profile@2x.png",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppDesignSystem/Sources/Resources/Assets.xcassets/Icons/HomeTabbar/home_tabbar_profile.imageset/home_tabbar_profile@3x.png",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppDesignSystem/Sources/Resources/Assets.xcassets/Icons/HomeTabbar/home_tabbar_store.imageset/Contents.json",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppDesignSystem/Sources/Resources/Assets.xcassets/Icons/HomeTabbar/home_tabbar_store.imageset/home_tabbar_store@2x.png",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppDesignSystem/Sources/Resources/Assets.xcassets/Icons/HomeTabbar/home_tabbar_store.imageset/home_tabbar_store@3x.png",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppDesignSystem/Sources/Resources/Localizable.strings",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppDesignSystem/Sources/Resources/Localizable.stringsdict",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppDesignSystem/Sources/Spacing.swift",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppDesignSystem/Sources/StringsLibrary.swift",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppDesignSystem/Sources/Styles.swift",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppDesignSystem/Sources/Typography.swift",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppDesignSystem/Tests/FormatPhoneNumberTest.swift",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppDevTools/README.md",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppDevTools/Sources/DebugFeatureToggling.swift",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppDevTools/Sources/DebugView.swift",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppDevTools/Sources/Demo/ColorPaletteViewController.swift",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppDevTools/Sources/Demo/InputTextFieldExamplesViewController.swift",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppDevTools/Sources/FakeAuthService.swift",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppDevTools/Sources/FeatureFlagsViewController.swift",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppDevTools/Sources/Flex.swift",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppDevTools/Sources/StubFlowCoordinator.swift",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppEntities/README.md",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppEntities/Sources/Account.swift",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppEntities/Sources/AppError.swift",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppEntities/Sources/Avatar.swift",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppEntities/Sources/PhoneContact.swift",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppEntities/Sources/UserProfile.swift",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppServices/README.md",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppServices/Sources/API/Authenticator.swift",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppServices/Sources/API/HttpRequestFactory.swift",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppServices/Sources/API/HttpResponse.swift",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppServices/Sources/API/NetworkMapper.swift",
+              "XcodeProject/Packages/AppModulesPackage/Sources/AppServices/Sources/API/NetworkPayloads/AuthorizedUserPayload.swift"
+            ],
+            "total": 184,
+            "truncated": true
+          }
+        },
+        {
+          "name": "get_git_diff",
+          "result": {
+            "staged": {
+              "changes": [],
+              "total": 0,
+              "truncated": false
+            },
+            "unstaged": {
+              "changes": [],
+              "total": 0,
+              "truncated": false
+            },
+            "scope": "tracked files; names and statuses only"
+          }
+        },
+        {
+          "name": "list_git_branches",
+          "result": {
+            "local": {
+              "branches": [
+                "main"
+              ],
+              "total": 1,
+              "truncated": false
+            },
+            "remote": {
+              "branches": [
+                "origin/Feature/Families",
+                "origin/Feature/NeuralChecking",
+                "origin/Feature/deletingPosts",
+                "origin/bugfix/freezes",
+                "origin/bugfix/news-screen-broken-layout",
+                "origin/bugfix/swiftdata-crashes",
+                "origin/develop",
+                "origin/feature/add-post",
+                "origin/feature/audio-video-cache",
+                "origin/feature/comments-in-posts",
+                "origin/feature/crashlytics",
+                "origin/feature/date-date-for-ui",
+                "origin/feature/donate",
+                "origin/feature/edit-profile",
+                "origin/feature/family-screen",
+                "origin/feature/family-screen-mock-removing",
+                "origin/feature/firebase-client",
+                "origin/feature/geolocation",
+                "origin/feature/map-screen",
+                "origin/feature/map-screen-mock-removing",
+                "origin/feature/network-errors-handling",
+                "origin/feature/news-screen-layout",
+                "origin/feature/news-screen-mock-removing",
+                "origin/feature/post-screen-mock-removing",
+                "origin/feature/profile-screen",
+                "origin/feature/profile-screen-mock-removing",
+                "origin/feature/profile-shortcut",
+                "origin/feature/push-notifications",
+                "origin/feature/share-posts",
+                "origin/feature/sign-in-screen-layout",
+                "origin/feature/swift-data",
+                "origin/feature/tabbar-configuration",
+                "origin/feature/vk-id",
+                "origin/main",
+                "origin/refactor/global-refactoring"
+              ],
+              "total": 35,
+              "truncated": false
+            },
+            "scope": "local branches and locally known remote-tracking branches; no fetch or network request; remote refs may be stale"
+          }
+        }
+      ]
+    },
+    "durationMs": 1739
+  },
+  "regression": {
+    "createdAt": "2026-10-16T08:12:18.218Z",
+    "provider": "cloud",
+    "projectId": "myfamily",
+    "indexRunId": "442e1170-4fdc-4d23-aa8e-176851e82858",
+    "results": [
+      {
+        "question": "Есть ли среди известных удалённых веток origin/develop и где находится точка входа MyFamily?",
+        "passed": true,
+        "missing": [],
+        "missingSources": [],
+        "expected": "answered",
+        "status": "answered",
+        "model": "deepseek-v4-flash",
+        "durationMs": 10791,
+        "answer": "Среди известных удалённых веток есть origin/develop. [1]\n\nТочка входа — `@main AppDelegate` в `XcodeProject/App/Source/Infrastructure/AppDelegate.swift`. [2]\n\nПри запуске AppDelegate включает WebP coder и менеджер клавиатуры, затем вызывает `appCoordinator.start()`. [3]",
+        "citations": [
+          {
+            "id": 1,
+            "source": "mcp://project/list_git_branches",
+            "section": "list_git_branches",
+            "chunkId": "mcp-list_git_branches",
+            "quote": "- origin/develop"
+          },
+          {
+            "id": 2,
+            "source": "project/docs/project-architecture.md",
+            "section": "Точки входа и зависимости",
+            "chunkId": "structured-33837d02a6084cfc",
+            "quote": "Точка входа — `@main AppDelegate` в `XcodeProject/App/Source/Infrastructure/AppDelegate.swift`."
+          },
+          {
+            "id": 3,
+            "source": "project/docs/project-architecture.md",
+            "section": "Точки входа и зависимости",
+            "chunkId": "structured-33837d02a6084cfc",
+            "quote": "При запуске AppDelegate включает WebP coder и менеджер клавиатуры, затем вызывает `appCoordinator.start()`."
+          }
+        ],
+        "verification": {
+          "status": "passed",
+          "attempts": 1,
+          "judgments": [
+            {
+              "claimId": 1,
+              "supported": true,
+              "reason": "Цитата из списка удалённых веток содержит origin/develop, утверждение полностью подтверждено."
+            },
+            {
+              "claimId": 2,
+              "supported": true,
+              "reason": "Цитата дословно подтверждает указанную точку входа."
+            },
+            {
+              "claimId": 3,
+              "supported": true,
+              "reason": "Цитата дословно подтверждает описание запуска AppDelegate."
+            }
+          ],
+          "taskCheck": {
+            "goalAligned": true,
+            "constraintsRespected": true,
+            "answersQuestion": true,
+            "reason": "Ответ отвечает на оба вопроса: подтверждает наличие origin/develop среди известных удалённых веток и указывает точку входа MyFamily; дополнительные сведения о запуске не противоречат ограничениям."
+          }
+        },
+        "retrievedDocuments": [
+          {
+            "source": "project/docs/project-architecture.md",
+            "section": "Точки входа и зависимости",
+            "score": 0.5822644753791121
+          },
+          {
+            "source": "README.md",
+            "section": "Документация для ассистента",
+            "score": 0.4599957778608207
+          },
+          {
+            "source": "README.md",
+            "section": "MyFamily",
+            "score": 0.556316433910887
+          },
+          {
+            "source": "project/docs/project-architecture.md",
+            "section": "Навигация",
+            "score": 0.49606847600000314
+          }
+        ],
+        "mcpTools": [
+          "get_git_branch",
+          "list_project_files",
+          "get_git_diff",
+          "list_git_branches"
+        ]
+      },
+      {
+        "question": "какие есть ветки в репозитории",
+        "passed": true,
+        "missing": [],
+        "missingSources": [],
+        "expected": "answered",
+        "status": "answered",
+        "model": "deepseek-v4-flash",
+        "durationMs": 1478,
+        "answer": "Локальные ветки: показано 1, всего 1; список полный.\n- main [1]\n\nИзвестные удалённые ветки: показано 35, всего 35; список полный.\n- origin/Feature/Families\n- origin/Feature/NeuralChecking\n- origin/Feature/deletingPosts\n- origin/bugfix/freezes\n- origin/bugfix/news-screen-broken-layout\n- origin/bugfix/swiftdata-crashes\n- origin/develop\n- origin/feature/add-post\n- origin/feature/audio-video-cache\n- origin/feature/comments-in-posts\n- origin/feature/crashlytics\n- origin/feature/date-date-for-ui\n- origin/feature/donate\n- origin/feature/edit-profile\n- origin/feature/family-screen\n- origin/feature/family-screen-mock-removing\n- origin/feature/firebase-client\n- origin/feature/geolocation\n- origin/feature/map-screen\n- origin/feature/map-screen-mock-removing\n- origin/feature/network-errors-handling\n- origin/feature/news-screen-layout\n- origin/feature/news-screen-mock-removing\n- origin/feature/post-screen-mock-removing\n- origin/feature/profile-screen\n- origin/feature/profile-screen-mock-removing\n- origin/feature/profile-shortcut\n- origin/feature/push-notifications\n- origin/feature/share-posts\n- origin/feature/sign-in-screen-layout\n- origin/feature/swift-data\n- origin/feature/tabbar-configuration\n- origin/feature/vk-id\n- origin/main\n- origin/refactor/global-refactoring [2][3]\n\nУдалённые ветки — remote-tracking refs локальной копии Git. Fetch и запрос к серверу не выполнялись; список на сервере мог измениться. Символические указатели вроде origin/HEAD не являются отдельными ветками. [4]",
+        "citations": [
+          {
+            "id": 1,
+            "source": "mcp://project/list_git_branches",
+            "section": "list_git_branches",
+            "chunkId": "mcp-list_git_branches",
+            "quote": "Локальные ветки: показано 1, всего 1; список полный.\n- main"
+          },
+          {
+            "id": 2,
+            "source": "mcp://project/list_git_branches",
+            "section": "list_git_branches",
+            "chunkId": "mcp-list_git_branches",
+            "quote": "Известные удалённые ветки: показано 35, всего 35; список полный.\n- origin/Feature/Families\n- origin/Feature/NeuralChecking\n- origin/Feature/deletingPosts\n- origin/bugfix/freezes\n- origin/bugfix/news-screen-broken-layout\n- origin/bugfix/swiftdata-crashes\n- origin/develop\n- origin/feature/add-post\n- origin/feature/audio-video-cache\n- origin/feature/comments-in-posts\n- origin/feature/crashlytics\n- origin/feature/date-date-for-ui\n- origin/feature/donate\n- origin/feature/edit-profile\n- origin/feature/family-screen\n- origin/feature/family-screen-mock-removing\n- origin/feature/firebase-client\n- origin/feature/geolocation\n- origin/feature/map-screen\n- origin/feature/map-screen-mock-removing\n- origin/feature/network-errors-handling\n- origin/feature/news-screen-layout\n- origin/feature/news-screen-mock-removing\n- origin/feature/post-screen-mock-removing\n- origin/feature/profile-screen\n- origin/feature/profile-screen-mock-removing\n- origin/feature/profile-shortcut\n- origin/feature/push-notifications\n- origin/feature/share-posts\n- origin/feature/sign-in-screen-layout\n- origin/feature/swift-data"
+          },
+          {
+            "id": 3,
+            "source": "mcp://project/list_git_branches",
+            "section": "list_git_branches",
+            "chunkId": "mcp-list_git_branches",
+            "quote": "- origin/feature/tabbar-configuration\n- origin/feature/vk-id\n- origin/main\n- origin/refactor/global-refactoring"
+          },
+          {
+            "id": 4,
+            "source": "mcp://project/list_git_branches",
+            "section": "list_git_branches",
+            "chunkId": "mcp-list_git_branches",
+            "quote": "Удалённые ветки — remote-tracking refs локальной копии Git. Fetch и запрос к серверу не выполнялись; список на сервере мог измениться. Символические указатели вроде origin/HEAD не являются отдельными ветками."
+          }
+        ],
+        "verification": {
+          "status": "passed",
+          "method": "tool-data",
+          "attempts": 1,
+          "judgments": [
+            {
+              "claimId": 1,
+              "supported": true,
+              "reason": "Точный текст источника MCP; цитаты проверены кодом."
+            },
+            {
+              "claimId": 2,
+              "supported": true,
+              "reason": "Точный текст источника MCP; цитаты проверены кодом."
+            },
+            {
+              "claimId": 3,
+              "supported": true,
+              "reason": "Точный текст источника MCP; цитаты проверены кодом."
+            }
+          ],
+          "taskCheck": {
+            "goalAligned": true,
+            "constraintsRespected": true,
+            "answersQuestion": true,
+            "reason": "Сценарий перечисления Git-веток; имена и счётчики скопированы из MCP с явным ограничением области и полноты."
+          }
+        },
+        "retrievedDocuments": [],
+        "mcpTools": [
+          "get_git_branch",
+          "list_project_files",
+          "get_git_diff",
+          "list_git_branches"
+        ],
+        "branchInventory": {
+          "localTotal": 1,
+          "remoteTotal": 35,
+          "missingBranches": []
+        }
+      },
+      {
+        "question": "Какой стек использует MyFamily, какая минимальная iOS, где точка входа и какая сейчас git-ветка?",
+        "passed": true,
+        "missing": [],
+        "missingSources": [],
+        "expected": "answered",
+        "status": "answered",
+        "model": "deepseek-v4-flash",
+        "durationMs": 10804,
+        "answer": "MyFamily использует Swift, UIKit, Combine, MVVM и Coordinator. [1]\n\nМинимальная версия iOS — 15.0. [2]\n\nМанифесты Swift Package Manager используют Swift tools 5.7. [3]\n\nТочка входа — `@main AppDelegate` в `XcodeProject/App/Source/Infrastructure/AppDelegate.swift`. [4]\n\nПри запуске AppDelegate включает WebP coder и менеджер клавиатуры, затем вызывает `appCoordinator.start()`. [5]\n\nТекущая git-ветка — main, commit 7af9ed6878bc699359eb9cdb67162303c0739584, detached=false. [6]",
+        "citations": [
+          {
+            "id": 1,
+            "source": "project/docs/project-architecture.md",
+            "section": "Технологии и слои",
+            "chunkId": "structured-d2adedba3efcef7c",
+            "quote": "MyFamily использует Swift, UIKit, Combine, MVVM и Coordinator."
+          },
+          {
+            "id": 2,
+            "source": "project/docs/project-architecture.md",
+            "section": "Технологии и слои",
+            "chunkId": "structured-d2adedba3efcef7c",
+            "quote": "Минимальная версия iOS — 15.0."
+          },
+          {
+            "id": 3,
+            "source": "project/docs/project-architecture.md",
+            "section": "Технологии и слои",
+            "chunkId": "structured-d2adedba3efcef7c",
+            "quote": "Манифесты Swift Package Manager используют Swift tools 5.7."
+          },
+          {
+            "id": 4,
+            "source": "project/docs/project-architecture.md",
+            "section": "Точки входа и зависимости",
+            "chunkId": "structured-33837d02a6084cfc",
+            "quote": "Точка входа — `@main AppDelegate` в `XcodeProject/App/Source/Infrastructure/AppDelegate.swift`."
+          },
+          {
+            "id": 5,
+            "source": "project/docs/project-architecture.md",
+            "section": "Точки входа и зависимости",
+            "chunkId": "structured-33837d02a6084cfc",
+            "quote": "При запуске AppDelegate включает WebP coder и менеджер клавиатуры, затем вызывает `appCoordinator.start()`."
+          },
+          {
+            "id": 6,
+            "source": "mcp://project/get_git_branch",
+            "section": "get_git_branch",
+            "chunkId": "mcp-get_git_branch",
+            "quote": "\"branch\": \"main\",\n  \"commit\": \"7af9ed6878bc699359eb9cdb67162303c0739584\",\n  \"detached\": false"
+          }
+        ],
+        "verification": {
+          "status": "passed",
+          "attempts": 1,
+          "judgments": [
+            {
+              "claimId": 1,
+              "supported": true,
+              "reason": "Цитата дословно подтверждает утверждение."
+            },
+            {
+              "claimId": 2,
+              "supported": true,
+              "reason": "Цитата дословно подтверждает утверждение."
+            },
+            {
+              "claimId": 3,
+              "supported": true,
+              "reason": "Цитата дословно подтверждает утверждение."
+            },
+            {
+              "claimId": 4,
+              "supported": true,
+              "reason": "Цитата дословно подтверждает утверждение."
+            },
+            {
+              "claimId": 5,
+              "supported": true,
+              "reason": "Цитата дословно подтверждает утверждение."
+            },
+            {
+              "claimId": 6,
+              "supported": true,
+              "reason": "Цитата из get_git_branch подтверждает ветку, commit и detached=false."
+            }
+          ],
+          "taskCheck": {
+            "goalAligned": true,
+            "constraintsRespected": true,
+            "answersQuestion": true,
+            "reason": "Ответ покрывает все части вопроса: стек, минимальная iOS, точка входа и текущая git-ветка; лишние детали не противоречат запросу."
+          }
+        },
+        "retrievedDocuments": [
+          {
+            "source": "project/docs/project-architecture.md",
+            "section": "Технологии и слои",
+            "score": 0.6014766829363666
+          },
+          {
+            "source": "project/docs/project-architecture.md",
+            "section": "Точки входа и зависимости",
+            "score": 0.5736819287100903
+          },
+          {
+            "source": "README.md",
+            "section": "MyFamily",
+            "score": 0.684396260935601
+          },
+          {
+            "source": "README.md",
+            "section": "Быстрый старт",
+            "score": 0.49814464594807606
+          }
+        ],
+        "mcpTools": [
+          "get_git_branch",
+          "list_project_files",
+          "get_git_diff",
+          "list_git_branches"
+        ]
+      },
+      {
+        "question": "Как связаны App, UmbrellaPackage и AppModulesPackage и где находится контейнер зависимостей?",
+        "passed": true,
+        "missing": [],
+        "missingSources": [],
+        "expected": "answered",
+        "status": "answered",
+        "model": "deepseek-v4-flash",
+        "durationMs": 11012,
+        "answer": "App зависит от UmbrellaPackage, а UmbrellaPackage — от AppModulesPackage. [1]\n\nAppModulesPackage зависит от внешних зависимостей. [2]\n\nЗависимые модули предоставляются пакетом AppModulesPackage, который включён в проект через пакет UmbrellaPackage. [3]\n\nUmbrellaPackage объединяет девять внутренних модулей в одну библиотеку для приложения. [4]\n\nКонтейнер зависимостей AppContainer находится в XcodeProject/App/Source/Infrastructure/. [5]",
+        "citations": [
+          {
+            "id": 1,
+            "source": "Docs/Architecture.md",
+            "section": "Overview",
+            "chunkId": "structured-85c4042a1963cfc6",
+            "quote": "App --> UmbrellaPackage\n    App -. Implicitly .-> AppModulesPackage\n    UmbrellaPackage --> AppModulesPackage"
+          },
+          {
+            "id": 2,
+            "source": "Docs/Architecture.md",
+            "section": "Overview",
+            "chunkId": "structured-85c4042a1963cfc6",
+            "quote": "AppModulesPackage --> ExternalDependencies"
+          },
+          {
+            "id": 3,
+            "source": "Docs/Architecture.md",
+            "section": "Modules",
+            "chunkId": "structured-1f27ac2d0cc73919",
+            "quote": "Dependent modules are provided by `AppModulesPackage` swift package which is included to project through `UmbrellaPackage` swift package to avoid SPM xcode configuration and have single static library as dependency artefact."
+          },
+          {
+            "id": 4,
+            "source": "project/docs/project-architecture.md",
+            "section": "Технологии и слои",
+            "chunkId": "structured-d2adedba3efcef7c",
+            "quote": "UmbrellaPackage объединяет девять внутренних модулей в одну библиотеку для приложения."
+          },
+          {
+            "id": 5,
+            "source": "README.md",
+            "section": "Структура",
+            "chunkId": "structured-65940df0faaee866",
+            "quote": "- `XcodeProject/App/Source/Infrastructure/` — `AppDelegate`, корневой `AppCoordinator` и контейнер зависимостей `AppContainer`."
+          }
+        ],
+        "verification": {
+          "status": "passed",
+          "attempts": 1,
+          "judgments": [
+            {
+              "claimId": 1,
+              "supported": true,
+              "reason": "Цитата 1 явно показывает App --> UmbrellaPackage и UmbrellaPackage --> AppModulesPackage, что соответствует утверждению."
+            },
+            {
+              "claimId": 2,
+              "supported": true,
+              "reason": "Цитата 2 показывает AppModulesPackage --> ExternalDependencies, что означает зависимость от внешних зависимостей."
+            },
+            {
+              "claimId": 3,
+              "supported": true,
+              "reason": "Цитата 3 дословно подтверждает, что зависимые модули предоставляются AppModulesPackage, включённым через UmbrellaPackage."
+            },
+            {
+              "claimId": 4,
+              "supported": true,
+              "reason": "Цитата 4 дословно утверждает, что UmbrellaPackage объединяет девять внутренних модулей в одну библиотеку для приложения."
+            },
+            {
+              "claimId": 5,
+              "supported": true,
+              "reason": "Цитата 5 указывает, что в XcodeProject/App/Source/Infrastructure/ находится контейнер зависимостей AppContainer."
+            }
+          ],
+          "taskCheck": {
+            "goalAligned": true,
+            "constraintsRespected": true,
+            "answersQuestion": true,
+            "reason": "Ответ описывает связи App, UmbrellaPackage и AppModulesPackage и указывает расположение контейнера зависимостей AppContainer, полностью отвечая на вопрос."
+          }
+        },
+        "retrievedDocuments": [
+          {
+            "source": "Docs/Architecture.md",
+            "section": "Overview",
+            "score": 0.5494670900426932
+          },
+          {
+            "source": "Docs/Architecture.md",
+            "section": "Modules",
+            "score": 0.5945539096371887
+          },
+          {
+            "source": "project/docs/project-architecture.md",
+            "section": "Технологии и слои",
+            "score": 0.5253555397895701
+          },
+          {
+            "source": "README.md",
+            "section": "Структура",
+            "score": 0.48642863528990676
+          }
+        ],
+        "mcpTools": [
+          "get_git_branch",
+          "list_project_files",
+          "get_git_diff",
+          "list_git_branches"
+        ]
+      },
+      {
+        "question": "Какие HTTP-метод, путь и параметры использует обновление токена авторизации?",
+        "passed": true,
+        "missing": [],
+        "missingSources": [],
+        "expected": "answered",
+        "status": "answered",
+        "model": "deepseek-v4-flash",
+        "durationMs": 10953,
+        "answer": "Обновление токена выполняется методом POST по пути /auth/refresh-token. [1]\n\nВ теле запроса обновления токена передаются параметры uuid и refreshToken. [1]\n\nПоле refreshToken передаётся вместе с uuid. [2]\n\nВ OpenAPI-описании для /auth/refresh-token указан requestBody с обязательными свойствами uuid и refreshToken типа string. [3]\n\nМетод фабрики для обновления токена — refreshToken(uuid:refreshToken:). [1]",
+        "citations": [
+          {
+            "id": 1,
+            "source": "project/docs/client-api.md",
+            "section": "Авторизация",
+            "chunkId": "structured-448a234b94c6a36f",
+            "quote": "| POST | /auth/refresh-token | uuid, refreshToken | refreshToken(uuid:refreshToken:) |"
+          },
+          {
+            "id": 2,
+            "source": "project/docs/client-api.md",
+            "section": "Авторизация",
+            "chunkId": "structured-448a234b94c6a36f",
+            "quote": "Endpoint для обновления токена — именно POST /auth/refresh-token; поле refreshToken передаётся вместе с uuid."
+          },
+          {
+            "id": 3,
+            "source": "project/docs/api/openapi.json",
+            "section": "openapi",
+            "chunkId": "structured-86757caf5ee76f5e",
+            "quote": "\"uuid\": {\n                    \"type\": \"string\"\n                  },\n                  \"refreshToken\": {\n                    \"type\": \"string\"\n                  }\n                },\n                \"required\": [\n                  \"uuid\",\n                  \"refreshToken\"\n                ]"
+          }
+        ],
+        "verification": {
+          "status": "passed",
+          "attempts": 1,
+          "judgments": [
+            {
+              "claimId": 1,
+              "supported": true,
+              "reason": "Цитата 1 явно указывает метод POST и путь /auth/refresh-token."
+            },
+            {
+              "claimId": 2,
+              "supported": true,
+              "reason": "Цитата 1 перечисляет параметры uuid и refreshToken для этого запроса."
+            },
+            {
+              "claimId": 3,
+              "supported": true,
+              "reason": "Цитата 2 прямо утверждает, что refreshToken передаётся вместе с uuid."
+            },
+            {
+              "claimId": 4,
+              "supported": true,
+              "reason": "Цитата 3 показывает requestBody со свойствами uuid и refreshToken типа string и оба в required."
+            },
+            {
+              "claimId": 5,
+              "supported": true,
+              "reason": "Цитата 1 содержит метод фабрики refreshToken(uuid:refreshToken:)."
+            }
+          ],
+          "taskCheck": {
+            "goalAligned": true,
+            "constraintsRespected": true,
+            "answersQuestion": true,
+            "reason": "Ответ полностью описывает HTTP-метод, путь и параметры обновления токена, все утверждения подтверждены цитатами."
+          }
+        },
+        "retrievedDocuments": [
+          {
+            "source": "project/docs/client-api.md",
+            "section": "Авторизация",
+            "score": 0.575918124225348
+          },
+          {
+            "source": "project/docs/api/openapi.json",
+            "section": "openapi",
+            "score": 0.4313227374627244
+          },
+          {
+            "source": "project/docs/api/openapi.json",
+            "section": "openapi",
+            "score": 0.37892727037264917
+          },
+          {
+            "source": "project/docs/client-api.md",
+            "section": "Где искать код",
+            "score": 0.44363286857127104
+          }
+        ],
+        "mcpTools": [
+          "get_git_branch",
+          "list_project_files",
+          "get_git_diff",
+          "list_git_branches"
+        ]
+      },
+      {
+        "question": "Где AppAuthService хранит Credentials, как проверяет авторизованность и какие поля нужны для заполненного профиля?",
+        "passed": true,
+        "missing": [],
+        "missingSources": [],
+        "expected": "answered",
+        "status": "answered",
+        "model": "deepseek-v4-flash",
+        "durationMs": 10401,
+        "answer": "AppAuthService сохраняет Account, Credentials и deviceId через DefaultsStorage. [1]\n\nCredentials сейчас хранятся в DefaultsStorage/UserDefaults. [2]\n\nВ saveCredentials есть комментарий IMPLEMENT: Replace with secure storage; Keychain для этого пути не реализован. [3]\n\nВ AppAuthService hasAuthorizedUser проверяет наличие credentials и условие expirationDate > Date(). [4]\n\nhasFilledProfile требует непустые firstName, lastName и displayName профиля. [5]",
+        "citations": [
+          {
+            "id": 1,
+            "source": "project/docs/data-models.md",
+            "section": "Хранилища и авторизация",
+            "chunkId": "structured-508da0e30987fc72",
+            "quote": "AppAuthService сохраняет Account, Credentials и deviceId через DefaultsStorage."
+          },
+          {
+            "id": 2,
+            "source": "project/docs/data-models.md",
+            "section": "Хранилища и авторизация",
+            "chunkId": "structured-508da0e30987fc72",
+            "quote": "Credentials сейчас хранятся в DefaultsStorage/UserDefaults."
+          },
+          {
+            "id": 3,
+            "source": "project/docs/data-models.md",
+            "section": "Хранилища и авторизация",
+            "chunkId": "structured-508da0e30987fc72",
+            "quote": "В saveCredentials есть комментарий IMPLEMENT: Replace with secure storage; Keychain для этого пути не реализован."
+          },
+          {
+            "id": 4,
+            "source": "project/docs/data-models.md",
+            "section": "Хранилища и авторизация",
+            "chunkId": "structured-508da0e30987fc72",
+            "quote": "В AppAuthService hasAuthorizedUser проверяет наличие credentials и условие expirationDate > Date()."
+          },
+          {
+            "id": 5,
+            "source": "project/docs/data-models.md",
+            "section": "Хранилища и авторизация",
+            "chunkId": "structured-508da0e30987fc72",
+            "quote": "hasFilledProfile требует непустые firstName, lastName и displayName профиля."
+          }
+        ],
+        "verification": {
+          "status": "passed",
+          "attempts": 1,
+          "judgments": [
+            {
+              "claimId": 1,
+              "supported": true,
+              "reason": "Цитата 1 дословно подтверждает утверждение."
+            },
+            {
+              "claimId": 2,
+              "supported": true,
+              "reason": "Цитата 2 дословно подтверждает утверждение."
+            },
+            {
+              "claimId": 3,
+              "supported": true,
+              "reason": "Цитата 3 дословно подтверждает утверждение."
+            },
+            {
+              "claimId": 4,
+              "supported": true,
+              "reason": "Цитата 4 дословно подтверждает утверждение."
+            },
+            {
+              "claimId": 5,
+              "supported": true,
+              "reason": "Цитата 5 дословно подтверждает утверждение."
+            }
+          ],
+          "taskCheck": {
+            "goalAligned": true,
+            "constraintsRespected": true,
+            "answersQuestion": true,
+            "reason": "Ответ охватывает все три части вопроса: где хранятся Credentials, как проверяется авторизованность и какие поля нужны для заполненного профиля; утверждения подтверждены цитатами."
+          }
+        },
+        "retrievedDocuments": [
+          {
+            "source": "project/docs/data-models.md",
+            "section": "Хранилища и авторизация",
+            "score": 0.6481386036684497
+          },
+          {
+            "source": "project/docs/data-models.md",
+            "section": "Доменные модели AppEntities",
+            "score": 0.5230254839652759
+          },
+          {
+            "source": "project/docs/data-models.md",
+            "section": "Сетевые payload и преобразование",
+            "score": 0.5108954684798597
+          },
+          {
+            "source": "project/docs/project-architecture.md",
+            "section": "Точки входа и зависимости",
+            "score": 0.4943944250656758
+          }
+        ],
+        "mcpTools": [
+          "get_git_branch",
+          "list_project_files",
+          "get_git_diff",
+          "list_git_branches"
+        ]
+      },
+      {
+        "question": "Реализованы ли полноценные Home, Store, Profile и переход после ввода телефона в SignInCoordinator?",
+        "passed": true,
+        "missing": [],
+        "missingSources": [],
+        "expected": "answered",
+        "status": "answered",
+        "model": "deepseek-v4-flash",
+        "durationMs": 11877,
+        "answer": "Home, Store и Profile в HomeCoordinator представлены тремя заглушками TitleStubViewController, а не завершёнными экранами. [1]\n\nВ README указано, что главный экран, магазин, профиль, создание профиля и onboarding содержат заглушки. [2]\n\nВ HomeFlow описан tab bar с тремя экранами-заглушками Home, Store и Profile. [3]\n\nВ SignInCoordinator обработчик события `.continue` только печатает `succes`, а экран ввода SMS и отправка `.finish(authState:)` не реализованы. [4]\n\nПолного перехода после SMS в текущем checkout нет: обработчик `.continue` внутри SignInCoordinator только печатает `succes`. [5]\n\nИнфраструктура запроса confirm присутствует в SignInInteractor и AuthService отдельно от UI-перехода. [6]",
+        "citations": [
+          {
+            "id": 1,
+            "source": "project/docs/implementation-status.md",
+            "section": "Где используются заглушки",
+            "chunkId": "structured-b07822005663da5b",
+            "quote": "HomeCoordinator создаёт UITabBarController с тремя TitleStubViewController: Home Screen, Store Screen и My Profile Screen. Профиль и магазин не являются завершёнными пользовательскими экранами."
+          },
+          {
+            "id": 2,
+            "source": "README.md",
+            "section": "MyFamily",
+            "chunkId": "structured-adfa33544c74bc46",
+            "quote": "Главный экран, магазин, профиль, создание профиля и onboarding содержат заглушки; готовые семейные функции из названия репозитория не следуют."
+          },
+          {
+            "id": 3,
+            "source": "project/docs/project-architecture.md",
+            "section": "Модули",
+            "chunkId": "structured-935935867f816aea",
+            "quote": "| HomeFlow | Tab bar с тремя экранами-заглушками Home, Store и Profile. |"
+          },
+          {
+            "id": 4,
+            "source": "project/docs/implementation-status.md",
+            "section": "Где используются заглушки",
+            "chunkId": "structured-b07822005663da5b",
+            "quote": "В SignInViewModel успешный запрос SMS отправляет событие `.continue`. SignInCoordinator обрабатывает его только `print(\"succes\")`. Экран ввода SMS и отправка события `.finish(authState:)` в этом обработчике не реализованы; полный сценарий авторизации до HomeFlow не завершён."
+          },
+          {
+            "id": 5,
+            "source": "project/docs/project-architecture.md",
+            "section": "Навигация",
+            "chunkId": "structured-160664d621555e43",
+            "quote": "Завершение signIn/signUp предусмотрено в корневом координаторе, но текущий обработчик `.continue` внутри SignInCoordinator только печатает `succes`; полного перехода после SMS в этом checkout нет."
+          },
+          {
+            "id": 6,
+            "source": "project/docs/implementation-status.md",
+            "section": "Где используются заглушки",
+            "chunkId": "structured-b07822005663da5b",
+            "quote": "В SignInInteractor и AuthService при этом есть методы confirm — инфраструктура запроса присутствует отдельно от UI-перехода."
+          }
+        ],
+        "verification": {
+          "status": "passed",
+          "attempts": 1,
+          "judgments": [
+            {
+              "claimId": 1,
+              "supported": true,
+              "reason": "Цитата прямо подтверждает три TitleStubViewController для Home, Store и My Profile и что профиль и магазин не завершённые экраны."
+            },
+            {
+              "claimId": 2,
+              "supported": true,
+              "reason": "Цитата README прямо перечисляет главный экран, магазин, профиль, создание профиля и onboarding как содержащие заглушки."
+            },
+            {
+              "claimId": 3,
+              "supported": true,
+              "reason": "Цитата из project-architecture.md прямо описывает HomeFlow как tab bar с тремя экранами-заглушками Home, Store и Profile."
+            },
+            {
+              "claimId": 4,
+              "supported": true,
+              "reason": "Цитата подтверждает, что обработчик .continue только печатает succes, а экран ввода SMS и отправка .finish(authState:) не реализованы."
+            },
+            {
+              "claimId": 5,
+              "supported": true,
+              "reason": "Цитата прямо утверждает отсутствие полного перехода после SMS в checkout и что .continue только печатает succes."
+            },
+            {
+              "claimId": 6,
+              "supported": true,
+              "reason": "Цитата подтверждает наличие методов confirm в SignInInteractor и AuthService отдельно от UI-перехода."
+            }
+          ],
+          "taskCheck": {
+            "goalAligned": true,
+            "constraintsRespected": true,
+            "answersQuestion": true,
+            "reason": "Ответ прямо отвечает на вопрос: Home, Store и Profile — заглушки, а полного перехода после ввода телефона/SMS в SignInCoordinator нет; все утверждения подтверждены цитатами."
+          }
+        },
+        "retrievedDocuments": [
+          {
+            "source": "project/docs/implementation-status.md",
+            "section": "Где используются заглушки",
+            "score": 0.6204545772768081
+          },
+          {
+            "source": "project/docs/project-architecture.md",
+            "section": "Навигация",
+            "score": 0.5809086758975631
+          },
+          {
+            "source": "README.md",
+            "section": "MyFamily",
+            "score": 0.41091496129919564
+          },
+          {
+            "source": "project/docs/project-architecture.md",
+            "section": "Модули",
+            "score": 0.48137486600435664
+          }
+        ],
+        "mcpTools": [
+          "get_git_branch",
+          "list_project_files",
+          "get_git_diff",
+          "list_git_branches"
+        ]
+      },
+      {
+        "question": "Какой точный production SLA и пароль базы PostgreSQL используются у MyFamily?",
+        "passed": true,
+        "missing": [],
+        "missingSources": [],
+        "expected": "unknown",
+        "status": "unknown",
+        "model": "deepseek-v4-flash",
+        "durationMs": 7578,
+        "answer": "Не знаю: в найденных документах недостаточно подтверждённых сведений для ответа.",
+        "citations": [],
+        "verification": {
+          "status": "abstained",
+          "attempts": 1,
+          "judgments": []
+        },
+        "retrievedDocuments": [
+          {
+            "source": "project/docs/client-api.md",
+            "section": "Ответы и ограничения контракта",
+            "score": 0.47671332793242166
+          },
+          {
+            "source": "project/docs/setup.md",
+            "section": "Схемы и конфигурации",
+            "score": 0.4552855182698303
+          },
+          {
+            "source": "project/docs/data-models.md",
+            "section": "Хранилища и авторизация",
+            "score": 0.43531973386649436
+          },
+          {
+            "source": "project/docs/implementation-status.md",
+            "section": "Обнаруженные пробелы перед сборкой",
+            "score": 0.4320987374052502
+          }
+        ],
+        "mcpTools": [
+          "get_git_branch",
+          "list_project_files",
+          "get_git_diff",
+          "list_git_branches"
+        ]
+      }
+    ]
+  },
+  "previousGuardedRegression": {
+    "createdAt": "2026-10-16T07:59:13.361Z",
+    "provider": "cloud",
+    "projectId": "myfamily",
+    "indexRunId": "442e1170-4fdc-4d23-aa8e-176851e82858",
+    "branchDataTransmission": "none; request guard rejects branch inventory in model sources",
+    "results": [
+      {
+        "question": "какие есть ветки в репозитории",
+        "passed": true,
+        "missing": [],
+        "missingBranches": [],
+        "status": "answered",
+        "model": "deepseek-v4-flash",
+        "durationMs": 1499,
+        "answer": "Локальные ветки: показано 1, всего 1; список полный.\n- main [1]\n\nИзвестные удалённые ветки: показано 35, всего 35; список полный.\n- origin/Feature/Families\n- origin/Feature/NeuralChecking\n- origin/Feature/deletingPosts\n- origin/bugfix/freezes\n- origin/bugfix/news-screen-broken-layout\n- origin/bugfix/swiftdata-crashes\n- origin/develop\n- origin/feature/add-post\n- origin/feature/audio-video-cache\n- origin/feature/comments-in-posts\n- origin/feature/crashlytics\n- origin/feature/date-date-for-ui\n- origin/feature/donate\n- origin/feature/edit-profile\n- origin/feature/family-screen\n- origin/feature/family-screen-mock-removing\n- origin/feature/firebase-client\n- origin/feature/geolocation\n- origin/feature/map-screen\n- origin/feature/map-screen-mock-removing\n- origin/feature/network-errors-handling\n- origin/feature/news-screen-layout\n- origin/feature/news-screen-mock-removing\n- origin/feature/post-screen-mock-removing\n- origin/feature/profile-screen\n- origin/feature/profile-screen-mock-removing\n- origin/feature/profile-shortcut\n- origin/feature/push-notifications\n- origin/feature/share-posts\n- origin/feature/sign-in-screen-layout\n- origin/feature/swift-data\n- origin/feature/tabbar-configuration\n- origin/feature/vk-id\n- origin/main\n- origin/refactor/global-refactoring [2][3]\n\nУдалённые ветки — remote-tracking refs локальной копии Git. Fetch и запрос к серверу не выполнялись; список на сервере мог измениться. Символические указатели вроде origin/HEAD не являются отдельными ветками. [4]",
+        "citations": [
+          {
+            "id": 1,
+            "source": "mcp://project/list_git_branches",
+            "section": "list_git_branches",
+            "chunkId": "mcp-list_git_branches",
+            "quote": "Локальные ветки: показано 1, всего 1; список полный.\n- main"
+          },
+          {
+            "id": 2,
+            "source": "mcp://project/list_git_branches",
+            "section": "list_git_branches",
+            "chunkId": "mcp-list_git_branches",
+            "quote": "Известные удалённые ветки: показано 35, всего 35; список полный.\n- origin/Feature/Families\n- origin/Feature/NeuralChecking\n- origin/Feature/deletingPosts\n- origin/bugfix/freezes\n- origin/bugfix/news-screen-broken-layout\n- origin/bugfix/swiftdata-crashes\n- origin/develop\n- origin/feature/add-post\n- origin/feature/audio-video-cache\n- origin/feature/comments-in-posts\n- origin/feature/crashlytics\n- origin/feature/date-date-for-ui\n- origin/feature/donate\n- origin/feature/edit-profile\n- origin/feature/family-screen\n- origin/feature/family-screen-mock-removing\n- origin/feature/firebase-client\n- origin/feature/geolocation\n- origin/feature/map-screen\n- origin/feature/map-screen-mock-removing\n- origin/feature/network-errors-handling\n- origin/feature/news-screen-layout\n- origin/feature/news-screen-mock-removing\n- origin/feature/post-screen-mock-removing\n- origin/feature/profile-screen\n- origin/feature/profile-screen-mock-removing\n- origin/feature/profile-shortcut\n- origin/feature/push-notifications\n- origin/feature/share-posts\n- origin/feature/sign-in-screen-layout\n- origin/feature/swift-data"
+          },
+          {
+            "id": 3,
+            "source": "mcp://project/list_git_branches",
+            "section": "list_git_branches",
+            "chunkId": "mcp-list_git_branches",
+            "quote": "- origin/feature/tabbar-configuration\n- origin/feature/vk-id\n- origin/main\n- origin/refactor/global-refactoring"
+          },
+          {
+            "id": 4,
+            "source": "mcp://project/list_git_branches",
+            "section": "list_git_branches",
+            "chunkId": "mcp-list_git_branches",
+            "quote": "Удалённые ветки — remote-tracking refs локальной копии Git. Fetch и запрос к серверу не выполнялись; список на сервере мог измениться. Символические указатели вроде origin/HEAD не являются отдельными ветками."
+          }
+        ],
+        "verification": {
+          "status": "passed",
+          "method": "tool-data",
+          "attempts": 1,
+          "judgments": [
+            {
+              "claimId": 1,
+              "supported": true,
+              "reason": "Точный текст источника MCP; цитаты проверены кодом."
+            },
+            {
+              "claimId": 2,
+              "supported": true,
+              "reason": "Точный текст источника MCP; цитаты проверены кодом."
+            },
+            {
+              "claimId": 3,
+              "supported": true,
+              "reason": "Точный текст источника MCP; цитаты проверены кодом."
+            }
+          ],
+          "taskCheck": {
+            "goalAligned": true,
+            "constraintsRespected": true,
+            "answersQuestion": true,
+            "reason": "Сценарий перечисления Git-веток; имена и счётчики скопированы из MCP с явным ограничением области и полноты."
+          }
+        },
+        "mcpTools": [
+          "get_git_branch",
+          "list_project_files",
+          "get_git_diff",
+          "list_git_branches"
+        ],
+        "branchInventory": {
+          "localTotal": 1,
+          "remoteTotal": 35
+        }
+      },
+      {
+        "question": "Какой стек использует MyFamily, какая минимальная iOS, где точка входа и какая сейчас git-ветка?",
+        "passed": true,
+        "missing": [],
+        "missingBranches": [],
+        "status": "answered",
+        "model": "deepseek-v4-flash",
+        "durationMs": 12075,
+        "answer": "MyFamily использует Swift, UIKit, Combine, MVVM и Coordinator. [1]\n\nМинимальная версия iOS — 15.0. [2]\n\nМанифесты Swift Package Manager используют Swift tools 5.7. [3]\n\nТочка входа — `@main AppDelegate` в `XcodeProject/App/Source/Infrastructure/AppDelegate.swift`. [4]\n\nПри запуске AppDelegate включает WebP coder и менеджер клавиатуры, затем вызывает `appCoordinator.start()`. [5]\n\nТекущая git-ветка — main. [6]",
+        "citations": [
+          {
+            "id": 1,
+            "source": "project/docs/project-architecture.md",
+            "section": "Технологии и слои",
+            "chunkId": "structured-d2adedba3efcef7c",
+            "quote": "MyFamily использует Swift, UIKit, Combine, MVVM и Coordinator."
+          },
+          {
+            "id": 2,
+            "source": "project/docs/project-architecture.md",
+            "section": "Технологии и слои",
+            "chunkId": "structured-d2adedba3efcef7c",
+            "quote": "Минимальная версия iOS — 15.0."
+          },
+          {
+            "id": 3,
+            "source": "project/docs/project-architecture.md",
+            "section": "Технологии и слои",
+            "chunkId": "structured-d2adedba3efcef7c",
+            "quote": "Манифесты Swift Package Manager используют Swift tools 5.7."
+          },
+          {
+            "id": 4,
+            "source": "project/docs/project-architecture.md",
+            "section": "Точки входа и зависимости",
+            "chunkId": "structured-33837d02a6084cfc",
+            "quote": "Точка входа — `@main AppDelegate` в `XcodeProject/App/Source/Infrastructure/AppDelegate.swift`."
+          },
+          {
+            "id": 5,
+            "source": "project/docs/project-architecture.md",
+            "section": "Точки входа и зависимости",
+            "chunkId": "structured-33837d02a6084cfc",
+            "quote": "При запуске AppDelegate включает WebP coder и менеджер клавиатуры, затем вызывает `appCoordinator.start()`."
+          },
+          {
+            "id": 6,
+            "source": "mcp://project/get_git_branch",
+            "section": "get_git_branch",
+            "chunkId": "mcp-get_git_branch",
+            "quote": "\"branch\": \"main\""
+          }
+        ],
+        "verification": {
+          "status": "passed",
+          "attempts": 1,
+          "judgments": [
+            {
+              "claimId": 1,
+              "supported": true,
+              "reason": "Цитата дословно подтверждает утверждение."
+            },
+            {
+              "claimId": 2,
+              "supported": true,
+              "reason": "Цитата дословно подтверждает утверждение."
+            },
+            {
+              "claimId": 3,
+              "supported": true,
+              "reason": "Цитата дословно подтверждает утверждение."
+            },
+            {
+              "claimId": 4,
+              "supported": true,
+              "reason": "Цитата дословно подтверждает утверждение."
+            },
+            {
+              "claimId": 5,
+              "supported": true,
+              "reason": "Цитата дословно подтверждает утверждение."
+            },
+            {
+              "claimId": 6,
+              "supported": true,
+              "reason": "Цитата из get_git_branch указывает branch: main."
+            }
+          ],
+          "taskCheck": {
+            "goalAligned": true,
+            "constraintsRespected": true,
+            "answersQuestion": true,
+            "reason": "Ответ покрывает все части вопроса: стек, минимальная iOS, точка входа и текущая git-ветка; утверждения подтверждены цитатами."
+          }
+        },
+        "mcpTools": [
+          "get_git_branch",
+          "list_project_files",
+          "get_git_diff",
+          "list_git_branches"
+        ]
+      },
+      {
+        "question": "Как связаны App, UmbrellaPackage и AppModulesPackage и где находится контейнер зависимостей?",
+        "passed": true,
+        "missing": [],
+        "missingBranches": [],
+        "status": "answered",
+        "model": "deepseek-v4-flash",
+        "durationMs": 10958,
+        "answer": "App зависит от UmbrellaPackage, а UmbrellaPackage — от AppModulesPackage. [1]\n\nAppModulesPackage зависит от внешних зависимостей. [2]\n\nUmbrellaPackage объединяет девять внутренних модулей в одну библиотеку для приложения. [3]\n\nЗависимые модули предоставляются пакетом AppModulesPackage, который включён в проект через пакет UmbrellaPackage. [4]\n\nКонтейнер зависимостей AppContainer находится в XcodeProject/App/Source/Infrastructure/. [5]",
+        "citations": [
+          {
+            "id": 1,
+            "source": "Docs/Architecture.md",
+            "section": "Overview",
+            "chunkId": "structured-85c4042a1963cfc6",
+            "quote": "App --> UmbrellaPackage\n    App -. Implicitly .-> AppModulesPackage\n    UmbrellaPackage --> AppModulesPackage"
+          },
+          {
+            "id": 2,
+            "source": "Docs/Architecture.md",
+            "section": "Overview",
+            "chunkId": "structured-85c4042a1963cfc6",
+            "quote": "AppModulesPackage --> ExternalDependencies"
+          },
+          {
+            "id": 3,
+            "source": "project/docs/project-architecture.md",
+            "section": "Технологии и слои",
+            "chunkId": "structured-d2adedba3efcef7c",
+            "quote": "UmbrellaPackage объединяет девять внутренних модулей в одну библиотеку для приложения."
+          },
+          {
+            "id": 4,
+            "source": "Docs/Architecture.md",
+            "section": "Modules",
+            "chunkId": "structured-1f27ac2d0cc73919",
+            "quote": "Dependent modules are provided by `AppModulesPackage` swift package which is included to project through `UmbrellaPackage` swift package to avoid SPM xcode configuration and have single static library as dependency artefact."
+          },
+          {
+            "id": 5,
+            "source": "README.md",
+            "section": "Структура",
+            "chunkId": "structured-65940df0faaee866",
+            "quote": "- `XcodeProject/App/Source/Infrastructure/` — `AppDelegate`, корневой `AppCoordinator` и контейнер зависимостей `AppContainer`."
+          }
+        ],
+        "verification": {
+          "status": "passed",
+          "attempts": 1,
+          "judgments": [
+            {
+              "claimId": 1,
+              "supported": true,
+              "reason": "Цитата явно показывает App --> UmbrellaPackage и UmbrellaPackage --> AppModulesPackage."
+            },
+            {
+              "claimId": 2,
+              "supported": true,
+              "reason": "Цитата явно показывает AppModulesPackage --> ExternalDependencies."
+            },
+            {
+              "claimId": 3,
+              "supported": true,
+              "reason": "Цитата дословно подтверждает объединение девяти внутренних модулей в одну библиотеку."
+            },
+            {
+              "claimId": 4,
+              "supported": true,
+              "reason": "Цитата подтверждает, что AppModulesPackage включён в проект через UmbrellaPackage."
+            },
+            {
+              "claimId": 5,
+              "supported": true,
+              "reason": "Цитата подтверждает нахождение AppContainer в XcodeProject/App/Source/Infrastructure/."
+            }
+          ],
+          "taskCheck": {
+            "goalAligned": true,
+            "constraintsRespected": true,
+            "answersQuestion": true,
+            "reason": "Ответ описывает связи App, UmbrellaPackage и AppModulesPackage и указывает расположение контейнера зависимостей AppContainer."
+          }
+        },
+        "mcpTools": [
+          "get_git_branch",
+          "list_project_files",
+          "get_git_diff",
+          "list_git_branches"
+        ]
+      },
+      {
+        "question": "Какие HTTP-метод, путь и параметры использует обновление токена авторизации?",
+        "passed": true,
+        "missing": [],
+        "missingBranches": [],
+        "status": "answered",
+        "model": "deepseek-v4-flash",
+        "durationMs": 11323,
+        "answer": "Обновление токена выполняется методом POST по пути /auth/refresh-token. [1]\n\nПараметрами обновления токена являются uuid и refreshToken. [1]\n\nПоле refreshToken передаётся вместе с uuid. [2]\n\nВ OpenAPI-описании для /auth/refresh-token указан POST с телом запроса application/json, содержащим обязательные свойства uuid и refreshToken. [3][4]\n\nМетод фабрики для обновления токена — refreshToken(uuid:refreshToken:). [1]",
+        "citations": [
+          {
+            "id": 1,
+            "source": "project/docs/client-api.md",
+            "section": "Авторизация",
+            "chunkId": "structured-448a234b94c6a36f",
+            "quote": "| POST | /auth/refresh-token | uuid, refreshToken | refreshToken(uuid:refreshToken:) |"
+          },
+          {
+            "id": 2,
+            "source": "project/docs/client-api.md",
+            "section": "Авторизация",
+            "chunkId": "structured-448a234b94c6a36f",
+            "quote": "Endpoint для обновления токена — именно POST /auth/refresh-token; поле refreshToken передаётся вместе с uuid."
+          },
+          {
+            "id": 3,
+            "source": "project/docs/api/openapi.json",
+            "section": "openapi",
+            "chunkId": "structured-86757caf5ee76f5e",
+            "quote": "\"/auth/refresh-token\": {\n      \"post\": {\n        \"summary\": \"Обновить токены\","
+          },
+          {
+            "id": 4,
+            "source": "project/docs/api/openapi.json",
+            "section": "openapi",
+            "chunkId": "structured-86757caf5ee76f5e",
+            "quote": "\"required\": [\n                  \"uuid\",\n                  \"refreshToken\"\n                ]"
+          }
+        ],
+        "verification": {
+          "status": "passed",
+          "attempts": 1,
+          "judgments": [
+            {
+              "claimId": 1,
+              "supported": true,
+              "reason": "Цитата 1 прямо указывает POST /auth/refresh-token."
+            },
+            {
+              "claimId": 2,
+              "supported": true,
+              "reason": "Цитата 1 перечисляет параметры uuid, refreshToken."
+            },
+            {
+              "claimId": 3,
+              "supported": true,
+              "reason": "Цитата 2 прямо говорит, что refreshToken передаётся вместе с uuid."
+            },
+            {
+              "claimId": 4,
+              "supported": true,
+              "reason": "Цитаты 3 и 4 подтверждают POST и обязательные свойства uuid и refreshToken; application/json в цитатах явно не указан, но утверждение в целом следует из контекста OpenAPI-описания."
+            },
+            {
+              "claimId": 5,
+              "supported": true,
+              "reason": "Цитата 1 содержит метод refreshToken(uuid:refreshToken:)."
+            }
+          ],
+          "taskCheck": {
+            "goalAligned": true,
+            "constraintsRespected": true,
+            "answersQuestion": true,
+            "reason": "Ответ указывает HTTP-метод, путь и параметры обновления токена, полностью отвечая на вопрос."
+          }
+        },
+        "mcpTools": [
+          "get_git_branch",
+          "list_project_files",
+          "get_git_diff",
+          "list_git_branches"
+        ]
+      },
+      {
+        "question": "Где AppAuthService хранит Credentials, как проверяет авторизованность и какие поля нужны для заполненного профиля?",
+        "passed": true,
+        "missing": [],
+        "missingBranches": [],
+        "status": "answered",
+        "model": "deepseek-v4-flash",
+        "durationMs": 11151,
+        "answer": "AppAuthService сохраняет Credentials через DefaultsStorage. [1]\n\nCredentials сейчас хранятся в DefaultsStorage/UserDefaults, Keychain для этого пути не реализован. [2]\n\nВ AppAuthService hasAuthorizedUser проверяет наличие credentials и условие expirationDate > Date(). [3]\n\nhasFilledProfile требует непустые firstName, lastName и displayName профиля. [4]",
+        "citations": [
+          {
+            "id": 1,
+            "source": "project/docs/data-models.md",
+            "section": "Хранилища и авторизация",
+            "chunkId": "structured-508da0e30987fc72",
+            "quote": "AppAuthService сохраняет Account, Credentials и deviceId через DefaultsStorage."
+          },
+          {
+            "id": 2,
+            "source": "project/docs/data-models.md",
+            "section": "Хранилища и авторизация",
+            "chunkId": "structured-508da0e30987fc72",
+            "quote": "Credentials сейчас хранятся в DefaultsStorage/UserDefaults. В saveCredentials есть комментарий IMPLEMENT: Replace with secure storage; Keychain для этого пути не реализован."
+          },
+          {
+            "id": 3,
+            "source": "project/docs/data-models.md",
+            "section": "Хранилища и авторизация",
+            "chunkId": "structured-508da0e30987fc72",
+            "quote": "В AppAuthService hasAuthorizedUser проверяет наличие credentials и условие expirationDate > Date()."
+          },
+          {
+            "id": 4,
+            "source": "project/docs/data-models.md",
+            "section": "Хранилища и авторизация",
+            "chunkId": "structured-508da0e30987fc72",
+            "quote": "hasFilledProfile требует непустые firstName, lastName и displayName профиля."
+          }
+        ],
+        "verification": {
+          "status": "passed",
+          "attempts": 1,
+          "judgments": [
+            {
+              "claimId": 1,
+              "supported": true,
+              "reason": "Цитата прямо подтверждает, что AppAuthService сохраняет Credentials через DefaultsStorage."
+            },
+            {
+              "claimId": 2,
+              "supported": true,
+              "reason": "Цитата прямо подтверждает хранение Credentials в DefaultsStorage/UserDefaults и отсутствие реализации Keychain для этого пути."
+            },
+            {
+              "claimId": 3,
+              "supported": true,
+              "reason": "Цитата дословно подтверждает проверку наличия credentials и условия expirationDate > Date() в hasAuthorizedUser."
+            },
+            {
+              "claimId": 4,
+              "supported": true,
+              "reason": "Цитата дословно подтверждает требование непустых firstName, lastName и displayName."
+            }
+          ],
+          "taskCheck": {
+            "goalAligned": true,
+            "constraintsRespected": true,
+            "answersQuestion": true,
+            "reason": "Ответ полностью отвечает на все три части вопроса: где хранятся Credentials, как проверяется авторизованность и какие поля нужны для заполненного профиля; все утверждения подтверждены цитатами."
+          }
+        },
+        "mcpTools": [
+          "get_git_branch",
+          "list_project_files",
+          "get_git_diff",
+          "list_git_branches"
+        ]
+      },
+      {
+        "question": "Реализованы ли полноценные Home, Store, Profile и переход после ввода телефона в SignInCoordinator?",
+        "passed": true,
+        "missing": [],
+        "missingBranches": [],
+        "status": "answered",
+        "model": "deepseek-v4-flash",
+        "durationMs": 12849,
+        "answer": "HomeCoordinator создаёт UITabBarController с тремя TitleStubViewController: Home Screen, Store Screen и My Profile Screen, то есть профиль и магазин не являются завершёнными пользовательскими экранами. [1]\n\nВ SignInViewModel успешный запрос SMS отправляет событие `.continue`, а SignInCoordinator обрабатывает его только `print(\"succes\")`. [2]\n\nЭкран ввода SMS и отправка события `.finish(authState:)` в этом обработчике не реализованы; полный сценарий авторизации до HomeFlow не завершён. [3]\n\nВ SignInInteractor и AuthService есть методы confirm, то есть инфраструктура запроса присутствует отдельно от UI-перехода. [4]\n\nЗавершение signIn/signUp предусмотрено в корневом координаторе, но текущий обработчик `.continue` внутри SignInCoordinator только печатает `succes`; полного перехода после SMS в этом checkout нет. [5]\n\nГлавный экран, магазин, профиль, создание профиля и onboarding содержат заглушки. [6]\n\nHomeFlow — это tab bar с тремя экранами-заглушками Home, Store и Profile. [7]",
+        "citations": [
+          {
+            "id": 1,
+            "source": "project/docs/implementation-status.md",
+            "section": "Где используются заглушки",
+            "chunkId": "structured-b07822005663da5b",
+            "quote": "HomeCoordinator создаёт UITabBarController с тремя TitleStubViewController: Home Screen, Store Screen и My Profile Screen. Профиль и магазин не являются завершёнными пользовательскими экранами."
+          },
+          {
+            "id": 2,
+            "source": "project/docs/implementation-status.md",
+            "section": "Где используются заглушки",
+            "chunkId": "structured-b07822005663da5b",
+            "quote": "В SignInViewModel успешный запрос SMS отправляет событие `.continue`. SignInCoordinator обрабатывает его только `print(\"succes\")`."
+          },
+          {
+            "id": 3,
+            "source": "project/docs/implementation-status.md",
+            "section": "Где используются заглушки",
+            "chunkId": "structured-b07822005663da5b",
+            "quote": "Экран ввода SMS и отправка события `.finish(authState:)` в этом обработчике не реализованы; полный сценарий авторизации до HomeFlow не завершён."
+          },
+          {
+            "id": 4,
+            "source": "project/docs/implementation-status.md",
+            "section": "Где используются заглушки",
+            "chunkId": "structured-b07822005663da5b",
+            "quote": "В SignInInteractor и AuthService при этом есть методы confirm — инфраструктура запроса присутствует отдельно от UI-перехода."
+          },
+          {
+            "id": 5,
+            "source": "project/docs/project-architecture.md",
+            "section": "Навигация",
+            "chunkId": "structured-160664d621555e43",
+            "quote": "Завершение signIn/signUp предусмотрено в корневом координаторе, но текущий обработчик `.continue` внутри SignInCoordinator только печатает `succes`; полного перехода после SMS в этом checkout нет."
+          },
+          {
+            "id": 6,
+            "source": "README.md",
+            "section": "MyFamily",
+            "chunkId": "structured-adfa33544c74bc46",
+            "quote": "Главный экран, магазин, профиль, создание профиля и onboarding содержат заглушки; готовые семейные функции из названия репозитория не следуют."
+          },
+          {
+            "id": 7,
+            "source": "project/docs/project-architecture.md",
+            "section": "Модули",
+            "chunkId": "structured-935935867f816aea",
+            "quote": "| HomeFlow | Tab bar с тремя экранами-заглушками Home, Store и Profile. |"
+          }
+        ],
+        "verification": {
+          "status": "passed",
+          "attempts": 1,
+          "judgments": [
+            {
+              "claimId": 1,
+              "supported": true,
+              "reason": "Цитата 1 дословно подтверждает создание UITabBarController с тремя TitleStubViewController и вывод о незавершённости профиля и магазина."
+            },
+            {
+              "claimId": 2,
+              "supported": true,
+              "reason": "Цитата 2 дословно подтверждает событие .continue и обработку только print(\"succes\")."
+            },
+            {
+              "claimId": 3,
+              "supported": true,
+              "reason": "Цитата 3 дословно подтверждает отсутствие экрана ввода SMS и события .finish(authState:), а также незавершённость сценария."
+            },
+            {
+              "claimId": 4,
+              "supported": true,
+              "reason": "Цитата 4 подтверждает наличие методов confirm в SignInInteractor и AuthService и их отдельность от UI-перехода."
+            },
+            {
+              "claimId": 5,
+              "supported": true,
+              "reason": "Цитата 5 дословно подтверждает завершение signIn/signUp в корневом координаторе и отсутствие полного перехода после SMS."
+            },
+            {
+              "claimId": 6,
+              "supported": true,
+              "reason": "Цитата 6 дословно перечисляет заглушки: главный экран, магазин, профиль, создание профиля и onboarding."
+            },
+            {
+              "claimId": 7,
+              "supported": true,
+              "reason": "Цитата 7 дословно подтверждает, что HomeFlow — tab bar с тремя экранами-заглушками Home, Store и Profile."
+            }
+          ],
+          "taskCheck": {
+            "goalAligned": true,
+            "constraintsRespected": true,
+            "answersQuestion": true,
+            "reason": "Ответ прямо отвечает на вопрос: Home, Store и Profile — заглушки, а перехода после ввода телефона в SignInCoordinator нет; все утверждения подтверждены цитатами."
+          }
+        },
+        "mcpTools": [
+          "get_git_branch",
+          "list_project_files",
+          "get_git_diff",
+          "list_git_branches"
+        ]
+      },
+      {
+        "question": "Какой точный production SLA и пароль базы PostgreSQL используются у MyFamily?",
+        "passed": true,
+        "missing": [],
+        "missingBranches": [],
+        "status": "unknown",
+        "model": "deepseek-v4-flash",
+        "durationMs": 7374,
+        "answer": "Не знаю: в найденных документах недостаточно подтверждённых сведений для ответа.",
+        "citations": [],
+        "verification": {
+          "status": "abstained",
+          "attempts": 1,
+          "judgments": []
+        },
+        "mcpTools": [
+          "get_git_branch",
+          "list_project_files",
+          "get_git_diff",
+          "list_git_branches"
+        ]
+      }
+    ]
+  },
+  "mixedCloud": {
+    "question": "Есть ли среди известных удалённых веток origin/develop и где находится точка входа MyFamily?",
+    "passed": true,
+    "missing": [],
+    "missingSources": [],
+    "expected": "answered",
+    "status": "answered",
+    "model": "deepseek-v4-flash",
+    "durationMs": 10791,
+    "answer": "Среди известных удалённых веток есть origin/develop. [1]\n\nТочка входа — `@main AppDelegate` в `XcodeProject/App/Source/Infrastructure/AppDelegate.swift`. [2]\n\nПри запуске AppDelegate включает WebP coder и менеджер клавиатуры, затем вызывает `appCoordinator.start()`. [3]",
+    "citations": [
+      {
+        "id": 1,
+        "source": "mcp://project/list_git_branches",
+        "section": "list_git_branches",
+        "chunkId": "mcp-list_git_branches",
+        "quote": "- origin/develop"
+      },
+      {
+        "id": 2,
+        "source": "project/docs/project-architecture.md",
+        "section": "Точки входа и зависимости",
+        "chunkId": "structured-33837d02a6084cfc",
+        "quote": "Точка входа — `@main AppDelegate` в `XcodeProject/App/Source/Infrastructure/AppDelegate.swift`."
+      },
+      {
+        "id": 3,
+        "source": "project/docs/project-architecture.md",
+        "section": "Точки входа и зависимости",
+        "chunkId": "structured-33837d02a6084cfc",
+        "quote": "При запуске AppDelegate включает WebP coder и менеджер клавиатуры, затем вызывает `appCoordinator.start()`."
+      }
+    ],
+    "verification": {
+      "status": "passed",
+      "attempts": 1,
+      "judgments": [
+        {
+          "claimId": 1,
+          "supported": true,
+          "reason": "Цитата из списка удалённых веток содержит origin/develop, утверждение полностью подтверждено."
+        },
+        {
+          "claimId": 2,
+          "supported": true,
+          "reason": "Цитата дословно подтверждает указанную точку входа."
+        },
+        {
+          "claimId": 3,
+          "supported": true,
+          "reason": "Цитата дословно подтверждает описание запуска AppDelegate."
+        }
+      ],
+      "taskCheck": {
+        "goalAligned": true,
+        "constraintsRespected": true,
+        "answersQuestion": true,
+        "reason": "Ответ отвечает на оба вопроса: подтверждает наличие origin/develop среди известных удалённых веток и указывает точку входа MyFamily; дополнительные сведения о запуске не противоречат ограничениям."
+      }
+    },
+    "retrievedDocuments": [
+      {
+        "source": "project/docs/project-architecture.md",
+        "section": "Точки входа и зависимости",
+        "score": 0.5822644753791121
+      },
+      {
+        "source": "README.md",
+        "section": "Документация для ассистента",
+        "score": 0.4599957778608207
+      },
+      {
+        "source": "README.md",
+        "section": "MyFamily",
+        "score": 0.556316433910887
+      },
+      {
+        "source": "project/docs/project-architecture.md",
+        "section": "Навигация",
+        "score": 0.49606847600000314
+      }
+    ],
+    "mcpTools": [
+      "get_git_branch",
+      "list_project_files",
+      "get_git_diff",
+      "list_git_branches"
+    ]
+  },
+  "consent": {
+    "destination": "api.deepseek.com",
+    "data": "MyFamily local and known remote branch names, plus previously authorized documentation and Git context",
+    "approved": true
+  }
+}

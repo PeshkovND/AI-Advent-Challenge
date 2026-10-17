@@ -1,0 +1,152 @@
+{
+  "checkedAt": "2026-10-13T07:30:29.906Z",
+  "target": "http://192.168.0.41:8788",
+  "clientLocation": "machine-running-this-command",
+  "service": {
+    "model": "qwen3.5:4b",
+    "context": 8192,
+    "maxTokens": 1024,
+    "ready": true,
+    "limits": {
+      "requestsPerMinute": 12,
+      "maxConcurrentRequests": 1,
+      "timeoutMs": 120000,
+      "maxBodyBytes": 1048576,
+      "maxQueueSize": 3,
+      "queueTimeoutMs": 60000
+    },
+    "queue": {
+      "active": 0,
+      "waiting": 0,
+      "maxSize": 3
+    }
+  },
+  "results": [
+    {
+      "id": 1,
+      "status": 200,
+      "answer": "21",
+      "elapsedMs": 3124,
+      "events": [
+        {
+          "state": "running",
+          "position": 0,
+          "initialPosition": 0,
+          "waitedMs": 0,
+          "elapsedMs": 3053
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "status": 200,
+      "answer": "22",
+      "elapsedMs": 3428,
+      "events": [
+        {
+          "state": "queued",
+          "position": 1,
+          "timeoutMs": 60000,
+          "elapsedMs": 12
+        },
+        {
+          "state": "running",
+          "position": 0,
+          "initialPosition": 1,
+          "waitedMs": 3109,
+          "elapsedMs": 3125
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "status": 200,
+      "answer": "23",
+      "elapsedMs": 3720,
+      "events": [
+        {
+          "state": "queued",
+          "position": 2,
+          "timeoutMs": 60000,
+          "elapsedMs": 11
+        },
+        {
+          "state": "queued",
+          "position": 1,
+          "timeoutMs": 60000,
+          "elapsedMs": 3124
+        },
+        {
+          "state": "running",
+          "position": 0,
+          "initialPosition": 2,
+          "waitedMs": 3416,
+          "elapsedMs": 3427
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "status": 200,
+      "answer": "24",
+      "elapsedMs": 4019,
+      "events": [
+        {
+          "state": "queued",
+          "position": 3,
+          "timeoutMs": 60000,
+          "elapsedMs": 11
+        },
+        {
+          "state": "queued",
+          "position": 2,
+          "timeoutMs": 60000,
+          "elapsedMs": 3124
+        },
+        {
+          "state": "queued",
+          "position": 1,
+          "timeoutMs": 60000,
+          "elapsedMs": 3427
+        },
+        {
+          "state": "running",
+          "position": 0,
+          "initialPosition": 3,
+          "waitedMs": 3709,
+          "elapsedMs": 3720
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "status": 503,
+      "answer": "",
+      "elapsedMs": 12,
+      "events": [],
+      "error": "Очередь заполнена. Повторите запрос позже."
+    }
+  ],
+  "startedOrder": [
+    1,
+    2,
+    3,
+    4
+  ],
+  "recovery": {
+    "id": 6,
+    "status": 200,
+    "answer": "26",
+    "elapsedMs": 316,
+    "events": [
+      {
+        "state": "running",
+        "position": 0,
+        "initialPosition": 0,
+        "waitedMs": 0,
+        "elapsedMs": 238
+      }
+    ]
+  },
+  "passed": true
+}

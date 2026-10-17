@@ -1,0 +1,7 @@
+{
+  "temperature": 0,
+  "maxTokens": 512,
+  "context": 16384,
+  "topP": 0.95,
+  "adaptiveContext": true
+}

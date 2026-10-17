@@ -1,0 +1,103 @@
+name: RAG AI Code Review
+description: Review PR diffs using project documentation and code with DeepSeek
+author: PeshkovND
+branding:
+  icon: search
+  color: blue
+
+inputs:
+  api-key:
+    description: DeepSeek API key (repository Actions secret)
+    required: false
+  github-token:
+    description: GitHub token with contents read and pull-requests write
+    required: false
+    default: ${{ github.token }}
+  repository-path:
+    description: Path to the checked-out target repository, relative to github.workspace
+    default: '.'
+  base:
+    description: Base ref or SHA (defaults to the pull request base SHA)
+    required: false
+  head:
+    description: Head ref or SHA (defaults to the pull request head SHA)
+    required: false
+  model:
+    description: DeepSeek model
+    default: deepseek-v4-flash
+  publish-comment:
+    description: Publish or update a PR comment (requires pull_request_target)
+    default: 'true'
+  inline-comments:
+    description: Publish findings as native GitHub review threads (false keeps the full issue comment only)
+    default: 'true'
+  prepare-only:
+    description: Collect diff and RAG without calling the model or publishing
+    default: 'false'
+  upload-artifact:
+    description: Upload context/review reports as a workflow artifact
+    default: 'true'
+  artifact-name:
+    description: Artifact name (use a different name for each invocation in a job)
+    default: ai-code-review
+
+outputs:
+  report-directory:
+    description: Absolute directory containing context.json or review.md/review.json/comment.md
+    value: ${{ steps.review.outputs.report-directory }}
+  status:
+    description: complete, partial, failed, or prepared
+    value: ${{ steps.review.outputs.status }}
+  findings:
+    description: Number of validated findings
+    value: ${{ steps.review.outputs.findings }}
+  reviewed-files:
+    description: Number of successfully reviewed files
+    value: ${{ steps.review.outputs.reviewed-files }}
+  comment-url:
+    description: URL of the created or updated PR comment (empty when not published)
+    value: ${{ steps.review.outputs.comment-url }}
+  review-url:
+    description: URL of the native GitHub review or an existing inline thread
+    value: ${{ steps.review.outputs.review-url }}
+  inline-comments:
+    description: Number of inline threads created, updated or reused by this run
+    value: ${{ steps.review.outputs.inline-comments }}
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v4
+      with:
+        node-version: '24'
+
+    - name: Review target repository
+      id: review
+      continue-on-error: true
+      shell: bash
+      env:
+        REVIEW_ACTION_PATH: ${{ github.action_path }}
+        REVIEW_API_KEY: ${{ inputs.api-key }}
+        REVIEW_GITHUB_TOKEN: ${{ inputs.github-token }}
+        REVIEW_REPOSITORY_PATH: ${{ inputs.repository-path }}
+        REVIEW_BASE: ${{ inputs.base }}
+        REVIEW_HEAD: ${{ inputs.head }}
+        REVIEW_MODEL: ${{ inputs.model }}
+        REVIEW_PUBLISH_COMMENT: ${{ inputs.publish-comment }}
+        REVIEW_INLINE_COMMENTS: ${{ inputs.inline-comments }}
+        REVIEW_PREPARE_ONLY: ${{ inputs.prepare-only }}
+      run: node "$REVIEW_ACTION_PATH/dist-action/index.cjs"
+
+    - name: Upload AI review
+      if: ${{ !cancelled() && inputs.upload-artifact == 'true' && steps.review.outputs.report-directory != '' }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ inputs.artifact-name }}
+        path: ${{ steps.review.outputs.report-directory }}/
+        if-no-files-found: ignore
+        retention-days: 7
+
+    - name: Preserve review failure
+      if: ${{ !cancelled() && steps.review.outcome == 'failure' }}
+      shell: bash
+      run: exit 1

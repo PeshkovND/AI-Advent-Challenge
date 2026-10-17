@@ -1,0 +1,51 @@
+# Автоматическое AI-ревью в MyFamily
+
+17 октября 2026 года workflow установлен в `main` репозитория [PeshkovND/MyFamily](https://github.com/PeshkovND/MyFamily). Создан repository Actions secret `DEEPSEEK_API_KEY`; его значение не записывалось в файлы и логи. Само приложение и зависимости MyFamily для подключения reviewer не изменялись.
+
+## Установка
+
+- [PR #34](https://github.com/PeshkovND/MyFamily/pull/34) добавил `.github/workflows/ai-code-review.yml` в `main`.
+- [PR #36](https://github.com/PeshkovND/MyFamily/pull/36) обновил Action до `v1.0.1`, закреплённого на SHA `24528323c63a16b1e7e817867b397dec488fd853`.
+- [PR #39](https://github.com/PeshkovND/MyFamily/pull/39) обновил Action до `v1.0.2` / `dc359e71221316df806fc4e82cc542ebd35c5e53`: номер строки уточняется по единственному дословному совпадению цитаты на той же стороне diff. Это устраняет ошибки модели при подсчёте строк больших hunks.
+- [PR #40](https://github.com/PeshkovND/MyFamily/pull/40) обновил Action до `v1.1.0` / `977c91233e221f529cb0382909d5e756befeb19c`: замечания публикуются нативным GitHub Review с привязкой к файлу и строке.
+- [Рабочий workflow](https://github.com/PeshkovND/MyFamily/blob/main/.github/workflows/ai-code-review.yml) запускается на `pull_request_target`: opened, synchronize, reopened и ready_for_review. Draft PR пропускаются.
+- Разрешены `contents: read` и `pull-requests: write`. Дополнительные глобальные разрешения Actions и право создавать/одобрять PR не включались.
+- Публикуются обсуждения у строк в Files changed, один обновляемый комментарий со сводкой, Job Summary и артефакт `ai-code-review` с Markdown/JSON, срок хранения — 7 дней.
+
+## Реальная проверка
+
+Во временном [PR #35](https://github.com/PeshkovND/MyFamily/pull/35) свойство `Collection.isNotEmpty` намеренно изменено с `return !isEmpty` на `return isEmpty`. Приложение и тесты из PR reviewer не запускал.
+
+[Первый запуск](https://github.com/PeshkovND/MyFamily/actions/runs/39008356373) завершился успешно. DeepSeek нашёл баг в `Collection+Extensions.swift:13`, показал инверсию логического значения и её влияние на вызов в `ResponseErrorMapper.swift`. [Автоматический комментарий](https://github.com/PeshkovND/MyFamily/pull/35#issuecomment-6230457963) опубликован GitHub Actions bot. Результат — `complete`, проверен 1/1 файл, RAG-корпус — 167 документов/файлов baseline.
+
+Первый отчёт также выявил, что `.swift` внутри каталога `API` ошибочно относились к документации. Это исправлено в `v1.0.1`; [CI исправления](https://github.com/PeshkovND/AI-Advent-Challenge/actions/runs/39008471910) прошёл с 14 тестами и реальным DeepSeek.
+
+[Повторный запуск v1.0.1](https://github.com/PeshkovND/MyFamily/actions/runs/39008592883) подтвердил `complete`, тот же баг и корректные категории RAG: Markdown README отдельно, Swift-код отдельно. Публикация этого отчёта была пропущена защитой от устаревшего base SHA после обновления `main`; артефакт сохранился. Для проверки обновления комментария тестовая ветка синхронизирована с актуальной `main` и запущена снова.
+
+[Итоговый запуск после синхронизации](https://github.com/PeshkovND/MyFamily/actions/runs/39008678695) — success: `complete`, 1/1 файл, баг на строке 13, настоящая Markdown-документация и Swift-код в RAG. Существующий комментарий `6230457963` обновлён, второй комментарий не создан. [Сохранённый отчёт](day-32-myfamily-ai-review-example.md).
+
+Тестовый PR #35 закрыт **без слияния**. `main` MyFamily содержит только установку workflow и pin исправленной версии; `Collection.isNotEmpty` остаётся `return !isEmpty`. Локальный checkout возвращён на актуальную `main`; исходная пользовательская правка `.DS_Store` сохранена.
+
+## Расширенный PR
+
+Небольшой PR #37 закрыт; [PR #38](https://github.com/PeshkovND/MyFamily/pull/38) содержит рефакторинг подготовки данных авторизации и проверки состояния сессии: 9 файлов, 233 добавленные и 22 удалённые строки. Название и описание оформлены как обычный PR. Он оставлен открытым и не слит в `main`.
+
+На первом запуске обнаружен дефект reviewer: точные цитаты отклонялись из-за неверно посчитанных моделью номеров строк. Исправление выпущено как `v1.0.2`, закреплено в MyFamily через PR #39 и не меняет код приложения в `main`.
+
+[Итоговый запуск](https://github.com/PeshkovND/MyFamily/actions/runs/39010352297) — success: 9/9 файлов рассмотрены, ошибок ответов нет; модель вернула 19 замечаний: 10 потенциальных багов, 4 архитектурных замечания и 5 рекомендаций. [AI-ревью](https://github.com/PeshkovND/MyFamily/pull/38#issuecomment-6230677153) обновлено в одном комментарии. `partial` в отчёте указывает на ограниченный объём содержимого трёх крупных файлов, а не на сбой ревью; ограничения перечислены явно.
+
+## Обсуждения у строк кода
+
+Версия `v1.1.0` установлена в `main` через PR #40. Ветка PR #38 синхронизирована с актуальной `main`, diff приложения остался прежним: 9 файлов, +233/−22.
+
+[Первый запуск с нативной публикацией](https://github.com/PeshkovND/MyFamily/actions/runs/39012240768/attempts/1) завершился успешно: 9/9 файлов, 16 замечаний и 16 обсуждений, ошибок и пропущенных привязок нет. [GitHub Review](https://github.com/PeshkovND/MyFamily/pull/38#pullrequestreview-5556754637) опубликован `github-actions[bot]` с `commit_id: 69acd6a0daf2c955bc8126ae8946bd7617f4f7ff`; API подтвердил `path`, `line` и `side` у всех обсуждений. [Пример обсуждения](https://github.com/PeshkovND/MyFamily/pull/38#discussion_r4301830728) закреплён на строке 29 `AuthenticationInput.swift`. Общий комментарий заменён краткой сводкой со ссылкой на Review, полный отчёт доступен в артефакте. Статус `partial` по-прежнему отражает лимит содержимого трёх файлов.
+
+[Повторный запуск](https://github.com/PeshkovND/MyFamily/actions/runs/39012240768/attempts/2) подтвердил обновление обсуждений: `updated: 12`, `created: 5`, `skipped: 0`, ошибка публикации отсутствует. Все исходные 16 ID сохранились, добавились пять других привязок, дубликатов `(path, line, side)` среди 21 обсуждения нет. Модель вернула новые формулировки и местами выбрала другие строки, поэтому новые привязки ожидаемы. Сам job завершился ошибкой: для `AuthenticationInput.swift` не удалось получить валидный ответ, рассмотрены 8/9 файлов. Валидные результаты сохранены и опубликованы; сбой не маскируется успешным статусом.
+
+[Итоговый повторный запуск](https://github.com/PeshkovND/MyFamily/actions/runs/39012240768/attempts/3) — success: 9/9 файлов, 17 замечаний (12 потенциальных багов, 3 архитектурных замечания, 2 рекомендации), ошибок модели нет. `publication.json`: `created: 1`, `updated: 15`, `unchanged: 1`, `skipped: 0`, `stale: false`, `failed: false`. Все исходные ID обсуждений сохранились, среди 22 накопленных привязок дубликатов нет. Актуальные обсуждения и оставшиеся обсуждения прошлых запусков видны в [Files changed](https://github.com/PeshkovND/MyFamily/pull/38/files). Решение о закрытии старых обсуждений остаётся за участниками PR.
+
+## Обычное использование
+
+Откройте PR в MyFamily или добавьте commit в существующий PR. В **Actions → AI code review** появится запуск; после завершения в **Files changed** будут обсуждения с багами, архитектурными проблемами и рекомендациями. На них можно отвечать и отмечать их решёнными через GitHub. Пустые категории не заполняются выдуманными замечаниями.
+
+Доступ к модели и счёт DeepSeek используются через secret MyFamily. В модель отправляются diff, ограниченное содержимое файлов и найденные фрагменты этого проекта. Настройки, лимиты и входы: [ai-review-action.md](ai-review-action.md).

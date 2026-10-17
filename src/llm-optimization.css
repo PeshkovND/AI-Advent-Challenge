@@ -1,0 +1,52 @@
+.day-main-optimization { min-width: 0; }
+.optimization-page { width: 100%; min-width: 0; max-width: 1120px; margin: 0 auto; padding-bottom: 32px; }
+.optimization-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.optimization-summary { margin-top: 24px; }
+.optimization-summary-card { min-width: 0; padding: 22px; background: #fff; border: 1px solid #e5e7f0; border-radius: 14px; }
+.optimization-summary-card:last-child { border-color: #d5d6f1; }
+.optimization-summary-card h2 { margin: 0; color: #454a5b; font-size: 17px; }
+.optimization-model { margin: 8px 0 18px; color: #8990a1; font-size: 12px; overflow-wrap: anywhere; }
+.optimization-settings { margin: -8px 0 16px; color: #9399a9; font-size: 10px; line-height: 1.7; }
+.optimization-toolbar { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 22px; }
+.optimization-page button { padding: 10px 14px; border: 1px solid #dee1ee; border-radius: 9px; background: #fff; color: #636b81; font: inherit; font-size: 12px; }
+.optimization-page button.optimization-primary { background: #6366d4; border-color: #6366d4; color: #fff; }
+.optimization-page button:disabled { opacity: .5; cursor: default; }
+.optimization-page button:focus-visible { outline: 2px solid #7477df; outline-offset: 3px; }
+.optimization-question-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 0 0 12px; }
+.optimization-question-actions span { color: #9399a9; font-size: 11px; }
+.optimization-summary-metrics { display: grid; gap: 14px; margin: 0; }
+.optimization-summary-metrics div { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px 12px; }
+.optimization-summary-metrics dt { color: #858b9c; font-size: 12px; }
+.optimization-summary-metrics dd { margin: 0; color: #4d5468; font-size: 19px; font-weight: 600; white-space: nowrap; }
+.optimization-conclusion { margin: 16px 0 0; padding: 14px 18px; color: #60649e; background: #eeeef9; border-radius: 10px; font-size: 13px; line-height: 1.7; }
+.optimization-note { margin: 10px 0 0; color: #9097a7; font-size: 11px; line-height: 1.7; }
+.optimization-results { display: grid; gap: 28px; margin-top: 28px; }
+.optimization-question { min-width: 0; }
+.optimization-question > h2 { display: flex; align-items: baseline; gap: 12px; margin: 0 0 14px; color: #51586d; font-size: 15px; font-weight: 500; line-height: 1.7; }
+.optimization-question > h2 > span { flex: 0 0 auto; color: #a0a6b6; font-size: 12px; }
+.optimization-answer-card { display: flex; min-width: 0; flex-direction: column; padding: 20px; background: #fff; border: 1px solid #e5e7f0; border-radius: 12px; }
+.optimization-answer-card h3 { margin: 0 0 14px; color: #858b9c; font-size: 12px; font-weight: 500; }
+.optimization-answer-card:last-child h3 { color: #686bc1; }
+.optimization-answer-text { flex: 1; color: #555e72; font-size: 13px; line-height: 1.8; overflow-wrap: anywhere; }
+.optimization-answer-text > :first-child { margin-top: 0; }
+.optimization-answer-text > :last-child { margin-bottom: 0; }
+.optimization-answer-text ul, .optimization-answer-text ol { padding-left: 18px; }
+.optimization-answer-text code { font-size: 11px; }
+.optimization-answer-metrics { margin: 18px 0 0; padding-top: 12px; border-top: 1px solid #edf0f5; color: #8a91a3; font-size: 11px; line-height: 1.7; }
+.optimization-answer-check { margin: 8px 0 0; font-size: 11px; line-height: 1.7; }
+.optimization-answer-check.passed { color: #52826d; }
+.optimization-answer-check.failed { color: #af6b4d; }
+.optimization-question-buttons { display: flex; flex-wrap: wrap; gap: 8px; }
+.optimization-review { margin-top: 8px; padding-top: 10px; border-top: 1px solid #edf0f5; }
+.optimization-review-rationale, .optimization-review details { color: #70788b; font-size: 11px; line-height: 1.7; }
+.optimization-review details summary { cursor: pointer; color: #686bc1; }
+.optimization-review ul { padding-left: 18px; }
+.optimization-error { color: #af4d58; font-size: 13px; line-height: 1.7; }
+.optimization-empty { color: #9097a7; font-size: 13px; line-height: 1.7; }
+@media (max-width: 840px) {
+  .optimization-summary-card, .optimization-answer-card { padding: 16px; }
+  .optimization-summary-card h2 { font-size: 15px; }
+}
+@media (max-width: 500px) {
+  .optimization-pair { grid-template-columns: 1fr; gap: 12px; }
+}

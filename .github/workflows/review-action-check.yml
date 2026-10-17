@@ -1,0 +1,85 @@
+name: Check reusable review action
+on:
+  push:
+    branches: [day-32]
+  pull_request:
+    paths:
+      - action.yml
+      - dist-action/**
+      - server/code-review*.ts
+      - scripts/*review-action*.mjs
+      - package*.json
+      - .github/workflows/review-action-check.yml
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm ci --ignore-scripts
+      - run: npm run typecheck
+      - run: npm run review:action:build
+      - name: Check committed bundle matches sources
+        run: git diff --exit-code -- dist-action
+      - run: npm run test:review
+      - name: Create isolated target repository
+        id: fixture
+        run: node scripts/review-action-fixture.mjs
+
+      - name: Run portable action without API key
+        id: prepare
+        uses: ./
+        with:
+          repository-path: ${{ steps.fixture.outputs.repository-path }}
+          base: ${{ steps.fixture.outputs.base }}
+          head: ${{ steps.fixture.outputs.head }}
+          prepare-only: 'true'
+          publish-comment: 'false'
+          artifact-name: action-smoke-context
+
+      - name: Detect available cloud configuration
+        if: ${{ github.event_name == 'push' }}
+        id: cloud-config
+        env:
+          REVIEW_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+        run: |
+          if [ -n "$REVIEW_KEY" ]; then
+            echo 'available=true' >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Run portable action with real DeepSeek
+        if: ${{ steps.cloud-config.outputs.available == 'true' }}
+        id: cloud
+        uses: ./
+        with:
+          api-key: ${{ secrets.DEEPSEEK_API_KEY }}
+          repository-path: ${{ steps.fixture.outputs.repository-path }}
+          base: ${{ steps.fixture.outputs.base }}
+          head: ${{ steps.fixture.outputs.head }}
+          publish-comment: 'false'
+          artifact-name: action-smoke-review
+
+      - name: Verify real model found the Swift regression
+        if: ${{ steps.cloud.outcome == 'success' }}
+        env:
+          REPORT_DIRECTORY: ${{ steps.cloud.outputs.report-directory }}
+          TARGET_PATH: ${{ steps.fixture.outputs.repository-path }}
+        run: |
+          node --input-type=module <<'NODE'
+          import { readFileSync, existsSync } from 'node:fs';
+          import assert from 'node:assert/strict';
+          const report = JSON.parse(readFileSync(process.env.REPORT_DIRECTORY + '/review.json', 'utf8'));
+          assert.equal(report.status, 'complete');
+          assert.ok(report.findings.some(f => f.category === 'bug' && f.path === 'Invoice.swift' && f.line === 1 && f.side === 'RIGHT'));
+          assert.ok(!existsSync(process.env.TARGET_PATH + '/node_modules'));
+          console.log('Swift arithmetic regression detected; target dependencies were not installed.');
+          NODE
