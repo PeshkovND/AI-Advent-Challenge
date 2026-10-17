@@ -142,3 +142,7 @@ Workflow `.github/workflows/review-action-check.yml` проверяет исхо
 Версия закреплена на `dc359e71221316df806fc4e82cc542ebd35c5e53`; [GitHub CI](https://github.com/PeshkovND/AI-Advent-Challenge/actions/runs/39010202729) прошёл с 15 тестами и реальным DeepSeek. Повторная локальная проверка всего diff MyFamily дала валидные ответы для всех девяти файлов. MyFamily обновлён через [PR #39](https://github.com/PeshkovND/MyFamily/pull/39).
 
 [Повторное GitHub-ревью PR #38](https://github.com/PeshkovND/MyFamily/actions/runs/39010352297) успешно: 9/9 файлов получили валидные ответы, ошибок модели/цитат нет. Опубликованы 19 замечаний (10 потенциальных багов, 4 архитектурных замечания, 5 рекомендаций) в [одном обновлённом комментарии](https://github.com/PeshkovND/MyFamily/pull/38#issuecomment-6230677153). Статус отчёта `partial` отражает усечение содержимого трёх крупных файлов до лимита контекста; diff и причины ограничений сохранены в артефакте.
+
+## Версия v1.1.0: GitHub Review у строк кода
+
+Неизменяемый tag указывает на `977c91233e221f529cb0382909d5e756befeb19c`. [GitHub CI](https://github.com/PeshkovND/AI-Advent-Challenge/actions/runs/39012139482) прошёл с 27 тестами, TypeScript, проверкой совпадения bundle, переносимым Swift/Xcode fixture и реальным DeepSeek. Проверены обе стороны diff, группировка замечаний, повторный запуск без дубликатов, перенос строки, переименование, пагинация, устаревшие SHA и сохранение полного отчёта при отказе API публикации. MyFamily подключён через [PR #40](https://github.com/PeshkovND/MyFamily/pull/40).
