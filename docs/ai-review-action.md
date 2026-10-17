@@ -36,14 +36,14 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - uses: PeshkovND/AI-Advent-Challenge@ai-review-v1.0.1
+      - uses: PeshkovND/AI-Advent-Challenge@ai-review-v1.0.2
         with:
           api-key: ${{ secrets.DEEPSEEK_API_KEY }}
 ```
 
-`ai-review-v1.0.1` — рекомендуемая patch-версия Action. Она доступна независимо от слияния ветки `day-32` в `main` этого репозитория. Для закрепления точного кода можно заменить тег полным SHA: `git ls-remote https://github.com/PeshkovND/AI-Advent-Challenge.git 'refs/tags/ai-review-v1.0.1^{}'` показывает commit annotated tag. Версия поставляется как Git tag, публикация в Marketplace не требуется.
+`ai-review-v1.0.2` — рекомендуемая patch-версия Action. Она доступна независимо от слияния ветки `day-32` в `main` этого репозитория. Для закрепления точного кода можно заменить тег полным SHA: `git ls-remote https://github.com/PeshkovND/AI-Advent-Challenge.git 'refs/tags/ai-review-v1.0.2^{}'` показывает commit annotated tag. Версия поставляется как Git tag, публикация в Marketplace не требуется.
 
-Опубликованная версия `ai-review-v1.0.1` указывает на `24528323c63a16b1e7e817867b397dec488fd853`. Для фиксации на неизменяемом SHA: `uses: PeshkovND/AI-Advent-Challenge@24528323c63a16b1e7e817867b397dec488fd853`.
+Опубликованная версия `ai-review-v1.0.2` указывает на `dc359e71221316df806fc4e82cc542ebd35c5e53`. Для фиксации на неизменяемом SHA: `uses: PeshkovND/AI-Advent-Challenge@dc359e71221316df806fc4e82cc542ebd35c5e53`.
 
 Первый PR, добавляющий workflow в целевой проект, не проверяет себя: `pull_request_target` использует workflow из default branch. Дополнительное разрешение создавать или одобрять PR не требуется. Токену нужны `contents: read` и `pull-requests: write` для обычного комментария. Политика организации может ограничить использование внешних Actions.
 
@@ -122,4 +122,12 @@ Workflow `.github/workflows/review-action-check.yml` проверяет исхо
 
 Первый реальный PR MyFamily выявил ошибку категорий RAG: Swift-код внутри `Sources/API` считался документацией. В `v1.0.1` категория документации дополнительно ограничена текстовыми форматами документов. Новая проверка гарантирует, что `.swift` внутри API/Docs остаётся кодом и не вытесняет Markdown/API-описания из двух слотов документации.
 
-[GitHub CI patch-версии](https://github.com/PeshkovND/AI-Advent-Challenge/actions/runs/39008471910) прошёл: 14 тестов reviewer/Action, TypeScript, точное совпадение пересобранного bundle и реальный вызов DeepSeek. MyFamily использует закреплённый SHA `24528323c63a16b1e7e817867b397dec488fd853`. Результаты реального подключения и ссылки: [day-32-myfamily-ai-review.md](day-32-myfamily-ai-review.md).
+[GitHub CI patch-версии](https://github.com/PeshkovND/AI-Advent-Challenge/actions/runs/39008471910) прошёл: 14 тестов reviewer/Action, TypeScript, точное совпадение пересобранного bundle и реальный вызов DeepSeek. Первоначально MyFamily был закреплён на SHA `24528323c63a16b1e7e817867b397dec488fd853`. Результаты реального подключения и ссылки: [day-32-myfamily-ai-review.md](day-32-myfamily-ai-review.md).
+
+## Patch v1.0.2: привязка строк в больших diff
+
+На PR из девяти файлов модель возвращала дословные цитаты, но ошибалась при подсчёте номеров строк hunk. `v1.0.2` уточняет номер по единственному точному совпадению цитаты на той же стороне diff. Путь должен быть верным, исходно указанная строка должна присутствовать в переданном hunk. Неизвестные строки, выдуманные цитаты, смена стороны и неоднозначные совпадения по-прежнему отклоняются. Проверка цитат не ослаблена.
+
+Версия закреплена на `dc359e71221316df806fc4e82cc542ebd35c5e53`; [GitHub CI](https://github.com/PeshkovND/AI-Advent-Challenge/actions/runs/39010202729) прошёл с 15 тестами и реальным DeepSeek. Повторная локальная проверка всего diff MyFamily дала валидные ответы для всех девяти файлов. MyFamily обновлён через [PR #39](https://github.com/PeshkovND/MyFamily/pull/39).
+
+[Повторное GitHub-ревью PR #38](https://github.com/PeshkovND/MyFamily/actions/runs/39010352297) успешно: 9/9 файлов получили валидные ответы, ошибок модели/цитат нет. Опубликованы 19 замечаний (10 потенциальных багов, 4 архитектурных замечания, 5 рекомендаций) в [одном обновлённом комментарии](https://github.com/PeshkovND/MyFamily/pull/38#issuecomment-6230677153). Статус отчёта `partial` отражает усечение содержимого трёх крупных файлов до лимита контекста; diff и причины ограничений сохранены в артефакте.

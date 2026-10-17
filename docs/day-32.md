@@ -18,7 +18,7 @@
 
 ## Подключение GitHub
 
-1. Добавить workflow в default branch проверяемого репозитория (обычно `main`). Подключаемый reviewer берётся из версии `PeshkovND/AI-Advent-Challenge@ai-review-v1.0.1`; перенос приложения в этот репозиторий не нужен. Первый PR, устанавливающий workflow, не может проверить себя этим пайплайном. Полная инструкция: [ai-review-action.md](ai-review-action.md).
+1. Добавить workflow в default branch проверяемого репозитория (обычно `main`). Подключаемый reviewer берётся из версии `PeshkovND/AI-Advent-Challenge@ai-review-v1.0.2`; перенос приложения в этот репозиторий не нужен. Первый PR, устанавливающий workflow, не может проверить себя этим пайплайном. Полная инструкция: [ai-review-action.md](ai-review-action.md).
 2. Открыть **Settings → Secrets and variables → Actions → New repository secret** и добавить `DEEPSEEK_API_KEY`. Локальная `.env` не передаётся в GitHub Actions.
 3. При необходимости задать модели input `model` у шага Action. По умолчанию используется существующая в проекте `deepseek-v4-flash`.
 4. Убедиться, что GitHub Actions разрешены и политика репозитория допускает `contents: read` и `pull-requests: write` для workflow. Параметр разрешения создавать и одобрять PR не нужен: публикуется обычный комментарий.

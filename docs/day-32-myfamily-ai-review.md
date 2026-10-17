@@ -6,6 +6,7 @@
 
 - [PR #34](https://github.com/PeshkovND/MyFamily/pull/34) добавил `.github/workflows/ai-code-review.yml` в `main`.
 - [PR #36](https://github.com/PeshkovND/MyFamily/pull/36) обновил Action до `v1.0.1`, закреплённого на SHA `24528323c63a16b1e7e817867b397dec488fd853`.
+- [PR #39](https://github.com/PeshkovND/MyFamily/pull/39) обновил Action до `v1.0.2` / `dc359e71221316df806fc4e82cc542ebd35c5e53`: номер строки уточняется по единственному дословному совпадению цитаты на той же стороне diff. Это устраняет ошибки модели при подсчёте строк больших hunks.
 - [Рабочий workflow](https://github.com/PeshkovND/MyFamily/blob/main/.github/workflows/ai-code-review.yml) запускается на `pull_request_target`: opened, synchronize, reopened и ready_for_review. Draft PR пропускаются.
 - Разрешены `contents: read` и `pull-requests: write`. Дополнительные глобальные разрешения Actions и право создавать/одобрять PR не включались.
 - Публикуется один обновляемый комментарий, Job Summary и артефакт `ai-code-review` с Markdown/JSON, срок хранения — 7 дней.
@@ -23,6 +24,14 @@
 [Итоговый запуск после синхронизации](https://github.com/PeshkovND/MyFamily/actions/runs/39008678695) — success: `complete`, 1/1 файл, баг на строке 13, настоящая Markdown-документация и Swift-код в RAG. Существующий комментарий `6230457963` обновлён, второй комментарий не создан. [Сохранённый отчёт](day-32-myfamily-ai-review-example.md).
 
 Тестовый PR #35 закрыт **без слияния**. `main` MyFamily содержит только установку workflow и pin исправленной версии; `Collection.isNotEmpty` остаётся `return !isEmpty`. Локальный checkout возвращён на актуальную `main`; исходная пользовательская правка `.DS_Store` сохранена.
+
+## Расширенный PR
+
+Небольшой PR #37 закрыт; [PR #38](https://github.com/PeshkovND/MyFamily/pull/38) содержит рефакторинг подготовки данных авторизации и проверки состояния сессии: 9 файлов, 233 добавленные и 22 удалённые строки. Название и описание оформлены как обычный PR. Он оставлен открытым и не слит в `main`.
+
+На первом запуске обнаружен дефект reviewer: точные цитаты отклонялись из-за неверно посчитанных моделью номеров строк. Исправление выпущено как `v1.0.2`, закреплено в MyFamily через PR #39 и не меняет код приложения в `main`.
+
+[Итоговый запуск](https://github.com/PeshkovND/MyFamily/actions/runs/39010352297) — success: 9/9 файлов рассмотрены, ошибок ответов нет; модель вернула 19 замечаний: 10 потенциальных багов, 4 архитектурных замечания и 5 рекомендаций. [AI-ревью](https://github.com/PeshkovND/MyFamily/pull/38#issuecomment-6230677153) обновлено в одном комментарии. `partial` в отчёте указывает на ограниченный объём содержимого трёх крупных файлов, а не на сбой ревью; ограничения перечислены явно.
 
 ## Обычное использование
 
