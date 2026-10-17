@@ -36,3 +36,16 @@ test('absence of evidence retains unknown and does not manufacture citations', (
   assert.equal(resolveLocalEvidence('{"status":"unknown"}', []), '{"status":"unknown"}')
   assert.deepEqual(localEvidence([{ ...source, text: 'Short' }]), [])
 })
+
+
+test('section headings are not selectable evidence; the adjacent factual paragraph remains literal', () => {
+  const fact = 'Pending means that the transaction is awaiting confirmation.'
+  const document = { ...source, text: '# Purchase support\n\n## Pending purchase\n\n' + fact }
+  const catalogue = localEvidence([document])
+  assert.equal(catalogue.length, 1)
+  assert.equal(catalogue[0].quote, fact)
+  assert.equal(catalogue[0].section, source.section)
+  const content = resolveLocalEvidence(JSON.stringify({ status: 'answered', claims: [{ text: fact, evidenceIds: [catalogue[0].id] }] }), catalogue)
+  assert.equal(parseGroundedAnswer(content, [document]).status, 'answered')
+  assert.deepEqual(localEvidence([{ ...source, text: '## A heading without facts' }]), [])
+})

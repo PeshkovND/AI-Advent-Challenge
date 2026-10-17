@@ -1,0 +1,204 @@
+{
+  "product": "MyFamily",
+  "demo": true,
+  "knowledgeRevision": "cbd4086dc5e30c8e5a77262e1c944cc1514d30d4",
+  "users": [
+    {
+      "id": "mf_owner",
+      "displayName": "Анна · владелец семьи",
+      "authMethod": "vk_id",
+      "accountState": "active",
+      "myFamily": {
+        "platform": "ios",
+        "build": "develop@cbd4086",
+        "authStage": "signed_in",
+        "sessionState": "valid",
+        "profileState": "complete",
+        "family": {
+          "membership": "member",
+          "role": "owner",
+          "id": "demo_family_a"
+        },
+        "pro": {
+          "state": "active",
+          "purchaseState": "none"
+        },
+        "permissions": {
+          "location": "always",
+          "microphone": "granted",
+          "camera": "granted",
+          "photos": "limited"
+        }
+      }
+    },
+    {
+      "id": "mf_member",
+      "displayName": "Олег · участник, геолокация запрещена",
+      "authMethod": "vk_id",
+      "accountState": "active",
+      "myFamily": {
+        "platform": "ios",
+        "build": "develop@cbd4086",
+        "authStage": "signed_in",
+        "sessionState": "valid",
+        "profileState": "complete",
+        "family": {
+          "membership": "member",
+          "role": "regular",
+          "id": "demo_family_a"
+        },
+        "pro": {
+          "state": "inactive",
+          "purchaseState": "none"
+        },
+        "permissions": {
+          "location": "denied",
+          "microphone": "denied",
+          "camera": "granted",
+          "photos": "limited"
+        }
+      }
+    },
+    {
+      "id": "mf_join",
+      "displayName": "Мария · ещё без семьи",
+      "authMethod": "vk_id",
+      "accountState": "active",
+      "myFamily": {
+        "platform": "ios",
+        "build": "develop@cbd4086",
+        "authStage": "signed_in",
+        "sessionState": "valid",
+        "profileState": "complete",
+        "family": {
+          "membership": "none",
+          "role": "unknown"
+        },
+        "pro": {
+          "state": "inactive",
+          "purchaseState": "none"
+        },
+        "permissions": {
+          "location": "when_in_use",
+          "microphone": "granted",
+          "camera": "granted",
+          "photos": "limited"
+        }
+      }
+    },
+    {
+      "id": "mf_pro",
+      "displayName": "Ирина · покупка Pro ожидает подтверждения",
+      "authMethod": "vk_id",
+      "accountState": "active",
+      "myFamily": {
+        "platform": "ios",
+        "build": "develop@cbd4086",
+        "authStage": "signed_in",
+        "sessionState": "valid",
+        "profileState": "complete",
+        "family": {
+          "membership": "member",
+          "role": "regular",
+          "id": "demo_family_a"
+        },
+        "pro": {
+          "state": "inactive",
+          "purchaseState": "pending"
+        },
+        "permissions": {
+          "location": "always",
+          "microphone": "granted",
+          "camera": "granted",
+          "photos": "limited"
+        }
+      }
+    }
+  ],
+  "tickets": [
+    {
+      "id": "MF-2001",
+      "userId": "mf_owner",
+      "title": "Как пригласить родственника",
+      "description": "Хочу создать приглашение и добавить родственника в свою семью. Где взять код?",
+      "category": "features",
+      "status": "open",
+      "messages": [
+        {
+          "author": "user",
+          "body": "Хочу создать приглашение и добавить родственника в свою семью. Где взять код?"
+        }
+      ]
+    },
+    {
+      "id": "MF-2002",
+      "userId": "mf_member",
+      "title": "Нет кнопки приглашения в семью",
+      "description": "В разделе семьи не вижу кнопку добавления участника. Почему не могу пригласить родственника?",
+      "category": "features",
+      "status": "open",
+      "messages": [
+        {
+          "author": "user",
+          "body": "В разделе семьи не вижу кнопку добавления участника. Почему не могу пригласить родственника?"
+        }
+      ]
+    },
+    {
+      "id": "MF-2003",
+      "userId": "mf_member",
+      "title": "Карта не получает мою геолокацию",
+      "description": "Приложение не получает местоположение моего устройства. Что нужно проверить?",
+      "category": "features",
+      "status": "open",
+      "messages": [
+        {
+          "author": "user",
+          "body": "Приложение не получает местоположение моего устройства. Что нужно проверить?"
+        }
+      ]
+    },
+    {
+      "id": "MF-2004",
+      "userId": "mf_join",
+      "title": "Вход прошёл, но семьи и ленты нет",
+      "description": "Я вошла через VK ID. Теперь нужно выбрать семью, а в ленте нет публикаций. Как начать?",
+      "category": "auth",
+      "status": "open",
+      "messages": [
+        {
+          "author": "user",
+          "body": "Я вошла через VK ID. Теперь нужно выбрать семью, а в ленте нет публикаций. Как начать?"
+        }
+      ]
+    },
+    {
+      "id": "MF-2005",
+      "userId": "mf_pro",
+      "title": "Pro не активировался после попытки покупки",
+      "description": "Попробовала купить Pro, но он пока не активен. Что означает ожидание подтверждения?",
+      "category": "billing",
+      "status": "open",
+      "messages": [
+        {
+          "author": "user",
+          "body": "Попробовала купить Pro, но он пока не активен. Что означает ожидание подтверждения?"
+        }
+      ]
+    },
+    {
+      "id": "MF-2006",
+      "userId": "mf_member",
+      "title": "Не записывается аудио",
+      "description": "При создании публикации не начинается запись голоса. Какие разрешения нужны?",
+      "category": "features",
+      "status": "open",
+      "messages": [
+        {
+          "author": "user",
+          "body": "При создании публикации не начинается запись голоса. Какие разрешения нужны?"
+        }
+      ]
+    }
+  ]
+}

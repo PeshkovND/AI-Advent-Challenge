@@ -289,3 +289,45 @@ test('local verifier cannot silently drop a missing or malformed whole-answer ch
       { role: 'user', content: JSON.stringify({ taskCheckRequired: true, claims: [{ claimId: 1 }] }) }], 'verify'), /соответствие ответа вопросу/)
   }
 })
+
+test('local support answers allow documented checks and use MCP when the claim needs it', async () => {
+  const context: RagSource = { ...source, source: 'mcp://support/get_support_context', chunkId: 'selected-context', text: 'The selected user has family role regular.' }
+  for (const ids of [['e1'], ['e2', 'e1']]) {
+    const client = modelClient('local', undefined, (async (_url, init) => {
+      const request = JSON.parse(String(init?.body)), answered = request.format.anyOf[0]
+      assert.deepEqual(answered.required, ['status', 'claims'])
+      assert.equal(answered.properties.claims.minItems, 1)
+      assert.equal(answered.properties.claims.maxItems, 3)
+      return Response.json({ message: { content: JSON.stringify({ status: 'answered', claims: [{ text: 'Ask your family owner to invite the relative.', evidenceIds: ids }] }) } })
+    }) as typeof fetch, { contextSourcePrefix: 'mcp://support/' })
+    client.setSources([source, context])
+    const result = JSON.parse((await client.complete([{ role: 'system', content: 'Support' }, { role: 'user', content: 'How can I invite a relative?' }], 'answer')).content)
+    assert.equal(result.claims.length, 1)
+    assert.equal(result.claims[0].citations.length, ids.length)
+    assert.equal(result.claims[0].text, 'Ask your family owner to invite the relative.')
+  }
+})
+
+test('support still rejects fabricated evidence IDs and permits unknown', async () => {
+  const context: RagSource = { ...source, source: 'mcp://support/get_support_context', chunkId: 'selected-context', text: 'The selected user has family role regular.' }
+  for (const status of ['answered', 'unknown']) {
+    const client = modelClient('local', undefined, (async () => Response.json({ message: { content: JSON.stringify(status === 'unknown' ? { status } : {
+      status, claims: [{ text: 'Invented evidence', evidenceIds: ['unknown-id'] }],
+    }) } })) as typeof fetch, { contextSourcePrefix: 'mcp://support/' })
+    client.setSources([source, context])
+    const run = client.complete([{ role: 'user', content: 'Question' }], 'answer')
+    if (status === 'answered') await assert.rejects(run, /Unknown evidence ID/)
+    else assert.equal((await run).content, '{"status":"unknown"}')
+  }
+})
+
+test('support context selector excludes technical receipt metadata from the required customer evidence', async () => {
+  const context: RagSource = { ...source, source: 'mcp://support/get_support_context', chunkId: 'selected-context', text: 'MCP get_support_context. Получено: test.\n\nПродукт: MyFamily.\n\nСообщение пользователя 1:\nЯ не дал разрешение на использование камеры.' }
+  const client = modelClient('local', undefined, (async (_url, init) => {
+    const request = JSON.parse(String(init?.body))
+    assert.deepEqual(request.format.anyOf[0].properties.claims.items.properties.evidenceIds.items.enum, ['e1', 'e4'])
+    return Response.json({ message: { content: '{"status":"unknown"}' } })
+  }) as typeof fetch, { contextSourcePrefix: 'mcp://support/' })
+  client.setSources([source, context])
+  await client.complete([{ role: 'user', content: 'Как разрешить камеру?' }], 'answer')
+})

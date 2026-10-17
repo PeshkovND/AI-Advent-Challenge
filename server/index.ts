@@ -3,6 +3,7 @@ import './network-config'
 import { createLocalLlmRouter } from './local-llm-router'
 import { createLocalRagRouter } from './local-rag-router'
 import { createDeveloperRouter } from './developer-router'
+import { createSupportRouter } from './support-router'
 import { createLlmOptimizationRouter } from './llm-optimization-router'
 import express, { Response } from 'express'
 import { resolve } from 'node:path'
@@ -247,6 +248,8 @@ app.use(express.json({ limit: '1mb' }))
 app.use('/api/local-llm', createLocalLlmRouter())
 app.use('/api/local-rag', createLocalRagRouter())
 app.use('/api/developer', createDeveloperRouter())
+const supportRouter = createSupportRouter()
+app.use('/api/support', supportRouter)
 app.use('/api/llm-optimization', createLlmOptimizationRouter())
 app.use('/api/agents', createAgentRouter(agentService))
 app.get('/api/rag/index', (_request, response) => {
@@ -825,6 +828,7 @@ await ensureScheduledAgent(agentService)
 await ensureCalendarAgent(agentService)
 
 const httpServer = app.listen(port, '127.0.0.1', () => {
+  supportRouter.tickets.start()
   schedulerWorker.start()
   const address = httpServer.address()
   console.log(`Приложение и планировщик запущены: http://127.0.0.1:${typeof address === 'object' && address ? address.port : port}`)
@@ -836,6 +840,7 @@ let shuttingDown = false
 const shutdown = async () => {
   if (shuttingDown) return
   shuttingDown = true
+  await supportRouter.tickets.stop()
   httpServer.closeIdleConnections()
   httpServer.closeAllConnections()
   await new Promise<void>((resolve) => httpServer.close(() => resolve()))

@@ -1,0 +1,159 @@
+{
+  "product": "MyFamily",
+  "ref": "origin/develop",
+  "commit": "cbd4086dc5e30c8e5a77262e1c944cc1514d30d4",
+  "generatedAt": "2026-10-17",
+  "method": "Curated Russian support documentation verified against git show; no raw credentials or user data indexed.",
+  "documents": [
+    {
+      "path": "support/myfamily/develop/knowledge/auth.md",
+      "sha256": "27df6d11f6b9421e1a72f861bc014737940d1473e64a1274982194e42820e733"
+    },
+    {
+      "path": "support/myfamily/develop/knowledge/families.md",
+      "sha256": "70cee95a600ab307fa583fc6b1c5256459eddbebb6b741392b4d4f8d3d625025"
+    },
+    {
+      "path": "support/myfamily/develop/knowledge/map.md",
+      "sha256": "3450ce79e1d5751496d0958b888c58dbddff5423fad991c27a366ceb22781265"
+    },
+    {
+      "path": "support/myfamily/develop/knowledge/moderation.md",
+      "sha256": "7a382ee026512842485a972b9a8ab65fe20ebeb8f7e2ec4c568dbe2c8657c1f1"
+    },
+    {
+      "path": "support/myfamily/develop/knowledge/posts.md",
+      "sha256": "43048f15c3c6b029ca3298ee6f1c8ce29c7542a9f60f2592d60922eb7cf93c83"
+    },
+    {
+      "path": "support/myfamily/develop/knowledge/pro.md",
+      "sha256": "7cd12b0f77dc705061cc42b15b573936fb20444e3a5eee6e1d092358487c9815"
+    },
+    {
+      "path": "support/myfamily/develop/knowledge/product.md",
+      "sha256": "df88c0d61e0558c4b990f7af2685b82de04d6792b983be057ab7c771de796c94"
+    },
+    {
+      "path": "support/myfamily/develop/knowledge/profile.md",
+      "sha256": "19ca2c7b3d5ee269f22c1896a90ebffd83badd401402ead85fbbae5440515477"
+    }
+  ],
+  "sources": [
+    {
+      "path": "XcodeProject/Packages/AppModulesPackage/Sources/AppServices/Sources/ImagePicker/ImagePicker.swift",
+      "sha256": "b288533f90cb3c01e134dd2de54274d66ebe18b5cc8358d42659cb6a027b954b"
+    },
+    {
+      "path": "XcodeProject/Packages/AppModulesPackage/Sources/AppServices/Sources/LocationManager/LocationManager.swift",
+      "sha256": "23534a8df966cdd4777eb76f334edf10f7287b728bbbf0b80db0ba4374b4c72c"
+    },
+    {
+      "path": "XcodeProject/Packages/AppModulesPackage/Sources/AppServices/Sources/PurchaseManager/PurchaseManager.swift",
+      "sha256": "e0096b4ccf8f1895d65162c8b2a41ec98fd0cb5c83ce5606dc0d515e87af3879"
+    },
+    {
+      "path": "XcodeProject/Packages/AppModulesPackage/Sources/AppServices/Sources/Services/AuthService.swift",
+      "sha256": "942f727225ea87ef9b509e655f149b21494304224b5c34aa7ab4027dfdbe55c5"
+    },
+    {
+      "path": "XcodeProject/Packages/AppModulesPackage/Sources/HomeFlow/Sources/AddPostScreen/AddPostRepository.swift",
+      "sha256": "25a962d2b33f627e6cc23398f1059a8c0a38bbe476070bfa0364c32456503094"
+    },
+    {
+      "path": "XcodeProject/Packages/AppModulesPackage/Sources/HomeFlow/Sources/AddPostScreen/AddPostViewModel.swift",
+      "sha256": "feb5316f90a8c2521ba64cd0a11f4b64a4ce4ecd0db450293ccaceb2fcdc59f4"
+    },
+    {
+      "path": "XcodeProject/Packages/AppModulesPackage/Sources/HomeFlow/Sources/EditProfileScreen/EditProfileRepository.swift",
+      "sha256": "92c960158f23f6588aace4a79c1bd32e8d54c7c5994c7e95a272296a54f91a74"
+    },
+    {
+      "path": "XcodeProject/Packages/AppModulesPackage/Sources/HomeFlow/Sources/EditProfileScreen/EditProfileViewModel.swift",
+      "sha256": "0166f7e17fc96e620eb0b1e0f5c0384b5af2dca2412a322798af516838825c9a"
+    },
+    {
+      "path": "XcodeProject/Packages/AppModulesPackage/Sources/HomeFlow/Sources/FamilyInvitationScreen/FamilyInvitationRepository.swift",
+      "sha256": "4f029be6e1058847e01c7a3d42e7fdff4cf0fcc0c84b328dcb6c2001f2d0ec8c"
+    },
+    {
+      "path": "XcodeProject/Packages/AppModulesPackage/Sources/HomeFlow/Sources/FamilyInvitationScreen/FamilyInvitationViewModel.swift",
+      "sha256": "5eef5cf5b80972fe0911dacc85b4a4d20df766f3c2afcff8c5b1e3076fd05412"
+    },
+    {
+      "path": "XcodeProject/Packages/AppModulesPackage/Sources/HomeFlow/Sources/FamilyScreen/FamilyRepository.swift",
+      "sha256": "dad9975dc06380f85465a696f9323faf935624b48693fe34a68ebc57dda75108"
+    },
+    {
+      "path": "XcodeProject/Packages/AppModulesPackage/Sources/HomeFlow/Sources/FamilyScreen/FamilyViewController.swift",
+      "sha256": "04d8fa8a18347a26ff7a4c85671a40e910d5ffbe475dcb74fb8f19d159a6d3ce"
+    },
+    {
+      "path": "XcodeProject/Packages/AppModulesPackage/Sources/HomeFlow/Sources/FamilyScreen/FamilyViewModel.swift",
+      "sha256": "915d69ea4fbd72e759ac5e7648b9d13b940a7065906e6d625bbce01dd4b80582"
+    },
+    {
+      "path": "XcodeProject/Packages/AppModulesPackage/Sources/HomeFlow/Sources/HomeCoordinator.swift",
+      "sha256": "85fbc3a2a523e445dda11e854e6424d7b65770241e781a7ef25db87ef76f009d"
+    },
+    {
+      "path": "XcodeProject/Packages/AppModulesPackage/Sources/HomeFlow/Sources/MapScreen/MapRepository.swift",
+      "sha256": "f88b460e2c55e01f59ffb5d33ea8d6e62ef8ee48398f4cb051c57e4df73dc7cc"
+    },
+    {
+      "path": "XcodeProject/Packages/AppModulesPackage/Sources/HomeFlow/Sources/MapScreen/MapViewModel.swift",
+      "sha256": "924000d54a78a27635c647feba32b425efdc3431507915b9d6b00c4346a9ebd8"
+    },
+    {
+      "path": "XcodeProject/Packages/AppModulesPackage/Sources/HomeFlow/Sources/NewsScreen/NewsRepository.swift",
+      "sha256": "02092c0ccc45cbb3aa78367ea802c5831e71621ddd078c7c99b802519fede0e0"
+    },
+    {
+      "path": "XcodeProject/Packages/AppModulesPackage/Sources/HomeFlow/Sources/PostScreen/PostRepository.swift",
+      "sha256": "c47566e221d3a2134454be9c0c035498e963c7b04b1d98d7bf093db726162968"
+    },
+    {
+      "path": "XcodeProject/Packages/AppModulesPackage/Sources/HomeFlow/Sources/ProfileScreen/GetProScreen/GetProRepository.swift",
+      "sha256": "4e2810462f302643238eb426cef10e08e209c61d3b8ec0b253af6a51ede431d8"
+    },
+    {
+      "path": "XcodeProject/Packages/AppModulesPackage/Sources/HomeFlow/Sources/ProfileScreen/GetProScreen/GetProViewModel.swift",
+      "sha256": "4cb72dd1d2cbb36e70079eb3e52b4309ff6eb8acaecd50bdf474c5209f764199"
+    },
+    {
+      "path": "XcodeProject/Packages/AppModulesPackage/Sources/HomeFlow/Sources/ProfileScreen/ProfileRepository.swift",
+      "sha256": "7daa6c8cc38cefb79f6586339e70a710a39a6474e3d618b218aae7b10fb882e7"
+    },
+    {
+      "path": "XcodeProject/Packages/AppModulesPackage/Sources/HomeFlow/Sources/ProfileScreen/ProfileViewModel.swift",
+      "sha256": "60d82163c301f61b237c19d9ebcc570c5958187327f188a517a789c7965110e8"
+    },
+    {
+      "path": "XcodeProject/Packages/AppModulesPackage/Sources/SignInFlow/Sources/AddFamilyScreen/AddFamilyRepository.swift",
+      "sha256": "91f3c807c680ed09b4d0339f1863a0265e53d057180500bdb34fdf979f481b48"
+    },
+    {
+      "path": "XcodeProject/Packages/AppModulesPackage/Sources/SignInFlow/Sources/FamilyCheckingScreen/FamilyCheckingRepository.swift",
+      "sha256": "de88dd492b11f5aeef0eb3dd3a8c589a44e6e64f4fc66ca392f7821b5db799a5"
+    },
+    {
+      "path": "XcodeProject/Packages/AppModulesPackage/Sources/SignInFlow/Sources/JoinFamilyScreen/JoinFamilyRepository.swift",
+      "sha256": "b174df7b6acc77b825c5a5a90bd6a6b18579af5a0c5a799311c002d2da14998a"
+    },
+    {
+      "path": "XcodeProject/Packages/AppModulesPackage/Sources/SignInFlow/Sources/SignInScreen/SignInViewModel.swift",
+      "sha256": "6069fce8ca3f46198ce72b1a6ac3fb9ccdbdbe7f6e00f6b53e10f37c49e3a9a7"
+    },
+    {
+      "path": "XcodeProject/Packages/AppModulesPackage/Sources/HomeFlow/Sources/AddPostScreen/AddPostViewController.swift",
+      "sha256": "0bae9d70773db83e7e9097f70ed361ff3e97c597dae1ca3486f40ed35e7f07df"
+    }
+  ],
+  "externalSources": [
+    {
+      "url": "https://support.apple.com/ru-ru/guide/iphone/iph168c4bbd5/ios",
+      "title": "Контроль доступа к аппаратным функциям на iPhone",
+      "checkedAt": "2026-10-17",
+      "usedFor": "Изменение разрешения камеры в настройках iOS; не диагностика устройства."
+    }
+  ]
+}

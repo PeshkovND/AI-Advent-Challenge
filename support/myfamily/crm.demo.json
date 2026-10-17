@@ -1,0 +1,35 @@
+{
+  "product": "MyFamily",
+  "demo": true,
+  "users": [
+    {
+      "id": "mf_anna", "displayName": "Анна · лимит SMS", "authMethod": "sms", "accountState": "unknown",
+      "myFamily": { "platform": "ios", "build": "снимок fe9030e", "authStage": "phone_entry", "sessionState": "absent", "profileState": "unknown", "lastAuthError": { "code": "1101", "retryAfterSeconds": 60 } }
+    },
+    {
+      "id": "mf_oleg", "displayName": "Олег · переход после SMS", "authMethod": "sms", "accountState": "unknown",
+      "myFamily": { "platform": "ios", "build": "снимок fe9030e", "authStage": "sms_requested", "sessionState": "absent", "profileState": "unknown" }
+    },
+    {
+      "id": "mf_maria", "displayName": "Мария · профиль", "authMethod": "sms", "accountState": "unknown",
+      "myFamily": { "platform": "ios", "build": "снимок fe9030e", "authStage": "signed_in", "sessionState": "valid", "profileState": "incomplete" }
+    }
+  ],
+  "tickets": [
+    {
+      "id": "MF-1001", "userId": "mf_anna", "title": "Не получается запросить SMS: ошибка 1101", "status": "open", "category": "auth", "errorCode": "1101",
+      "description": "Демонстрационный сценарий: при повторном запросе SMS приложение показывает код 1101 и ожидание 60 секунд. Вход не выполнен.",
+      "messages": [{ "author": "user", "body": "Почему не работает авторизация? При запросе SMS вижу 1101 и сообщение про 60 секунд." }]
+    },
+    {
+      "id": "MF-1002", "userId": "mf_oleg", "title": "После запроса SMS не открывается следующий экран", "status": "open", "category": "auth",
+      "description": "Демонстрационный сценарий на снимке fe9030e: запрос SMS отмечен успешным, пользователь остаётся на экране телефона. Доставка SMS и подтверждение кода не установлены.",
+      "messages": [{ "author": "user", "body": "Почему не работает авторизация? После запроса SMS ничего не происходит, остаюсь на экране телефона." }]
+    },
+    {
+      "id": "MF-1003", "userId": "mf_maria", "title": "Вместо профиля вижу My Profile Screen", "status": "open", "category": "profile",
+      "description": "Демонстрационный сценарий на снимке fe9030e: пользователь видит надпись My Profile Screen без редактора. В тестовом контексте профиль не заполнен.",
+      "messages": [{ "author": "user", "body": "Где изменить имя и фамилию? В профиле только My Profile Screen." }]
+    }
+  ]
+}

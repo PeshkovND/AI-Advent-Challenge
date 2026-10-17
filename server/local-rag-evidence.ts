@@ -8,6 +8,8 @@ export function localEvidence(sources: RagSource[]): LocalEvidence[] {
   const evidence: LocalEvidence[] = []
   for (const source of sources) {
     for (const paragraph of source.text.split(/\n\s*\n/)) {
+      // Headings locate a section but cannot substantiate a product claim on their own.
+      if (paragraph.trim().split('\n').every((line) => /^#{1,6}\s+/.test(line.trim()))) continue
       let start = 0
       while (start < paragraph.length) {
         let end = Math.min(start + 1100, paragraph.length)

@@ -1,0 +1,47 @@
+{
+  "scenario": "Browser: create ticket → automatic answer → follow-up → answer → resolved → reload",
+  "ticket": {
+    "id": "TCK-65de9a33-de2d-418f-b3c1-b700ede0495c",
+    "title": "Не могу войти в FlowDesk",
+    "status": "resolved",
+    "revision": 7,
+    "created_at": "2026-10-17T09:41:57.122Z",
+    "updated_at": "2026-10-17T11:05:52.276Z"
+  },
+  "messages": [
+    {
+      "author": "user",
+      "createdAt": "2026-10-17T09:41:57.122Z"
+    },
+    {
+      "author": "agent",
+      "createdAt": "2026-10-17T09:42:06.937Z",
+      "outcome": "answered",
+      "model": "deepseek-v4-flash",
+      "durationMs": 9326,
+      "citations": 6
+    },
+    {
+      "author": "user",
+      "createdAt": "2026-10-17T09:42:30.960Z"
+    },
+    {
+      "author": "agent",
+      "createdAt": "2026-10-17T09:42:43.166Z",
+      "outcome": "answered",
+      "model": "deepseek-v4-flash",
+      "durationMs": 11749,
+      "citations": 8
+    }
+  ],
+  "checks": {
+    "messagesRetainedAfterReload": true,
+    "resolvedStatusRetainedAfterReload": true,
+    "browserConsoleErrors": 0,
+    "unitAndIntegrationTests": {
+      "passed": 106,
+      "failed": 0
+    },
+    "build": "passed"
+  }
+}

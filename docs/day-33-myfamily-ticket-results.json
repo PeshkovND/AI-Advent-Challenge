@@ -1,0 +1,30 @@
+{
+  "ticket": {
+    "id": "TCK-50b7e6cc-6de1-430c-b27a-9c35bb2bf767",
+    "title": "MyFamily: не получается запросить SMS",
+    "status": "pending",
+    "revision": 6
+  },
+  "messages": [
+    {
+      "author": "user"
+    },
+    {
+      "author": "agent",
+      "outcome": "escalate",
+      "model": "qwen3.5:4b",
+      "durationMs": 40706,
+      "citations": 0
+    },
+    {
+      "author": "user"
+    },
+    {
+      "author": "agent",
+      "outcome": "answered",
+      "model": "qwen3.5:9b",
+      "durationMs": 167843,
+      "citations": 6
+    }
+  ]
+}

@@ -1,0 +1,60 @@
+{
+  "capturedAt": "2026-10-17T12:42:01.942Z",
+  "ticket": {
+    "id": "TCK-692568a9-e4b8-4b55-a73b-bbdd461a962f",
+    "userId": "mf_member",
+    "title": "MyFamily: не определяется моё местоположение",
+    "description": "Приложение не получает местоположение моего устройства. Объясни причину по моему контексту и что мне проверить на iPhone.",
+    "category": "features",
+    "status": "pending",
+    "createdAt": "2026-10-17T12:35:16.776Z",
+    "updatedAt": "2026-10-17T12:36:38.672Z",
+    "revision": 3,
+    "messages": [
+      {
+        "id": "msg-32a4661d-1f5d-4808-862f-1171eae21caf",
+        "author": "user",
+        "body": "Приложение не получает местоположение моего устройства. Объясни причину по моему контексту и что мне проверить на iPhone.",
+        "createdAt": "2026-10-17T12:35:16.776Z"
+      },
+      {
+        "id": "msg-5b406624-1865-478c-b9cd-dd02de1ad7bc",
+        "author": "agent",
+        "body": "Разрешение location: denied. [1]\n\nПричина неопределения местоположения — запрет геолокации в настройках iPhone (разрешение location=denied). [2]\n\nПроверьте разрешение геолокации MyFamily в настройках iPhone: Настройки → Конфиденциальность и безопасность → Службы геолокации → MyFamily. [2]\n\nЕсли статус разрешения restricted, проверьте системные ограничения iOS; снятие запрета не гарантирует немедленного обновления всех участников семьи. [2]",
+        "createdAt": "2026-10-17T12:36:38.672Z",
+        "replyTo": "msg-32a4661d-1f5d-4808-862f-1171eae21caf",
+        "reply": {
+          "outcome": "answered",
+          "provider": "local",
+          "model": "qwen3.5:9b",
+          "durationMs": 81439,
+          "citations": [
+            {
+              "id": 1,
+              "source": "mcp://support/get_support_context",
+              "section": "get_support_context",
+              "chunkId": "support-context-0d6be1bb-f4be-4822-9bfb-da3ce71fb325",
+              "quote": "Данные аккаунта из CRM:\nПользователь: mf_member.\nСпособ входа: vk_id.\nСостояние аккаунта: active.\nПлатформа: iOS.\nСборка: develop@cbd4086.\nЭтап входа: signed_in.\nСессия: valid.\nЗаполнение профиля: complete.\nЧленство в семье: member.\nРоль в семье: regular.\nСемья: demo_family_a.\nСтатус Pro: inactive.\nСостояние покупки Pro: none.\nРазрешение location: denied.\nРазрешение microphone: denied.\nРазрешение camera: granted.\nРазрешение photos: limited."
+            },
+            {
+              "id": 2,
+              "source": "support/myfamily/develop/knowledge/map.md",
+              "section": "Карта не получает моё местоположение",
+              "chunkId": "structured-57d1c991ff041a3e",
+              "quote": "AppLocationManager проверяет, включены ли службы геолокации. При denied или restricted он сообщает checkAuthorizationFailed и не запускает обновления координат в этой ветке. Если MCP показывает location=denied, запрет геолокации объясняет, почему приложение не получает координаты этого устройства. Проверьте разрешение геолокации MyFamily в настройках iPhone; при restricted нужно проверить системные ограничения. Ассистент сам разрешения не меняет. Снятие запрета не гарантирует немедленного обновления всех участников семьи."
+            }
+          ],
+          "indexRunId": "fd9d405f-ead4-4d78-a9be-123da9a3b7f5",
+          "capturedAt": "2026-10-17T12:35:17.223Z"
+        }
+      }
+    ],
+    "job": {
+      "id": "job-415b7986-e170-4218-9564-e70577489c43",
+      "state": "completed",
+      "provider": "local",
+      "userMessageId": "msg-32a4661d-1f5d-4808-862f-1171eae21caf",
+      "updatedAt": "2026-10-17T12:36:38.672Z"
+    }
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "product": "FlowDesk",
+  "demo": true,
+  "users": [
+    { "id": "usr_anna", "displayName": "Анна · North Studio", "plan": "business", "role": "admin", "authMethod": "sso", "ssoRequired": true, "accountState": "active" },
+    { "id": "usr_oleg", "displayName": "Олег · Personal", "plan": "free", "role": "owner", "authMethod": "password", "ssoRequired": false, "accountState": "locked" },
+    { "id": "usr_maria", "displayName": "Мария · Pixel Team", "plan": "team", "role": "viewer", "authMethod": "password", "ssoRequired": false, "accountState": "active" }
+  ],
+  "tickets": [
+    {
+      "id": "TCK-1001", "userId": "usr_anna", "title": "Не получается войти после включения SSO", "status": "open", "category": "auth", "errorCode": "SSO_REQUIRED",
+      "description": "Вход по email и паролю отклоняется. В организации включён обязательный корпоративный вход SSO. Аккаунт активен.",
+      "messages": [
+        { "author": "user", "body": "Почему не работает авторизация? Вчера входила с паролем, сегодня вижу SSO_REQUIRED." },
+        { "author": "agent", "body": "У организации включён обязательный SSO. Пользователь пробовал входить через форму email и пароля." },
+        { "author": "user", "body": "Сброс пароля уже попробовала, ошибка осталась." }
+      ]
+    },
+    {
+      "id": "TCK-1002", "userId": "usr_oleg", "title": "Аккаунт заблокирован после неверного пароля", "status": "open", "category": "auth", "errorCode": "ACCOUNT_LOCKED",
+      "description": "Зафиксировано пять неудачных попыток входа подряд. Аккаунт временно заблокирован. SSO не используется.",
+      "messages": [
+        { "author": "user", "body": "Не могу авторизоваться. Несколько раз вводил старый пароль, теперь ACCOUNT_LOCKED." },
+        { "author": "user", "body": "Можно войти прямо сейчас или нужно подождать?" }
+      ]
+    },
+    {
+      "id": "TCK-1003", "userId": "usr_maria", "title": "Не вижу раздел оплаты", "status": "pending", "category": "billing", "errorCode": "BILLING_FORBIDDEN",
+      "description": "Участник с ролью viewer не видит счета и настройки подписки команды на тарифе Team.",
+      "messages": [{ "author": "user", "body": "У нас оплачен Team, но у меня нет доступа к счетам. Как скачать счёт?" }]
+    },
+    {
+      "id": "TCK-1004", "userId": "usr_anna", "title": "Webhook получает HTTP 500", "status": "open", "category": "integrations", "errorCode": "WEBHOOK_DELIVERY_FAILED",
+      "description": "Получатель webhook возвращает HTTP 500. Требуется проверить endpoint и правила повторных доставок.",
+      "messages": [{ "author": "user", "body": "Событие не пришло в нашу систему. В истории доставки вижу HTTP 500." }]
+    }
+  ]
+}

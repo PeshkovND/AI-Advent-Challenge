@@ -9,11 +9,12 @@ import LocalLlmPage from './LocalLlmPage'
 import LocalRagPage from './LocalRagPage'
 import LlmOptimizationPage from './LlmOptimizationPage'
 import DeveloperAssistantPage from './DeveloperAssistantPage'
+import SupportAssistantPage from './SupportAssistantPage'
 import type { RagConfig } from './rag-types'
 import type { DialogueMemoryConfig } from './rag-chat-types'
 
 type MessageRole = 'user' | 'assistant'
-type Page = 'developer' | 'llm-optimization' | 'local-rag' | 'local-llm' | 'chat' | 'compare' | 'reasoning' | 'temperature' | 'models' | 'agents' | 'rag' | 'rag-chat' | 'context-demo' | 'context-comparison' | 'context-strategies' | 'context-branching' | 'memory-layers' | 'personalization' | 'task-state' | 'calendar-mcp' | 'scheduler'
+type Page = 'support' | 'developer' | 'llm-optimization' | 'local-rag' | 'local-llm' | 'chat' | 'compare' | 'reasoning' | 'temperature' | 'models' | 'agents' | 'rag' | 'rag-chat' | 'context-demo' | 'context-comparison' | 'context-strategies' | 'context-branching' | 'memory-layers' | 'personalization' | 'task-state' | 'calendar-mcp' | 'scheduler'
 
 type ChatMessage = {
   id: string
@@ -275,11 +276,15 @@ const createInvariantField = (): InvariantField => ({ id: `invariant-${crypto.ra
 
 function App() {
   const [activePage, setActivePage] = useState<Page>(() => {
-    try { return sessionStorage.getItem('deepchat-developer-open') === 'true' ? 'developer' : sessionStorage.getItem('deepchat-day29-open') === 'true' ? 'llm-optimization' : sessionStorage.getItem('deepchat-rag-chat-open') === 'true' ? 'rag-chat' : sessionStorage.getItem('deepchat-rag-open') === 'true' || sessionStorage.getItem('deepchat-day23-open') === 'true' ? 'rag' : 'chat' }
+    try { return window.location.hash === '#support' || sessionStorage.getItem('deepchat-support-open') === 'true' ? 'support' : sessionStorage.getItem('deepchat-developer-open') === 'true' ? 'developer' : sessionStorage.getItem('deepchat-day29-open') === 'true' ? 'llm-optimization' : sessionStorage.getItem('deepchat-rag-chat-open') === 'true' ? 'rag-chat' : sessionStorage.getItem('deepchat-rag-open') === 'true' || sessionStorage.getItem('deepchat-day23-open') === 'true' ? 'rag' : 'chat' }
     catch { return 'chat' }
   })
-  useEffect(() => { try { sessionStorage.setItem('deepchat-developer-open', String(activePage === 'developer')); sessionStorage.setItem('deepchat-day29-open', String(activePage === 'llm-optimization')); sessionStorage.setItem('deepchat-rag-open', String(activePage === 'rag')); sessionStorage.setItem('deepchat-rag-chat-open', String(activePage === 'rag-chat')); sessionStorage.removeItem('deepchat-day23-open') } catch { /* Navigation works without storage. */ } }, [activePage])
-  useEffect(() => { document.title = activePage === 'developer' ? 'DeepChat · Ассистент разработчика' : activePage === 'llm-optimization' ? 'DeepChat · Оптимизация LLM' : activePage === 'local-rag' ? 'DeepChat · Локальный RAG' : activePage === 'local-llm' ? 'DeepChat · Локальная LLM' : activePage === 'rag-chat' ? 'DeepChat · RAG-чат' : 'DeepChat · Сравнение ответов' }, [activePage])
+  useEffect(() => { try { sessionStorage.setItem('deepchat-support-open', String(activePage === 'support')); sessionStorage.setItem('deepchat-developer-open', String(activePage === 'developer')); sessionStorage.setItem('deepchat-day29-open', String(activePage === 'llm-optimization')); sessionStorage.setItem('deepchat-rag-open', String(activePage === 'rag')); sessionStorage.setItem('deepchat-rag-chat-open', String(activePage === 'rag-chat')); sessionStorage.removeItem('deepchat-day23-open') } catch { /* Navigation works without storage. */ } }, [activePage])
+  useEffect(() => {
+    if (activePage === 'support' && window.location.hash !== '#support') window.history.replaceState(null, '', '#support')
+    else if (activePage !== 'support' && window.location.hash === '#support') window.history.replaceState(null, '', window.location.pathname + window.location.search)
+  }, [activePage])
+  useEffect(() => { document.title = activePage === 'support' ? 'DeepChat · Поддержка пользователей' : activePage === 'developer' ? 'DeepChat · Ассистент разработчика' : activePage === 'llm-optimization' ? 'DeepChat · Оптимизация LLM' : activePage === 'local-rag' ? 'DeepChat · Локальный RAG' : activePage === 'local-llm' ? 'DeepChat · Локальная LLM' : activePage === 'rag-chat' ? 'DeepChat · RAG-чат' : 'DeepChat · Сравнение ответов' }, [activePage])
 
   return (
     <div className="day-app">
@@ -290,6 +295,7 @@ function App() {
         </div>
 
         <nav className="page-nav" aria-label="Разделы приложения">
+          <button className={`page-nav-button ${activePage === 'support' ? 'active' : ''}`} onClick={() => setActivePage('support')}><span>◉</span> Поддержка пользователей</button>
           <button className={`page-nav-button ${activePage === 'developer' ? 'active' : ''}`} onClick={() => setActivePage('developer')}><span>⌘</span> Ассистент разработчика</button>
           <button className={`page-nav-button ${activePage === 'llm-optimization' ? 'active' : ''}`} onClick={() => setActivePage('llm-optimization')}><span>⚙</span> Оптимизация LLM</button>
           <button className={`page-nav-button ${activePage === 'local-rag' ? 'active' : ''}`} onClick={() => setActivePage('local-rag')}><span>◉</span> Локальный RAG</button>
@@ -353,8 +359,8 @@ function App() {
         </div>
       </aside>
 
-      <main className={`day-main${(activePage === 'developer' || activePage === 'rag-chat' || activePage === 'local-llm') ? ' day-main-rag-chat' : ''}${activePage === 'llm-optimization' ? ' day-main-optimization' : ''}`}>
-        {activePage === 'developer' ? <DeveloperAssistantPage /> : activePage === 'llm-optimization' ? <LlmOptimizationPage /> : activePage === 'local-rag' ? <LocalRagPage /> : activePage === 'local-llm' ? <LocalLlmPage /> : activePage === 'rag-chat' ? <RagChatPage /> : activePage === 'chat' ? <ChatPage /> : activePage === 'compare' ? <ComparePage /> : activePage === 'reasoning' ? <ReasoningPage /> : activePage === 'temperature' ? <TemperaturePage /> : activePage === 'models' ? <ModelsPage /> : activePage === 'agents' ? <AgentsPage /> : activePage === 'rag' ? <RagPage /> : activePage === 'context-demo' ? <ContextDemoPage /> : activePage === 'context-comparison' ? <ContextCompressionComparisonPage /> : activePage === 'context-strategies' ? <ContextStrategiesPage /> : activePage === 'context-branching' ? <ContextBranchingPage /> : activePage === 'memory-layers' ? <MemoryLayersPage /> : activePage === 'personalization' ? <PersonalizationPage /> : activePage === 'task-state' ? <TaskStatePage /> : activePage === 'calendar-mcp' ? <CalendarMcpPage /> : <SchedulerPage />}
+      <main className={`day-main${(activePage === 'support' || activePage === 'developer' || activePage === 'rag-chat' || activePage === 'local-llm') ? ' day-main-rag-chat' : ''}${activePage === 'llm-optimization' ? ' day-main-optimization' : ''}`}>
+        {activePage === 'support' ? <SupportAssistantPage /> : activePage === 'developer' ? <DeveloperAssistantPage /> : activePage === 'llm-optimization' ? <LlmOptimizationPage /> : activePage === 'local-rag' ? <LocalRagPage /> : activePage === 'local-llm' ? <LocalLlmPage /> : activePage === 'rag-chat' ? <RagChatPage /> : activePage === 'chat' ? <ChatPage /> : activePage === 'compare' ? <ComparePage /> : activePage === 'reasoning' ? <ReasoningPage /> : activePage === 'temperature' ? <TemperaturePage /> : activePage === 'models' ? <ModelsPage /> : activePage === 'agents' ? <AgentsPage /> : activePage === 'rag' ? <RagPage /> : activePage === 'context-demo' ? <ContextDemoPage /> : activePage === 'context-comparison' ? <ContextCompressionComparisonPage /> : activePage === 'context-strategies' ? <ContextStrategiesPage /> : activePage === 'context-branching' ? <ContextBranchingPage /> : activePage === 'memory-layers' ? <MemoryLayersPage /> : activePage === 'personalization' ? <PersonalizationPage /> : activePage === 'task-state' ? <TaskStatePage /> : activePage === 'calendar-mcp' ? <CalendarMcpPage /> : <SchedulerPage />}
       </main>
     </div>
   )

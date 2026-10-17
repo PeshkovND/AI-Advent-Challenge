@@ -1,0 +1,17 @@
+{
+  "ticketId": "TCK-7b1a7472-9228-4e0d-8f1e-30cff853c7ab",
+  "originalProvider": "cloud",
+  "originalFailureDetailsRetained": false,
+  "diagnosticCloudInvocations": 1,
+  "diagnosticError": "Blanket requirement for an MCP citation rejected a documented generic checklist after style repair.",
+  "fix": "Require ticket evidence for personal-state claims, not for every generic recommendation; always provide ticket context to semantic verification.",
+  "replayGeneration": "Captured authorized DeepSeek response, unchanged",
+  "replayVerification": "Real local Qwen 9B",
+  "replayPassed": true,
+  "regression": {
+    "passed": 150,
+    "total": 150
+  },
+  "answer": "Проверьте доступ к камере: откройте «Настройки» → «Конфиденциальность и безопасность» → «Камера» и включите доступ для MyFamily, если приложение есть в списке, затем вернитесь в MyFamily и попробуйте снова сделать фото. [1][2]\n\nЕсли камера не открывается, в меню добавления фото можно выбрать галерею и добавить готовое фото; выбор фото ещё не означает успешную публикацию, после него выполняются загрузка и проверка содержимого. [3][4]\n\nЕсли доступ выдать не получилось или MyFamily нет в списке, уточните, что отображается на этом экране. [5]",
+  "knownLimit": "The old exception was not retained. The same question reproduced this check failure; no additional cloud run was performed after the fix."
+}

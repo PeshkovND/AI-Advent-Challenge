@@ -1,0 +1,486 @@
+{
+  "createdAt": "2026-10-17T12:29:35.211Z",
+  "snapshot": "cbd4086dc5e30c8e5a77262e1c944cc1514d30d4",
+  "provider": "local",
+  "selected": [
+    "pro-pending"
+  ],
+  "complete": true,
+  "passed": 1,
+  "total": 1,
+  "results": [
+    {
+      "id": "pro-pending",
+      "passed": true,
+      "checks": {
+        "outcome": true,
+        "answer": true,
+        "verified": true,
+        "documentationCitation": true,
+        "crmCitation": true
+      },
+      "result": {
+        "question": "Почему Pro пока не активен? Что значит ожидание подтверждения покупки?",
+        "selection": {
+          "userId": "mf_pro",
+          "ticketId": "MF-2005"
+        },
+        "provider": "local",
+        "model": "qwen3.5:9b",
+        "answer": "Статус покупки Pro: pending (ожидание подтверждения транзакции). Пользователь сообщает, что попыталась купить Pro, но он пока не активен. [1][2][3]\n\nСостояние purchaseState=pending означает ожидание подтверждения транзакции; в PurchaseManager этот результат вызывает onFailure, а не успешную активацию. Подтверждённого успешного платежа ещё нет. [4]\n\nЕсли pro=inactive и пользователь сообщает об оплате, восстановление может помочь проверить подтверждённые права, но без данных StoreKit и Firebase причину рассинхронизации установить нельзя. [4]\n\nМожно предложить «Восстановить покупки» на экране Pro; это не гарантия наличия покупки у аккаунта. [5]",
+        "outcome": "answered",
+        "grounding": {
+          "status": "answered",
+          "answer": "Статус покупки Pro: pending (ожидание подтверждения транзакции). Пользователь сообщает, что попыталась купить Pro, но он пока не активен. [1][2][3]\n\nСостояние purchaseState=pending означает ожидание подтверждения транзакции; в PurchaseManager этот результат вызывает onFailure, а не успешную активацию. Подтверждённого успешного платежа ещё нет. [4]\n\nЕсли pro=inactive и пользователь сообщает об оплате, восстановление может помочь проверить подтверждённые права, но без данных StoreKit и Firebase причину рассинхронизации установить нельзя. [4]\n\nМожно предложить «Восстановить покупки» на экране Pro; это не гарантия наличия покупки у аккаунта. [5]",
+          "claims": [
+            {
+              "id": 1,
+              "text": "Статус покупки Pro: pending (ожидание подтверждения транзакции). Пользователь сообщает, что попыталась купить Pro, но он пока не активен.",
+              "citationIds": [
+                1,
+                2,
+                3
+              ]
+            },
+            {
+              "id": 2,
+              "text": "Состояние purchaseState=pending означает ожидание подтверждения транзакции; в PurchaseManager этот результат вызывает onFailure, а не успешную активацию. Подтверждённого успешного платежа ещё нет.",
+              "citationIds": [
+                4
+              ]
+            },
+            {
+              "id": 3,
+              "text": "Если pro=inactive и пользователь сообщает об оплате, восстановление может помочь проверить подтверждённые права, но без данных StoreKit и Firebase причину рассинхронизации установить нельзя.",
+              "citationIds": [
+                4
+              ]
+            },
+            {
+              "id": 4,
+              "text": "Можно предложить «Восстановить покупки» на экране Pro; это не гарантия наличия покупки у аккаунта.",
+              "citationIds": [
+                5
+              ]
+            }
+          ],
+          "citations": [
+            {
+              "id": 1,
+              "source": "mcp://support/get_support_context",
+              "section": "get_support_context",
+              "chunkId": "support-context-e9775aa8-c5b6-4e86-a9be-f351a4f55f52",
+              "quote": "Данные аккаунта из CRM:\nПользователь: mf_pro.\nСпособ входа: vk_id.\nСостояние аккаунта: active.\nПлатформа: iOS.\nСборка: develop@cbd4086.\nЭтап входа: signed_in.\nСессия: valid.\nЗаполнение профиля: complete.\nЧленство в семье: member.\nРоль в семье: regular.\nСемья: demo_family_a.\nСтатус Pro: inactive.\nСостояние покупки Pro: pending.\nРазрешение location: always.\nРазрешение microphone: granted.\nРазрешение camera: granted.\nРазрешение photos: limited."
+            },
+            {
+              "id": 2,
+              "source": "mcp://support/get_support_context",
+              "section": "get_support_context",
+              "chunkId": "support-context-e9775aa8-c5b6-4e86-a9be-f351a4f55f52",
+              "quote": "Данные тикета из CRM:\nТикет: MF-2005.\nПользователь тикета: mf_pro.\nСтатус: open.\nКатегория: billing.\nКод ошибки: не указан.\nТема: Pro не активировался после попытки покупки\nОписание: Попробовала купить Pro, но он пока не активен. Что означает ожидание подтверждения?"
+            },
+            {
+              "id": 3,
+              "source": "mcp://support/get_support_context",
+              "section": "get_support_context",
+              "chunkId": "support-context-e9775aa8-c5b6-4e86-a9be-f351a4f55f52",
+              "quote": "Сообщение пользователя 1 (подтверждает только его слова, не диагноз):\nПопробовала купить Pro, но он пока не активен. Что означает ожидание подтверждения?"
+            },
+            {
+              "id": 4,
+              "source": "support/myfamily/develop/knowledge/pro.md",
+              "section": "Оплата ожидает подтверждения или Pro не появился",
+              "chunkId": "structured-06122826c90b21ec",
+              "quote": "Результат pending означает ожидание подтверждения транзакции; в PurchaseManager этот результат вызывает onFailure, а не успешную активацию. userCancelled закрывает процесс без успешной покупки, unverified тоже не активирует Pro по этой ветке. Если синтетический контекст показывает pending, подтверждённого успешного платежа ещё нет; нельзя заявлять, что средства списаны или Pro активен. Если pro=inactive и пользователь сообщает об оплате, восстановление может помочь проверить подтверждённые права, но без данных StoreKit и Firebase причину рассинхронизации установить нельзя. Поддержка не включает Pro и не оформляет возврат; при сохранении проблемы нужны оператор и безопасные диагностические данные без платёжных реквизитов."
+            },
+            {
+              "id": 5,
+              "source": "support/myfamily/develop/knowledge/pro.md",
+              "section": "Как купить и восстановить Pro",
+              "chunkId": "structured-1f163a27472a4a28",
+              "quote": "Экран Pro открывается из профиля. GetProRepository запрашивает продукт StoreKit с id premiumstatus. Цена отображается через product.displayPrice, поэтому нельзя указывать фиксированную цену из исходного кода. Покупка вызывает Product.purchase. При проверенной транзакции verified менеджер завершает транзакцию, обновляет покупки и вызывает обработчик, после которого setPro записывает pro=true в Firebase и локальный флаг isPro. Восстановление покупок вызывает AppStore.sync, проверяет текущие подтверждённые права через Transaction.currentEntitlements и вызывает setPro только при найденном праве. Можно предложить «Восстановить покупки» на экране Pro; это не гарантия наличия покупки у аккаунта."
+            }
+          ],
+          "sources": [
+            {
+              "source": "mcp://support/get_support_context",
+              "section": "get_support_context",
+              "chunkId": "support-context-e9775aa8-c5b6-4e86-a9be-f351a4f55f52"
+            },
+            {
+              "source": "support/myfamily/develop/knowledge/pro.md",
+              "section": "Оплата ожидает подтверждения или Pro не появился",
+              "chunkId": "structured-06122826c90b21ec"
+            },
+            {
+              "source": "support/myfamily/develop/knowledge/pro.md",
+              "section": "Как купить и восстановить Pro",
+              "chunkId": "structured-1f163a27472a4a28"
+            }
+          ],
+          "verification": {
+            "status": "passed",
+            "attempts": 1,
+            "judgments": [
+              {
+                "claimId": 1,
+                "supported": true,
+                "reason": "Утверждение полностью следует из цитат 1-3: данные CRM подтверждают статус 'pending' и слова пользователя о попытке покупки, что соответствует тексту утверждения."
+              },
+              {
+                "claimId": 2,
+                "supported": true,
+                "reason": "Цитата 4 прямо утверждает, что pending означает ожидание подтверждения и вызывает onFailure, а не активацию, что полностью совпадает с текстом утверждения."
+              },
+              {
+                "claimId": 3,
+                "supported": true,
+                "reason": "Цитата 4 содержит точное совпадение текста о том, что восстановление может помочь проверить права, но без StoreKit/Firebase причину установить нельзя."
+              },
+              {
+                "claimId": 4,
+                "supported": true,
+                "reason": "Цитата 5 в разделе 'Как купить и восстановить Pro' прямо предлагает действие «Восстановить покупки» и предупреждает, что это не гарантия наличия покупки."
+              }
+            ],
+            "taskCheck": {
+              "goalAligned": true,
+              "constraintsRespected": true,
+              "answersQuestion": true,
+              "reason": "Ответ корректно объясняет причину (pending) и предлагает решение (восстановление), опираясь на данные тикета и документацию. Все утверждения подтверждены цитатами, нет подмены ответа или игнорирования ограничений."
+            }
+          },
+          "usage": {
+            "inputTokens": 29216,
+            "promptTokens": 4774,
+            "completionTokens": 449,
+            "totalTokens": 5223
+          }
+        },
+        "sources": [
+          {
+            "source": "mcp://support/get_support_context",
+            "title": "Контекст пользователя и тикета",
+            "section": "get_support_context",
+            "chunkId": "support-context-e9775aa8-c5b6-4e86-a9be-f351a4f55f52",
+            "strategy": "structured",
+            "score": 1,
+            "text": "MCP get_support_context. Получено: 2026-10-17T12:28:07.461Z.\n\nВерсия знаний CRM: cbd4086dc5e30c8e5a77262e1c944cc1514d30d4.\n\nПродукт: MyFamily.\n\nИсточник: демонстрационный JSON. Это тестовые пользователи и диагностические события; подключения к backend продукта нет.\n\nДанные аккаунта из CRM:\nПользователь: mf_pro.\nСпособ входа: vk_id.\nСостояние аккаунта: active.\nПлатформа: iOS.\nСборка: develop@cbd4086.\nЭтап входа: signed_in.\nСессия: valid.\nЗаполнение профиля: complete.\nЧленство в семье: member.\nРоль в семье: regular.\nСемья: demo_family_a.\nСтатус Pro: inactive.\nСостояние покупки Pro: pending.\nРазрешение location: always.\nРазрешение microphone: granted.\nРазрешение camera: granted.\nРазрешение photos: limited.\n\nДанные тикета из CRM:\nТикет: MF-2005.\nПользователь тикета: mf_pro.\nСтатус: open.\nКатегория: billing.\nКод ошибки: не указан.\nТема: Pro не активировался после попытки покупки\nОписание: Попробовала купить Pro, но он пока не активен. Что означает ожидание подтверждения?\n\nСообщение пользователя 1 (подтверждает только его слова, не диагноз):\nПопробовала купить Pro, но он пока не активен. Что означает ожидание подтверждения?\n\nПредыдущие ответы ассистента исключены из доказательств о продукте. Они используются отдельно только для понимания уточняющего вопроса.\n\nНе показано сообщений: 0. Из них исключено предыдущих ответов ассистента: 0. Дополнительное ограничение контекста: нет."
+          },
+          {
+            "source": "support/myfamily/develop/knowledge/pro.md",
+            "title": "MyFamily Pro: покупка и восстановление",
+            "section": "Оплата ожидает подтверждения или Pro не появился",
+            "chunkId": "structured-06122826c90b21ec",
+            "strategy": "structured",
+            "score": 0.7246672474059732,
+            "text": "## Оплата ожидает подтверждения или Pro не появился\n\nРезультат pending означает ожидание подтверждения транзакции; в PurchaseManager этот результат вызывает onFailure, а не успешную активацию. userCancelled закрывает процесс без успешной покупки, unverified тоже не активирует Pro по этой ветке. Если синтетический контекст показывает pending, подтверждённого успешного платежа ещё нет; нельзя заявлять, что средства списаны или Pro активен. Если pro=inactive и пользователь сообщает об оплате, восстановление может помочь проверить подтверждённые права, но без данных StoreKit и Firebase причину рассинхронизации установить нельзя. Поддержка не включает Pro и не оформляет возврат; при сохранении проблемы нужны оператор и безопасные диагностические данные без платёжных реквизитов."
+          },
+          {
+            "source": "support/myfamily/develop/knowledge/pro.md",
+            "title": "MyFamily Pro: покупка и восстановление",
+            "section": "Как купить и восстановить Pro",
+            "chunkId": "structured-1f163a27472a4a28",
+            "strategy": "structured",
+            "score": 0.6342144263186156,
+            "text": "## Как купить и восстановить Pro\n\nЭкран Pro открывается из профиля. GetProRepository запрашивает продукт StoreKit с id premiumstatus. Цена отображается через product.displayPrice, поэтому нельзя указывать фиксированную цену из исходного кода. Покупка вызывает Product.purchase. При проверенной транзакции verified менеджер завершает транзакцию, обновляет покупки и вызывает обработчик, после которого setPro записывает pro=true в Firebase и локальный флаг isPro. Восстановление покупок вызывает AppStore.sync, проверяет текущие подтверждённые права через Transaction.currentEntitlements и вызывает setPro только при найденном праве. Можно предложить «Восстановить покупки» на экране Pro; это не гарантия наличия покупки у аккаунта."
+          }
+        ],
+        "trace": {
+          "originalQuestion": "Почему Pro пока не активен? Что значит ожидание подтверждения покупки?\nТема обращения: Pro не активировался после попытки покупки.",
+          "searchQuery": "Почему Pro пока не активен? Что значит ожидание подтверждения покупки?\nТема обращения: Pro не активировался после попытки покупки.",
+          "candidateTopK": 12,
+          "topK": 4,
+          "minSimilarity": 0.2,
+          "minRelevance": 2,
+          "candidates": [
+            {
+              "source": "support/myfamily/develop/knowledge/pro.md",
+              "title": "MyFamily Pro: покупка и восстановление",
+              "section": "Оплата ожидает подтверждения или Pro не появился",
+              "chunkId": "structured-06122826c90b21ec",
+              "strategy": "structured",
+              "score": 0.7246672474059732,
+              "text": "## Оплата ожидает подтверждения или Pro не появился\n\nРезультат pending означает ожидание подтверждения транзакции; в PurchaseManager этот результат вызывает onFailure, а не успешную активацию. userCancelled закрывает процесс без успешной покупки, unverified тоже не активирует Pro по этой ветке. Если синтетический контекст показывает pending, подтверждённого успешного платежа ещё нет; нельзя заявлять, что средства списаны или Pro активен. Если pro=inactive и пользователь сообщает об оплате, восстановление может помочь проверить подтверждённые права, но без данных StoreKit и Firebase причину рассинхронизации установить нельзя. Поддержка не включает Pro и не оформляет возврат; при сохранении проблемы нужны оператор и безопасные диагностические данные без платёжных реквизитов.",
+              "rankBefore": 1,
+              "selected": true,
+              "originalRank": 1,
+              "fusionScore": 0.01639344262295082,
+              "relevance": 3,
+              "reason": "Объясняет статус pending и отсутствие активации",
+              "rankAfter": 1
+            },
+            {
+              "source": "support/myfamily/develop/knowledge/pro.md",
+              "title": "MyFamily Pro: покупка и восстановление",
+              "section": "Как купить и восстановить Pro",
+              "chunkId": "structured-1f163a27472a4a28",
+              "strategy": "structured",
+              "score": 0.6342144263186156,
+              "text": "## Как купить и восстановить Pro\n\nЭкран Pro открывается из профиля. GetProRepository запрашивает продукт StoreKit с id premiumstatus. Цена отображается через product.displayPrice, поэтому нельзя указывать фиксированную цену из исходного кода. Покупка вызывает Product.purchase. При проверенной транзакции verified менеджер завершает транзакцию, обновляет покупки и вызывает обработчик, после которого setPro записывает pro=true в Firebase и локальный флаг isPro. Восстановление покупок вызывает AppStore.sync, проверяет текущие подтверждённые права через Transaction.currentEntitlements и вызывает setPro только при найденном праве. Можно предложить «Восстановить покупки» на экране Pro; это не гарантия наличия покупки у аккаунта.",
+              "rankBefore": 2,
+              "selected": true,
+              "originalRank": 2,
+              "fusionScore": 0.016129032258064516,
+              "relevance": 2,
+              "reason": "Описывает процесс покупки и восстановления Pro",
+              "rankAfter": 2
+            },
+            {
+              "source": "support/myfamily/develop/knowledge/pro.md",
+              "title": "MyFamily Pro: покупка и восстановление",
+              "section": "Что даёт Pro и меняет ли права",
+              "chunkId": "structured-26bb6d7dd4d81594",
+              "strategy": "structured",
+              "score": 0.5360655884834811,
+              "text": "## Что даёт Pro и меняет ли права\n\nКод хранит pro у пользователя и показывает этот признак в профиле, ленте, карте и списке семьи. В проверенных обработчиках приглашений и удаления участников права определяет роль owner или regular, а не Pro. Восстановление Pro не делает пользователя владельцем семьи. В коде этой базы не подтверждены тарифная сетка, период подписки, возвраты, дополнительный объём хранилища или доступ Pro к чужим семейным публикациям. Не придумывайте эти преимущества.",
+              "rankBefore": 3,
+              "selected": false,
+              "originalRank": 3,
+              "fusionScore": 0.015873015873015872,
+              "relevance": 0,
+              "reason": "Перечисляет функции Pro, не объясняя причину неактивности",
+              "rankAfter": 5,
+              "rejection": "relevance"
+            },
+            {
+              "source": "support/myfamily/develop/knowledge/pro.md",
+              "title": "MyFamily Pro: покупка и восстановление",
+              "section": "MyFamily Pro: покупка и восстановление",
+              "chunkId": "structured-7cf71cb7426e8f66",
+              "strategy": "structured",
+              "score": 0.524561464175763,
+              "text": "# MyFamily Pro: покупка и восстановление\n\nСнимок исходников: MyFamily, origin/develop, commit cbd4086dc5e30c8e5a77262e1c944cc1514d30d4.",
+              "rankBefore": 4,
+              "selected": false,
+              "originalRank": 4,
+              "fusionScore": 0.015625,
+              "relevance": 0,
+              "reason": "Содержит только техническую информацию о репозитории",
+              "rankAfter": 6,
+              "rejection": "relevance"
+            },
+            {
+              "source": "support/myfamily/develop/knowledge/product.md",
+              "title": "Возможности MyFamily develop",
+              "section": "Что может проверить поддержка",
+              "chunkId": "structured-0d37ad71cac63ec9",
+              "strategy": "structured",
+              "score": 0.48425001084060915,
+              "text": "## Что может проверить поддержка\n\nДокументация подтверждает поведение конкретного исходного кода, а не состояние production. JSON-CRM даёт синтетический контекст выбранного пользователя и тикета: семья, роль, Pro, сессия и разрешения устройства. Поддержка может объяснить правила и предложить шаги, но не меняет семью, права, покупки или настройки iPhone. Состояние Firebase, текущие инциденты, реальные платежи и доступность VK ID требуют данных оператора. В коде нет подтверждения цен, периодов подписки, сроков возврата или SLA.",
+              "rankBefore": 5,
+              "selected": false,
+              "originalRank": 5,
+              "fusionScore": 0.015384615384615385,
+              "relevance": 1,
+              "reason": "Описывает ограничения поддержки, но не отвечает на вопрос",
+              "rankAfter": 3,
+              "rejection": "relevance"
+            },
+            {
+              "source": "support/myfamily/develop/knowledge/pro.md",
+              "title": "MyFamily Pro: покупка и восстановление",
+              "section": "Источники реализации",
+              "chunkId": "structured-e3c6a69808d41888",
+              "strategy": "structured",
+              "score": 0.48214413200118866,
+              "text": "## Источники реализации\n\n- `XcodeProject/Packages/AppModulesPackage/Sources/HomeFlow/Sources/ProfileScreen/GetProScreen/GetProRepository.swift`\n- `XcodeProject/Packages/AppModulesPackage/Sources/HomeFlow/Sources/ProfileScreen/GetProScreen/GetProViewModel.swift`\n- `XcodeProject/Packages/AppModulesPackage/Sources/AppServices/Sources/PurchaseManager/PurchaseManager.swift`",
+              "rankBefore": 6,
+              "selected": false,
+              "originalRank": 6,
+              "fusionScore": 0.015151515151515152,
+              "relevance": 0,
+              "reason": "Перечисляет файлы кода без объяснения логики работы",
+              "rankAfter": 7,
+              "rejection": "relevance"
+            },
+            {
+              "source": "support/myfamily/develop/knowledge/moderation.md",
+              "title": "Проверка текста, изображений и запись аудио",
+              "section": "Почему не записывается голосовое сообщение",
+              "chunkId": "structured-6e3d66ecbe4f38ca",
+              "strategy": "structured",
+              "score": 0.4522272287892508,
+              "text": "## Почему не записывается голосовое сообщение\n\nДля записи аудио в публикации AddPostViewModel запрашивает requestRecordPermission. Запись начинается только при allowed=true; файл recording.m4a затем передаётся на загрузку как audio. Если в MCP-контексте microphone=denied, проверьте доступ MyFamily к микрофону в настройках iPhone. Ассистент не включает разрешение сам. Не объясняйте отказ микрофона отсутствием Pro или семейной ролью: в этом обработчике таких проверок нет. Нельзя обещать, что после разрешения исчезнут ошибки записи или загрузки. В проверенном коде не описано восстановление потерянной записи.",
+              "rankBefore": 7,
+              "selected": false,
+              "originalRank": 7,
+              "fusionScore": 0.014925373134328358,
+              "relevance": 0,
+              "reason": "Обсуждает проблемы записи аудио, не связанные с Pro",
+              "rankAfter": 8,
+              "rejection": "relevance"
+            },
+            {
+              "source": "support/myfamily/develop/knowledge/moderation.md",
+              "title": "Проверка текста, изображений и запись аудио",
+              "section": "Почему не публикуется текст или изображение",
+              "chunkId": "structured-a02529ebf8003eb0",
+              "strategy": "structured",
+              "score": 0.4285932052343747,
+              "text": "## Почему не публикуется текст или изображение\n\nПеред отправкой текста AddPostViewModel вызывает checkTextToxicity. Ответ isToxic=true показывает предупреждение о токсичном тексте и не вызывает отправку публикации. Ошибка сервиса проверки показывает отдельную ошибку; она не означает, что текст признан токсичным. Для изображения используется Vision и ImageNSFWDetector: безопасное изображение загружается, небезопасное вызывает предупреждение, сбой проверки — отдельную ошибку. Если синтетическая диагностика показывает text_toxic или image_unsafe, объясните соответствующий результат проверки; без результата нельзя объявлять содержимое нарушающим правила. Можно предложить изменить содержание и повторить попытку, не обещая успешную модерацию. Проверку видео этим же детектором код не подтверждает. У поддержки нет функции отключить модерацию.",
+              "rankBefore": 8,
+              "selected": false,
+              "originalRank": 8,
+              "fusionScore": 0.014705882352941176,
+              "relevance": 0,
+              "reason": "Описывает модерацию контента, не относясь к статусу Pro",
+              "rankAfter": 9,
+              "rejection": "relevance"
+            },
+            {
+              "source": "support/myfamily/develop/knowledge/posts.md",
+              "title": "Лента, публикации и комментарии",
+              "section": "Почему публикация по ссылке недоступна",
+              "chunkId": "structured-b55c43e70018f923",
+              "strategy": "structured",
+              "score": 0.4156184804588848,
+              "text": "## Почему публикация по ссылке недоступна\n\nPostRepository.getPostData требует семью текущего аккаунта. После загрузки публикации и автора он сравнивает familyId автора с текущей семьёй. Если автор не найден или его семья отличается, выбрасывается noAccess. Поэтому ссылка не делает публикацию общедоступной. Проверьте, к какой семье принадлежит аккаунт и доступна ли публикация её участникам. По жалобе «нет доступа» нельзя утверждать, что конкретный автор сменил семью или публикация удалена: нужны фактические данные. Pro не отменяет эту проверку семьи.",
+              "rankBefore": 9,
+              "selected": false,
+              "originalRank": 9,
+              "fusionScore": 0.014492753623188406,
+              "relevance": 1,
+              "reason": "Упоминает проверку семьи, но не объясняет причину неактивиза",
+              "rankAfter": 4,
+              "rejection": "relevance"
+            },
+            {
+              "source": "support/myfamily/develop/knowledge/auth.md",
+              "title": "Вход VK ID и сессия",
+              "section": "Истекшая сессия и отсутствие семьи",
+              "chunkId": "structured-1daa078aaaea58d9",
+              "strategy": "structured",
+              "score": 0.4018491575973278,
+              "text": "## Истекшая сессия и отсутствие семьи\n\nСессия считается действующей, только если credentials присутствуют и expirationDate больше текущего времени. При отсутствии или истечении сессии стартует сценарий входа. Если демонстрационный контекст показывает expired или absent, предложите повторный вход через VK ID, не запрашивая токен или код. Успешный вход ещё не означает готовность семьи: после авторизации приложение проверяет familyId; отсутствие семьи ведёт к выбору создания семьи или вступления. Это не ошибка SMS. Проверка hasFilledProfile также учитывает имя, фамилию и наличие семьи.",
+              "rankBefore": 10,
+              "selected": false,
+              "originalRank": 10,
+              "fusionScore": 0.014285714285714285,
+              "relevance": 0,
+              "reason": "Обсуждает истекшую сессию входа, а не статус Pro",
+              "rankAfter": 10,
+              "rejection": "relevance"
+            },
+            {
+              "source": "support/myfamily/develop/knowledge/product.md",
+              "title": "Возможности MyFamily develop",
+              "section": "Что умеет MyFamily",
+              "chunkId": "structured-932c625c6243d939",
+              "strategy": "structured",
+              "score": 0.40114031311736403,
+              "text": "## Что умеет MyFamily\n\nВ MyFamily develop реализованы вход через VK ID, создание семьи и вступление по приглашению, список участников с ролями owner и regular, семейная лента, публикации с текстом, фото, видео или аудио, лайки, комментарии и открытие публикации по ссылке. Есть карта участников семьи, домашняя точка, статусы online, offline и atHome, профиль с редактированием имени, фамилии и фотографии, покупки и восстановление Pro через StoreKit. Это реализованные экраны, а не заглушки ранней ветки main. Для деталей нужно смотреть документацию соответствующей функции.",
+              "rankBefore": 11,
+              "selected": false,
+              "originalRank": 11,
+              "fusionScore": 0.014084507042253521,
+              "relevance": 0,
+              "reason": "Перечисляет общие возможности приложения без деталей о неакт",
+              "rankAfter": 11,
+              "rejection": "relevance"
+            },
+            {
+              "source": "support/myfamily/develop/knowledge/families.md",
+              "title": "Семья, роли и приглашения",
+              "section": "Почему нет кнопки приглашения или удаления участника",
+              "chunkId": "structured-dfc16a70672ef1fa",
+              "strategy": "structured",
+              "score": 0.39318207644936587,
+              "text": "## Почему нет кнопки приглашения или удаления участника\n\nВ интерфейсе управления семьёй кнопки приглашения и удаления участников доступны владельцу owner; участнику regular они не показываются. FamilyViewModel.isEnoughPermissions возвращает true для owner и false для regular. FamilyViewController по этому признаку добавляет кнопку «+» и обработчик удаления. Если в MCP-контексте пользователя роль regular, отсутствие этих кнопок соответствует реализации: попросите владельца семьи создать приглашение или удалить участника. Если роль owner, по одной роли нельзя объяснить отсутствие кнопки: уточните экран и сборку. Это правило клиентского интерфейса; оно не доказывает наличие серверных ACL. Покупка Pro не меняет роль семьи.",
+              "rankBefore": 12,
+              "selected": false,
+              "originalRank": 12,
+              "fusionScore": 0.013888888888888888,
+              "relevance": 0,
+              "reason": "Объясняет права доступа к кнопкам, а не статус Pro",
+              "rankAfter": 12,
+              "rejection": "relevance"
+            }
+          ],
+          "rewrite": {
+            "status": "disabled",
+            "durationMs": 0
+          },
+          "rerank": {
+            "status": "applied",
+            "durationMs": 39829,
+            "attempts": 1,
+            "usage": {
+              "inputTokens": 15077,
+              "promptTokens": 2209,
+              "completionTokens": 388,
+              "totalTokens": 2597
+            }
+          },
+          "timings": {
+            "embeddingMs": 72,
+            "searchMs": 3,
+            "totalMs": 39904
+          },
+          "usage": {
+            "inputTokens": 15077,
+            "promptTokens": 2209,
+            "completionTokens": 388,
+            "totalTokens": 2597
+          },
+          "emptyContext": false
+        },
+        "context": {
+          "capturedAt": "2026-10-17T12:28:07.461Z",
+          "receipt": {
+            "name": "get_support_context",
+            "result": {
+              "product": "MyFamily",
+              "demo": true,
+              "knowledgeRevision": "cbd4086dc5e30c8e5a77262e1c944cc1514d30d4",
+              "customer": {
+                "id": "mf_pro",
+                "authMethod": "vk_id",
+                "accountState": "active",
+                "myFamily": {
+                  "platform": "ios",
+                  "build": "develop@cbd4086",
+                  "authStage": "signed_in",
+                  "sessionState": "valid",
+                  "profileState": "complete",
+                  "family": {
+                    "membership": "member",
+                    "id": "demo_family_a",
+                    "role": "regular"
+                  },
+                  "pro": {
+                    "state": "inactive",
+                    "purchaseState": "pending"
+                  },
+                  "permissions": {
+                    "location": "always",
+                    "microphone": "granted",
+                    "camera": "granted",
+                    "photos": "limited"
+                  }
+                }
+              },
+              "ticket": {
+                "id": "MF-2005",
+                "userId": "mf_pro",
+                "title": "Pro не активировался после попытки покупки",
+                "status": "open",
+                "category": "billing",
+                "description": "Попробовала купить Pro, но он пока не активен. Что означает ожидание подтверждения?",
+                "messages": [
+                  {
+                    "author": "user",
+                    "body": "Попробовала купить Pro, но он пока не активен. Что означает ожидание подтверждения?"
+                  }
+                ]
+              },
+              "messagesOmitted": 0
+            }
+          }
+        },
+        "indexRunId": "b9fc5d07-a98e-4bf0-8a04-41ea4d48da72",
+        "durationMs": 87957
+      }
+    }
+  ]
+}

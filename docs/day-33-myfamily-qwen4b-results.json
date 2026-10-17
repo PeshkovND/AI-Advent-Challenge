@@ -1,0 +1,1266 @@
+{
+  "createdAt": "2026-10-17T11:25:44.454Z",
+  "provider": "local",
+  "passed": 1,
+  "total": 5,
+  "results": [
+    {
+      "id": "sms-limit",
+      "passed": false,
+      "checks": {
+        "outcome": false,
+        "answer": false,
+        "verified": false,
+        "documentationCitation": false,
+        "crmCitation": false
+      },
+      "result": {
+        "question": "Почему не работает авторизация? Что означает ошибка и сколько ждать?",
+        "selection": {
+          "userId": "mf_anna",
+          "ticketId": "MF-1001"
+        },
+        "provider": "local",
+        "model": "qwen3.5:4b",
+        "answer": "Не удалось подтвердить ответ по базе знаний и данным выбранного пользователя. Передайте вопрос оператору поддержки.",
+        "outcome": "escalate",
+        "grounding": {
+          "status": "unknown",
+          "answer": "Не удалось подтвердить ответ по базе знаний и данным выбранного пользователя. Передайте вопрос оператору поддержки.",
+          "clarification": "Укажите точный текст ошибки, время возникновения и уже выполненные шаги. Не отправляйте пароли и коды подтверждения.",
+          "reason": "insufficient-evidence",
+          "sources": [],
+          "citations": [],
+          "claims": [],
+          "verification": {
+            "status": "abstained",
+            "attempts": 1,
+            "judgments": []
+          },
+          "usage": {
+            "inputTokens": 30860,
+            "promptTokens": 5074,
+            "completionTokens": 12,
+            "totalTokens": 5086
+          }
+        },
+        "sources": [
+          {
+            "source": "mcp://support/get_support_context",
+            "title": "Контекст пользователя и тикета",
+            "section": "get_support_context",
+            "chunkId": "support-context-41851f2f-ed72-4b2f-9056-21d27b99e1e9",
+            "strategy": "structured",
+            "score": 1,
+            "text": "MCP get_support_context. Получено: 2026-10-17T11:23:48.748Z.\n\nПродукт: MyFamily.\n\nИсточник: демонстрационный JSON. Это тестовые пользователи и диагностические события; подключения к backend продукта нет.\n\nДанные аккаунта из CRM:\nПользователь: mf_anna.\nСпособ входа: sms.\nСостояние аккаунта: unknown.\nПлатформа: iOS.\nСборка: снимок fe9030e.\nЭтап входа: phone_entry.\nСессия: absent.\nЗаполнение профиля: unknown.\nКод последней ошибки входа: 1101.\nВ последней ошибке указано ожидание: 60 секунд. Это не текущий обратный отсчёт.\n\nДанные тикета из CRM:\nТикет: MF-1001.\nПользователь тикета: mf_anna.\nСтатус: open.\nКатегория: auth.\nКод ошибки: 1101.\nТема: Не получается запросить SMS: ошибка 1101\nОписание: Демонстрационный сценарий: при повторном запросе SMS приложение показывает код 1101 и ожидание 60 секунд. Вход не выполнен.\n\nСообщение пользователя 1 (подтверждает только его слова, не диагноз):\nПочему не работает авторизация? При запросе SMS вижу 1101 и сообщение про 60 секунд.\n\nПредыдущие ответы ассистента исключены из доказательств о продукте. Они используются отдельно только для понимания уточняющего вопроса.\n\nНе показано сообщений: 0. Из них исключено предыдущих ответов ассистента: 0. Дополнительное ограничение контекста: нет."
+          },
+          {
+            "source": "support/myfamily/knowledge/auth.md",
+            "title": "MyFamily: вход по телефону и SMS",
+            "section": "Ошибка 1101: лимит запросов SMS",
+            "chunkId": "structured-568b40a8491cd2d2",
+            "strategy": "structured",
+            "score": 0.689033102422481,
+            "text": "## Ошибка 1101: лимит запросов SMS\n\nВ проверенном снимке MyFamily код 1101 соответствует exceedLimitSMSCode — превышению лимита запросов SMS. SignInViewModel извлекает цифры из сообщения серверной ошибки и подставляет их в текст ожидания. Фиксированное время ожидания кодом клиента не задано. Конкретное число секунд берётся из последней ошибки выбранного пользователя, а не переносится из другого тикета.\n\nПри 1101 ориентируйтесь на ожидание в показанном сообщении и не запрашивайте SMS многократно подряд. Если время в ошибке неизвестно, ассистент не должен придумывать его. Истёкшее ожидание или успешную доставку SMS нельзя подтвердить по одному старому событию. Если ошибка повторяется после указанного ожидания, передайте оператору время возникновения, сборку и точный текст ошибки без SMS-кода.\n\nОснование: AppBaseFlow/Sources/Configuration.swift (exceedLimitSMSCode = \"1101\"), SignInFlow/Sources/SignInScreen/SignInViewModel.swift (makeScreenError), AppDesignSystem/Sources/StringsLibrary.swift."
+          },
+          {
+            "source": "support/myfamily/knowledge/auth.md",
+            "title": "MyFamily: вход по телефону и SMS",
+            "section": "После запроса SMS не открывается следующий экран",
+            "chunkId": "structured-a1edcd25117afe21",
+            "strategy": "structured",
+            "score": 0.6450715498484567,
+            "text": "## После запроса SMS не открывается следующий экран\n\nВ проверенном снимке MyFamily успешный requestAuth отправляет событие .continue. SignInCoordinator обрабатывает .continue только print(\"succes\"). Переход к экрану ввода SMS и завершение авторизации в этом обработчике не реализованы. Методы confirm существуют в сервисах, но это не означает наличие готового экрана подтверждения.\n\nЕсли пользователь на соответствующей сборке сообщает об остановке после успешного запроса SMS, это согласуется с известным незавершённым переходом. Ассистент должен объяснить ограничение и предложить передать тикет команде MyFamily; не обещать, что перезапуск, сброс пароля или ожидание исправят отсутствующий переход. Для другой сборки причину нужно проверять отдельно. Успешный запрос SMS сам по себе не подтверждает доставку сообщения.\n\nОснование: SignInFlow/Sources/SignInScreen/SignInViewModel.swift, SignInFlow/Sources/SignInCoordinator.swift и SignInInteractor.swift."
+          },
+          {
+            "source": "support/myfamily/knowledge/faq.md",
+            "title": "MyFamily: FAQ поддержки и границы диагностики",
+            "section": "Можно ли считать запрос SMS успешным входом",
+            "chunkId": "structured-2e5f3839aaf7e4e9",
+            "strategy": "structured",
+            "score": 0.6314335188227777,
+            "text": "## Можно ли считать запрос SMS успешным входом\n\nНет. Успешный запрос SMS, доставка SMS, подтверждение кода и действующая сессия — разные этапы. Если в контексте указан только sms_requested, ассистент не должен утверждать, что SMS доставлено или вход завершён. Если запрос заблокирован ошибкой 1101, нельзя переносить на этот тикет причину незавершённого UI-перехода после успешного запроса."
+          },
+          {
+            "source": "support/myfamily/knowledge/auth.md",
+            "title": "MyFamily: вход по телефону и SMS",
+            "section": "Запрос SMS и проверка номера",
+            "chunkId": "structured-ab5145c06f3bd752",
+            "strategy": "structured",
+            "score": 0.5754896975036229,
+            "text": "## Запрос SMS и проверка номера\n\nВ проверенном снимке MyFamily вход начинается с номера телефона. SignInViewModel разрешает продолжение при 10 символах в поле номера. Перед отправкой удаляются символы форматирования и добавляется countryCode из GlobalConfig; в этом снимке countryCode равен \"1\". Эти значения относятся к конфигурации снимка, не ко всем версиям приложения. При проблеме с номером уточните сборку и текст ошибки, не просите SMS-код.\n\nОснование: XcodeProject/Packages/AppModulesPackage/Sources/SignInFlow/Sources/SignInScreen/SignInViewModel.swift и AppBaseFlow/Sources/Configuration.swift в том же пакете."
+          }
+        ],
+        "trace": {
+          "originalQuestion": "Почему не работает авторизация? Что означает ошибка и сколько ждать?\nКонтекст: вход sms; состояние unknown; iOS; этап phone_entry; сессия absent; 1101. Тема: Не получается запросить SMS: ошибка 1101; категория auth; код 1101.",
+          "searchQuery": "Почему не работает авторизация? Что означает ошибка и сколько ждать?\nКонтекст: вход sms; состояние unknown; iOS; этап phone_entry; сессия absent; 1101. Тема: Не получается запросить SMS: ошибка 1101; категория auth; код 1101.",
+          "candidateTopK": 6,
+          "topK": 4,
+          "minSimilarity": 0.2,
+          "minRelevance": 2,
+          "candidates": [
+            {
+              "source": "support/myfamily/knowledge/auth.md",
+              "title": "MyFamily: вход по телефону и SMS",
+              "section": "Ошибка 1101: лимит запросов SMS",
+              "chunkId": "structured-568b40a8491cd2d2",
+              "strategy": "structured",
+              "score": 0.689033102422481,
+              "text": "## Ошибка 1101: лимит запросов SMS\n\nВ проверенном снимке MyFamily код 1101 соответствует exceedLimitSMSCode — превышению лимита запросов SMS. SignInViewModel извлекает цифры из сообщения серверной ошибки и подставляет их в текст ожидания. Фиксированное время ожидания кодом клиента не задано. Конкретное число секунд берётся из последней ошибки выбранного пользователя, а не переносится из другого тикета.\n\nПри 1101 ориентируйтесь на ожидание в показанном сообщении и не запрашивайте SMS многократно подряд. Если время в ошибке неизвестно, ассистент не должен придумывать его. Истёкшее ожидание или успешную доставку SMS нельзя подтвердить по одному старому событию. Если ошибка повторяется после указанного ожидания, передайте оператору время возникновения, сборку и точный текст ошибки без SMS-кода.\n\nОснование: AppBaseFlow/Sources/Configuration.swift (exceedLimitSMSCode = \"1101\"), SignInFlow/Sources/SignInScreen/SignInViewModel.swift (makeScreenError), AppDesignSystem/Sources/StringsLibrary.swift.",
+              "rankBefore": 1,
+              "selected": true,
+              "originalRank": 1,
+              "fusionScore": 0.01639344262295082,
+              "relevance": 3,
+              "reason": "Прямой ответ на ошибку 1101 и время ожидания",
+              "rankAfter": 1
+            },
+            {
+              "source": "support/myfamily/knowledge/auth.md",
+              "title": "MyFamily: вход по телефону и SMS",
+              "section": "После запроса SMS не открывается следующий экран",
+              "chunkId": "structured-a1edcd25117afe21",
+              "strategy": "structured",
+              "score": 0.6450715498484567,
+              "text": "## После запроса SMS не открывается следующий экран\n\nВ проверенном снимке MyFamily успешный requestAuth отправляет событие .continue. SignInCoordinator обрабатывает .continue только print(\"succes\"). Переход к экрану ввода SMS и завершение авторизации в этом обработчике не реализованы. Методы confirm существуют в сервисах, но это не означает наличие готового экрана подтверждения.\n\nЕсли пользователь на соответствующей сборке сообщает об остановке после успешного запроса SMS, это согласуется с известным незавершённым переходом. Ассистент должен объяснить ограничение и предложить передать тикет команде MyFamily; не обещать, что перезапуск, сброс пароля или ожидание исправят отсутствующий переход. Для другой сборки причину нужно проверять отдельно. Успешный запрос SMS сам по себе не подтверждает доставку сообщения.\n\nОснование: SignInFlow/Sources/SignInScreen/SignInViewModel.swift, SignInFlow/Sources/SignInCoordinator.swift и SignInInteractor.swift.",
+              "rankBefore": 2,
+              "selected": true,
+              "originalRank": 2,
+              "fusionScore": 0.016129032258064516,
+              "relevance": 2,
+              "reason": "Объясняет отсутствие UI после запроса SMS",
+              "rankAfter": 2
+            },
+            {
+              "source": "support/myfamily/knowledge/faq.md",
+              "title": "MyFamily: FAQ поддержки и границы диагностики",
+              "section": "Можно ли считать запрос SMS успешным входом",
+              "chunkId": "structured-2e5f3839aaf7e4e9",
+              "strategy": "structured",
+              "score": 0.6314335188227777,
+              "text": "## Можно ли считать запрос SMS успешным входом\n\nНет. Успешный запрос SMS, доставка SMS, подтверждение кода и действующая сессия — разные этапы. Если в контексте указан только sms_requested, ассистент не должен утверждать, что SMS доставлено или вход завершён. Если запрос заблокирован ошибкой 1101, нельзя переносить на этот тикет причину незавершённого UI-перехода после успешного запроса.",
+              "rankBefore": 3,
+              "selected": true,
+              "originalRank": 3,
+              "fusionScore": 0.015873015873015872,
+              "relevance": 2,
+              "reason": "Разграничивает этапы: запрос, доставка, вход",
+              "rankAfter": 3
+            },
+            {
+              "source": "support/myfamily/knowledge/faq.md",
+              "title": "MyFamily: FAQ поддержки и границы диагностики",
+              "section": "Как устроена авторизация",
+              "chunkId": "structured-f4a67a64ec0410fa",
+              "strategy": "structured",
+              "score": 0.6289832626805126,
+              "text": "## Как устроена авторизация\n\nПользователь MyFamily вводит телефон и запрашивает SMS. Клиент создаёт POST /auth/request с uuid, number и access=\"user\". Для подтверждения есть POST /auth/confirm с uuid, number, access=\"user\" и code. Это восстановленный клиентский контракт; он не доказывает готовый UI подтверждения или доступность сервера. Никогда не просите пользователя прислать code, токены или полный идентификатор устройства в поддержку.",
+              "rankBefore": 4,
+              "selected": false,
+              "originalRank": 4,
+              "fusionScore": 0.015625,
+              "relevance": 1,
+              "reason": "Описывает общий процесс авторизации без деталей ошибок",
+              "rankAfter": 5,
+              "rejection": "relevance"
+            },
+            {
+              "source": "support/myfamily/knowledge/profile.md",
+              "title": "MyFamily: сессия и профиль",
+              "section": "Почему приложение считает пользователя неавторизованным",
+              "chunkId": "structured-acaf807807f63463",
+              "strategy": "structured",
+              "score": 0.5813664282003675,
+              "text": "## Почему приложение считает пользователя неавторизованным\n\nВ проверенном снимке MyFamily hasAuthorizedUser возвращает true только при наличии credentials и expirationDate позже текущей даты. Отсутствующая или истёкшая сессия не проходит эту проверку. Это правило клиента; факт истечения сессии конкретного пользователя должен подтверждаться контекстом его аккаунта, а не выводиться только из жалобы.\n\nВ сервисе есть refreshToken, но наличие метода не гарантирует автоматическое обновление сессии в каждом пользовательском сценарии. Ассистент не обновляет сессии и не получает токены. При повторной проблеме следует передать оператору сборку, время и текст ошибки; токены и SMS-коды не прикладываются.",
+              "rankBefore": 5,
+              "selected": false,
+              "originalRank": 5,
+              "fusionScore": 0.015384615384615385,
+              "relevance": 0,
+              "reason": "Относится к сессиям и токенам, а не к SMS",
+              "rankAfter": 6,
+              "rejection": "relevance"
+            },
+            {
+              "source": "support/myfamily/knowledge/auth.md",
+              "title": "MyFamily: вход по телефону и SMS",
+              "section": "Запрос SMS и проверка номера",
+              "chunkId": "structured-ab5145c06f3bd752",
+              "strategy": "structured",
+              "score": 0.5754896975036229,
+              "text": "## Запрос SMS и проверка номера\n\nВ проверенном снимке MyFamily вход начинается с номера телефона. SignInViewModel разрешает продолжение при 10 символах в поле номера. Перед отправкой удаляются символы форматирования и добавляется countryCode из GlobalConfig; в этом снимке countryCode равен \"1\". Эти значения относятся к конфигурации снимка, не ко всем версиям приложения. При проблеме с номером уточните сборку и текст ошибки, не просите SMS-код.\n\nОснование: XcodeProject/Packages/AppModulesPackage/Sources/SignInFlow/Sources/SignInScreen/SignInViewModel.swift и AppBaseFlow/Sources/Configuration.swift в том же пакете.",
+              "rankBefore": 6,
+              "selected": true,
+              "originalRank": 6,
+              "fusionScore": 0.015151515151515152,
+              "relevance": 2,
+              "reason": "Указывает требования к номеру телефона для входа",
+              "rankAfter": 4
+            }
+          ],
+          "rewrite": {
+            "status": "disabled",
+            "durationMs": 0
+          },
+          "rerank": {
+            "status": "applied",
+            "durationMs": 14042,
+            "attempts": 1,
+            "usage": {
+              "inputTokens": 9371,
+              "promptTokens": 1462,
+              "completionTokens": 173,
+              "totalTokens": 1635
+            }
+          },
+          "timings": {
+            "embeddingMs": 68,
+            "searchMs": 2,
+            "totalMs": 14113
+          },
+          "usage": {
+            "inputTokens": 9371,
+            "promptTokens": 1462,
+            "completionTokens": 173,
+            "totalTokens": 1635
+          },
+          "emptyContext": false
+        },
+        "context": {
+          "capturedAt": "2026-10-17T11:23:48.748Z",
+          "receipt": {
+            "name": "get_support_context",
+            "result": {
+              "product": "MyFamily",
+              "demo": true,
+              "customer": {
+                "id": "mf_anna",
+                "authMethod": "sms",
+                "accountState": "unknown",
+                "myFamily": {
+                  "platform": "ios",
+                  "build": "снимок fe9030e",
+                  "authStage": "phone_entry",
+                  "sessionState": "absent",
+                  "profileState": "unknown",
+                  "lastAuthError": {
+                    "code": "1101",
+                    "retryAfterSeconds": 60
+                  }
+                }
+              },
+              "ticket": {
+                "id": "MF-1001",
+                "userId": "mf_anna",
+                "title": "Не получается запросить SMS: ошибка 1101",
+                "status": "open",
+                "category": "auth",
+                "description": "Демонстрационный сценарий: при повторном запросе SMS приложение показывает код 1101 и ожидание 60 секунд. Вход не выполнен.",
+                "errorCode": "1101",
+                "messages": [
+                  {
+                    "author": "user",
+                    "body": "Почему не работает авторизация? При запросе SMS вижу 1101 и сообщение про 60 секунд."
+                  }
+                ]
+              },
+              "messagesOmitted": 0
+            }
+          }
+        },
+        "indexRunId": "4506b249-c3e6-43c7-9457-e7395c0b0e82",
+        "durationMs": 23939
+      }
+    },
+    {
+      "id": "sms-transition",
+      "passed": false,
+      "checks": {
+        "outcome": false,
+        "answer": false,
+        "verified": false,
+        "documentationCitation": false,
+        "crmCitation": false
+      },
+      "result": {
+        "question": "Почему не работает авторизация? Что делать дальше?",
+        "selection": {
+          "userId": "mf_oleg",
+          "ticketId": "MF-1002"
+        },
+        "provider": "local",
+        "model": "qwen3.5:4b",
+        "answer": "Не удалось подтвердить ответ по базе знаний и данным выбранного пользователя. Передайте вопрос оператору поддержки.",
+        "outcome": "escalate",
+        "grounding": {
+          "status": "unknown",
+          "answer": "Не удалось подтвердить ответ по базе знаний и данным выбранного пользователя. Передайте вопрос оператору поддержки.",
+          "clarification": "Укажите точный текст ошибки, время возникновения и уже выполненные шаги. Не отправляйте пароли и коды подтверждения.",
+          "reason": "insufficient-evidence",
+          "sources": [],
+          "citations": [],
+          "claims": [],
+          "verification": {
+            "status": "abstained",
+            "attempts": 1,
+            "judgments": []
+          },
+          "usage": {
+            "inputTokens": 29240,
+            "promptTokens": 4632,
+            "completionTokens": 12,
+            "totalTokens": 4644
+          }
+        },
+        "sources": [
+          {
+            "source": "mcp://support/get_support_context",
+            "title": "Контекст пользователя и тикета",
+            "section": "get_support_context",
+            "chunkId": "support-context-57292d0b-d47a-478c-99de-ca11c9b7108c",
+            "strategy": "structured",
+            "score": 1,
+            "text": "MCP get_support_context. Получено: 2026-10-17T11:24:12.706Z.\n\nПродукт: MyFamily.\n\nИсточник: демонстрационный JSON. Это тестовые пользователи и диагностические события; подключения к backend продукта нет.\n\nДанные аккаунта из CRM:\nПользователь: mf_oleg.\nСпособ входа: sms.\nСостояние аккаунта: unknown.\nПлатформа: iOS.\nСборка: снимок fe9030e.\nЭтап входа: sms_requested.\nСессия: absent.\nЗаполнение профиля: unknown.\n\nДанные тикета из CRM:\nТикет: MF-1002.\nПользователь тикета: mf_oleg.\nСтатус: open.\nКатегория: auth.\nКод ошибки: не указан.\nТема: После запроса SMS не открывается следующий экран\nОписание: Демонстрационный сценарий на снимке fe9030e: запрос SMS отмечен успешным, пользователь остаётся на экране телефона. Доставка SMS и подтверждение кода не установлены.\n\nСообщение пользователя 1 (подтверждает только его слова, не диагноз):\nПочему не работает авторизация? После запроса SMS ничего не происходит, остаюсь на экране телефона.\n\nПредыдущие ответы ассистента исключены из доказательств о продукте. Они используются отдельно только для понимания уточняющего вопроса.\n\nНе показано сообщений: 0. Из них исключено предыдущих ответов ассистента: 0. Дополнительное ограничение контекста: нет."
+          },
+          {
+            "source": "support/myfamily/knowledge/auth.md",
+            "title": "MyFamily: вход по телефону и SMS",
+            "section": "После запроса SMS не открывается следующий экран",
+            "chunkId": "structured-a1edcd25117afe21",
+            "strategy": "structured",
+            "score": 0.7048282084245971,
+            "text": "## После запроса SMS не открывается следующий экран\n\nВ проверенном снимке MyFamily успешный requestAuth отправляет событие .continue. SignInCoordinator обрабатывает .continue только print(\"succes\"). Переход к экрану ввода SMS и завершение авторизации в этом обработчике не реализованы. Методы confirm существуют в сервисах, но это не означает наличие готового экрана подтверждения.\n\nЕсли пользователь на соответствующей сборке сообщает об остановке после успешного запроса SMS, это согласуется с известным незавершённым переходом. Ассистент должен объяснить ограничение и предложить передать тикет команде MyFamily; не обещать, что перезапуск, сброс пароля или ожидание исправят отсутствующий переход. Для другой сборки причину нужно проверять отдельно. Успешный запрос SMS сам по себе не подтверждает доставку сообщения.\n\nОснование: SignInFlow/Sources/SignInScreen/SignInViewModel.swift, SignInFlow/Sources/SignInCoordinator.swift и SignInInteractor.swift."
+          },
+          {
+            "source": "support/myfamily/knowledge/faq.md",
+            "title": "MyFamily: FAQ поддержки и границы диагностики",
+            "section": "Как устроена авторизация",
+            "chunkId": "structured-f4a67a64ec0410fa",
+            "strategy": "structured",
+            "score": 0.6702732048792953,
+            "text": "## Как устроена авторизация\n\nПользователь MyFamily вводит телефон и запрашивает SMS. Клиент создаёт POST /auth/request с uuid, number и access=\"user\". Для подтверждения есть POST /auth/confirm с uuid, number, access=\"user\" и code. Это восстановленный клиентский контракт; он не доказывает готовый UI подтверждения или доступность сервера. Никогда не просите пользователя прислать code, токены или полный идентификатор устройства в поддержку."
+          },
+          {
+            "source": "support/myfamily/knowledge/profile.md",
+            "title": "MyFamily: сессия и профиль",
+            "section": "Почему приложение считает пользователя неавторизованным",
+            "chunkId": "structured-acaf807807f63463",
+            "strategy": "structured",
+            "score": 0.6106835449659443,
+            "text": "## Почему приложение считает пользователя неавторизованным\n\nВ проверенном снимке MyFamily hasAuthorizedUser возвращает true только при наличии credentials и expirationDate позже текущей даты. Отсутствующая или истёкшая сессия не проходит эту проверку. Это правило клиента; факт истечения сессии конкретного пользователя должен подтверждаться контекстом его аккаунта, а не выводиться только из жалобы.\n\nВ сервисе есть refreshToken, но наличие метода не гарантирует автоматическое обновление сессии в каждом пользовательском сценарии. Ассистент не обновляет сессии и не получает токены. При повторной проблеме следует передать оператору сборку, время и текст ошибки; токены и SMS-коды не прикладываются."
+          },
+          {
+            "source": "support/myfamily/knowledge/faq.md",
+            "title": "MyFamily: FAQ поддержки и границы диагностики",
+            "section": "Можно ли считать запрос SMS успешным входом",
+            "chunkId": "structured-2e5f3839aaf7e4e9",
+            "strategy": "structured",
+            "score": 0.5967850105057287,
+            "text": "## Можно ли считать запрос SMS успешным входом\n\nНет. Успешный запрос SMS, доставка SMS, подтверждение кода и действующая сессия — разные этапы. Если в контексте указан только sms_requested, ассистент не должен утверждать, что SMS доставлено или вход завершён. Если запрос заблокирован ошибкой 1101, нельзя переносить на этот тикет причину незавершённого UI-перехода после успешного запроса."
+          }
+        ],
+        "trace": {
+          "originalQuestion": "Почему не работает авторизация? Что делать дальше?\nКонтекст: вход sms; состояние unknown; iOS; этап sms_requested; сессия absent. Тема: После запроса SMS не открывается следующий экран; категория auth; код не указан.",
+          "searchQuery": "Почему не работает авторизация? Что делать дальше?\nКонтекст: вход sms; состояние unknown; iOS; этап sms_requested; сессия absent. Тема: После запроса SMS не открывается следующий экран; категория auth; код не указан.",
+          "candidateTopK": 6,
+          "topK": 4,
+          "minSimilarity": 0.2,
+          "minRelevance": 2,
+          "candidates": [
+            {
+              "source": "support/myfamily/knowledge/auth.md",
+              "title": "MyFamily: вход по телефону и SMS",
+              "section": "После запроса SMS не открывается следующий экран",
+              "chunkId": "structured-a1edcd25117afe21",
+              "strategy": "structured",
+              "score": 0.7048282084245971,
+              "text": "## После запроса SMS не открывается следующий экран\n\nВ проверенном снимке MyFamily успешный requestAuth отправляет событие .continue. SignInCoordinator обрабатывает .continue только print(\"succes\"). Переход к экрану ввода SMS и завершение авторизации в этом обработчике не реализованы. Методы confirm существуют в сервисах, но это не означает наличие готового экрана подтверждения.\n\nЕсли пользователь на соответствующей сборке сообщает об остановке после успешного запроса SMS, это согласуется с известным незавершённым переходом. Ассистент должен объяснить ограничение и предложить передать тикет команде MyFamily; не обещать, что перезапуск, сброс пароля или ожидание исправят отсутствующий переход. Для другой сборки причину нужно проверять отдельно. Успешный запрос SMS сам по себе не подтверждает доставку сообщения.\n\nОснование: SignInFlow/Sources/SignInScreen/SignInViewModel.swift, SignInFlow/Sources/SignInCoordinator.swift и SignInInteractor.swift.",
+              "rankBefore": 1,
+              "selected": true,
+              "originalRank": 1,
+              "fusionScore": 0.01639344262295082,
+              "relevance": 3,
+              "reason": "Прямой ответ на проблему UI после SMS",
+              "rankAfter": 1
+            },
+            {
+              "source": "support/myfamily/knowledge/faq.md",
+              "title": "MyFamily: FAQ поддержки и границы диагностики",
+              "section": "Как устроена авторизация",
+              "chunkId": "structured-f4a67a64ec0410fa",
+              "strategy": "structured",
+              "score": 0.6702732048792953,
+              "text": "## Как устроена авторизация\n\nПользователь MyFamily вводит телефон и запрашивает SMS. Клиент создаёт POST /auth/request с uuid, number и access=\"user\". Для подтверждения есть POST /auth/confirm с uuid, number, access=\"user\" и code. Это восстановленный клиентский контракт; он не доказывает готовый UI подтверждения или доступность сервера. Никогда не просите пользователя прислать code, токены или полный идентификатор устройства в поддержку.",
+              "rankBefore": 2,
+              "selected": true,
+              "originalRank": 2,
+              "fusionScore": 0.016129032258064516,
+              "relevance": 2,
+              "reason": "Описывает общий процесс авторизации",
+              "rankAfter": 2
+            },
+            {
+              "source": "support/myfamily/knowledge/profile.md",
+              "title": "MyFamily: сессия и профиль",
+              "section": "Почему приложение считает пользователя неавторизованным",
+              "chunkId": "structured-acaf807807f63463",
+              "strategy": "structured",
+              "score": 0.6106835449659443,
+              "text": "## Почему приложение считает пользователя неавторизованным\n\nВ проверенном снимке MyFamily hasAuthorizedUser возвращает true только при наличии credentials и expirationDate позже текущей даты. Отсутствующая или истёкшая сессия не проходит эту проверку. Это правило клиента; факт истечения сессии конкретного пользователя должен подтверждаться контекстом его аккаунта, а не выводиться только из жалобы.\n\nВ сервисе есть refreshToken, но наличие метода не гарантирует автоматическое обновление сессии в каждом пользовательском сценарии. Ассистент не обновляет сессии и не получает токены. При повторной проблеме следует передать оператору сборку, время и текст ошибки; токены и SMS-коды не прикладываются.",
+              "rankBefore": 3,
+              "selected": true,
+              "originalRank": 3,
+              "fusionScore": 0.015873015873015872,
+              "relevance": 2,
+              "reason": "Объясняет проверку сессии и токенов",
+              "rankAfter": 3
+            },
+            {
+              "source": "support/myfamily/knowledge/faq.md",
+              "title": "MyFamily: FAQ поддержки и границы диагностики",
+              "section": "Можно ли считать запрос SMS успешным входом",
+              "chunkId": "structured-2e5f3839aaf7e4e9",
+              "strategy": "structured",
+              "score": 0.5967850105057287,
+              "text": "## Можно ли считать запрос SMS успешным входом\n\nНет. Успешный запрос SMS, доставка SMS, подтверждение кода и действующая сессия — разные этапы. Если в контексте указан только sms_requested, ассистент не должен утверждать, что SMS доставлено или вход завершён. Если запрос заблокирован ошибкой 1101, нельзя переносить на этот тикет причину незавершённого UI-перехода после успешного запроса.",
+              "rankBefore": 4,
+              "selected": true,
+              "originalRank": 4,
+              "fusionScore": 0.015625,
+              "relevance": 2,
+              "reason": "Разграничивает этапы входа и SMS",
+              "rankAfter": 4
+            },
+            {
+              "source": "support/myfamily/knowledge/auth.md",
+              "title": "MyFamily: вход по телефону и SMS",
+              "section": "Запрос SMS и проверка номера",
+              "chunkId": "structured-ab5145c06f3bd752",
+              "strategy": "structured",
+              "score": 0.5776719066910768,
+              "text": "## Запрос SMS и проверка номера\n\nВ проверенном снимке MyFamily вход начинается с номера телефона. SignInViewModel разрешает продолжение при 10 символах в поле номера. Перед отправкой удаляются символы форматирования и добавляется countryCode из GlobalConfig; в этом снимке countryCode равен \"1\". Эти значения относятся к конфигурации снимка, не ко всем версиям приложения. При проблеме с номером уточните сборку и текст ошибки, не просите SMS-код.\n\nОснование: XcodeProject/Packages/AppModulesPackage/Sources/SignInFlow/Sources/SignInScreen/SignInViewModel.swift и AppBaseFlow/Sources/Configuration.swift в том же пакете.",
+              "rankBefore": 5,
+              "selected": false,
+              "originalRank": 5,
+              "fusionScore": 0.015384615384615385,
+              "relevance": 2,
+              "reason": "Описывает валидацию номера телефона",
+              "rankAfter": 5,
+              "rejection": "top-k"
+            },
+            {
+              "source": "support/myfamily/knowledge/auth.md",
+              "title": "MyFamily: вход по телефону и SMS",
+              "section": "Ошибка 1101: лимит запросов SMS",
+              "chunkId": "structured-568b40a8491cd2d2",
+              "strategy": "structured",
+              "score": 0.5714879830797074,
+              "text": "## Ошибка 1101: лимит запросов SMS\n\nВ проверенном снимке MyFamily код 1101 соответствует exceedLimitSMSCode — превышению лимита запросов SMS. SignInViewModel извлекает цифры из сообщения серверной ошибки и подставляет их в текст ожидания. Фиксированное время ожидания кодом клиента не задано. Конкретное число секунд берётся из последней ошибки выбранного пользователя, а не переносится из другого тикета.\n\nПри 1101 ориентируйтесь на ожидание в показанном сообщении и не запрашивайте SMS многократно подряд. Если время в ошибке неизвестно, ассистент не должен придумывать его. Истёкшее ожидание или успешную доставку SMS нельзя подтвердить по одному старому событию. Если ошибка повторяется после указанного ожидания, передайте оператору время возникновения, сборку и точный текст ошибки без SMS-кода.\n\nОснование: AppBaseFlow/Sources/Configuration.swift (exceedLimitSMSCode = \"1101\"), SignInFlow/Sources/SignInScreen/SignInViewModel.swift (makeScreenError), AppDesignSystem/Sources/StringsLibrary.swift.",
+              "rankBefore": 6,
+              "selected": false,
+              "originalRank": 6,
+              "fusionScore": 0.015151515151515152,
+              "relevance": 1,
+              "reason": "Относится к ошибке 1101, не указанной в вопросе",
+              "rankAfter": 6,
+              "rejection": "relevance"
+            }
+          ],
+          "rewrite": {
+            "status": "disabled",
+            "durationMs": 0
+          },
+          "rerank": {
+            "status": "applied",
+            "durationMs": 20885,
+            "attempts": 1,
+            "usage": {
+              "inputTokens": 9367,
+              "promptTokens": 1446,
+              "completionTokens": 163,
+              "totalTokens": 1609
+            }
+          },
+          "timings": {
+            "embeddingMs": 1357,
+            "searchMs": 1,
+            "totalMs": 22243
+          },
+          "usage": {
+            "inputTokens": 9367,
+            "promptTokens": 1446,
+            "completionTokens": 163,
+            "totalTokens": 1609
+          },
+          "emptyContext": false
+        },
+        "context": {
+          "capturedAt": "2026-10-17T11:24:12.706Z",
+          "receipt": {
+            "name": "get_support_context",
+            "result": {
+              "product": "MyFamily",
+              "demo": true,
+              "customer": {
+                "id": "mf_oleg",
+                "authMethod": "sms",
+                "accountState": "unknown",
+                "myFamily": {
+                  "platform": "ios",
+                  "build": "снимок fe9030e",
+                  "authStage": "sms_requested",
+                  "sessionState": "absent",
+                  "profileState": "unknown"
+                }
+              },
+              "ticket": {
+                "id": "MF-1002",
+                "userId": "mf_oleg",
+                "title": "После запроса SMS не открывается следующий экран",
+                "status": "open",
+                "category": "auth",
+                "description": "Демонстрационный сценарий на снимке fe9030e: запрос SMS отмечен успешным, пользователь остаётся на экране телефона. Доставка SMS и подтверждение кода не установлены.",
+                "messages": [
+                  {
+                    "author": "user",
+                    "body": "Почему не работает авторизация? После запроса SMS ничего не происходит, остаюсь на экране телефона."
+                  }
+                ]
+              },
+              "messagesOmitted": 0
+            }
+          }
+        },
+        "indexRunId": "4506b249-c3e6-43c7-9457-e7395c0b0e82",
+        "durationMs": 42196
+      }
+    },
+    {
+      "id": "profile-stub",
+      "passed": false,
+      "checks": {
+        "outcome": false,
+        "answer": false,
+        "verified": false,
+        "documentationCitation": false,
+        "crmCitation": false
+      },
+      "result": {
+        "question": "Где изменить имя и фамилию? В профиле только My Profile Screen.",
+        "selection": {
+          "userId": "mf_maria",
+          "ticketId": "MF-1003"
+        },
+        "provider": "local",
+        "model": "qwen3.5:4b",
+        "answer": "Не удалось подтвердить ответ по базе знаний и данным выбранного пользователя. Передайте вопрос оператору поддержки.",
+        "outcome": "escalate",
+        "grounding": {
+          "status": "unknown",
+          "answer": "Не удалось подтвердить ответ по базе знаний и данным выбранного пользователя. Передайте вопрос оператору поддержки.",
+          "clarification": "Укажите точный текст ошибки, время возникновения и уже выполненные шаги. Не отправляйте пароли и коды подтверждения.",
+          "reason": "insufficient-evidence",
+          "sources": [],
+          "citations": [],
+          "claims": [],
+          "verification": {
+            "status": "abstained",
+            "attempts": 1,
+            "judgments": []
+          },
+          "usage": {
+            "inputTokens": 20062,
+            "promptTokens": 3198,
+            "completionTokens": 12,
+            "totalTokens": 3210
+          }
+        },
+        "sources": [
+          {
+            "source": "mcp://support/get_support_context",
+            "title": "Контекст пользователя и тикета",
+            "section": "get_support_context",
+            "chunkId": "support-context-194e7ca9-dd5f-422f-846c-872bb972d1b0",
+            "strategy": "structured",
+            "score": 1,
+            "text": "MCP get_support_context. Получено: 2026-10-17T11:24:54.903Z.\n\nПродукт: MyFamily.\n\nИсточник: демонстрационный JSON. Это тестовые пользователи и диагностические события; подключения к backend продукта нет.\n\nДанные аккаунта из CRM:\nПользователь: mf_maria.\nСпособ входа: sms.\nСостояние аккаунта: unknown.\nПлатформа: iOS.\nСборка: снимок fe9030e.\nЭтап входа: signed_in.\nСессия: valid.\nЗаполнение профиля: incomplete.\n\nДанные тикета из CRM:\nТикет: MF-1003.\nПользователь тикета: mf_maria.\nСтатус: open.\nКатегория: profile.\nКод ошибки: не указан.\nТема: Вместо профиля вижу My Profile Screen\nОписание: Демонстрационный сценарий на снимке fe9030e: пользователь видит надпись My Profile Screen без редактора. В тестовом контексте профиль не заполнен.\n\nСообщение пользователя 1 (подтверждает только его слова, не диагноз):\nГде изменить имя и фамилию? В профиле только My Profile Screen.\n\nПредыдущие ответы ассистента исключены из доказательств о продукте. Они используются отдельно только для понимания уточняющего вопроса.\n\nНе показано сообщений: 0. Из них исключено предыдущих ответов ассистента: 0. Дополнительное ограничение контекста: нет."
+          },
+          {
+            "source": "support/myfamily/knowledge/profile.md",
+            "title": "MyFamily: сессия и профиль",
+            "section": "Что означает незаполненный профиль",
+            "chunkId": "structured-709c87be2eb11e05",
+            "strategy": "structured",
+            "score": 0.6382448630460605,
+            "text": "## Что означает незаполненный профиль\n\nВ проверенном снимке MyFamily hasFilledProfile требует непустые firstName, lastName и displayName. Эти поля — имя, фамилия и отображаемое имя. При этом startCreateProfileFlow и startOnboardingFlow используют StubFlowCoordinator: готовые экраны создания профиля и onboarding отсутствуют в этом снимке. Нельзя советовать пользователю перейти в несуществующий редактор профиля или обещать, что ввод полей доступен в интерфейсе.\n\nЕсли контекст указывает на незаполненный профиль и пользователь видит заглушку на соответствующей сборке, объясните известное ограничение и предложите передать тикет команде MyFamily. Не обещайте дату реализации."
+          }
+        ],
+        "trace": {
+          "originalQuestion": "Где изменить имя и фамилию? В профиле только My Profile Screen.\nКонтекст: вход sms; состояние unknown; iOS; этап signed_in; сессия valid. Тема: Вместо профиля вижу My Profile Screen; категория profile; код не указан.",
+          "searchQuery": "Где изменить имя и фамилию? В профиле только My Profile Screen.\nКонтекст: вход sms; состояние unknown; iOS; этап signed_in; сессия valid. Тема: Вместо профиля вижу My Profile Screen; категория profile; код не указан.",
+          "candidateTopK": 6,
+          "topK": 4,
+          "minSimilarity": 0.2,
+          "minRelevance": 2,
+          "candidates": [
+            {
+              "source": "support/myfamily/knowledge/profile.md",
+              "title": "MyFamily: сессия и профиль",
+              "section": "Что означает незаполненный профиль",
+              "chunkId": "structured-709c87be2eb11e05",
+              "strategy": "structured",
+              "score": 0.6382448630460605,
+              "text": "## Что означает незаполненный профиль\n\nВ проверенном снимке MyFamily hasFilledProfile требует непустые firstName, lastName и displayName. Эти поля — имя, фамилия и отображаемое имя. При этом startCreateProfileFlow и startOnboardingFlow используют StubFlowCoordinator: готовые экраны создания профиля и onboarding отсутствуют в этом снимке. Нельзя советовать пользователю перейти в несуществующий редактор профиля или обещать, что ввод полей доступен в интерфейсе.\n\nЕсли контекст указывает на незаполненный профиль и пользователь видит заглушку на соответствующей сборке, объясните известное ограничение и предложите передать тикет команде MyFamily. Не обещайте дату реализации.",
+              "rankBefore": 1,
+              "selected": true,
+              "originalRank": 1,
+              "fusionScore": 0.01639344262295082,
+              "relevance": 3,
+              "reason": "Прямой ответ: My Profile Screen",
+              "rankAfter": 1
+            },
+            {
+              "source": "support/myfamily/knowledge/auth.md",
+              "title": "MyFamily: вход по телефону и SMS",
+              "section": "Запрос SMS и проверка номера",
+              "chunkId": "structured-ab5145c06f3bd752",
+              "strategy": "structured",
+              "score": 0.5858290795852821,
+              "text": "## Запрос SMS и проверка номера\n\nВ проверенном снимке MyFamily вход начинается с номера телефона. SignInViewModel разрешает продолжение при 10 символах в поле номера. Перед отправкой удаляются символы форматирования и добавляется countryCode из GlobalConfig; в этом снимке countryCode равен \"1\". Эти значения относятся к конфигурации снимка, не ко всем версиям приложения. При проблеме с номером уточните сборку и текст ошибки, не просите SMS-код.\n\nОснование: XcodeProject/Packages/AppModulesPackage/Sources/SignInFlow/Sources/SignInScreen/SignInViewModel.swift и AppBaseFlow/Sources/Configuration.swift в том же пакете.",
+              "rankBefore": 2,
+              "selected": false,
+              "originalRank": 2,
+              "fusionScore": 0.016129032258064516,
+              "relevance": 0,
+              "reason": "Относится к SMS входу, а не профилю",
+              "rankAfter": 3,
+              "rejection": "relevance"
+            },
+            {
+              "source": "support/myfamily/knowledge/profile.md",
+              "title": "MyFamily: сессия и профиль",
+              "section": "Почему приложение считает пользователя неавторизованным",
+              "chunkId": "structured-acaf807807f63463",
+              "strategy": "structured",
+              "score": 0.577389113080058,
+              "text": "## Почему приложение считает пользователя неавторизованным\n\nВ проверенном снимке MyFamily hasAuthorizedUser возвращает true только при наличии credentials и expirationDate позже текущей даты. Отсутствующая или истёкшая сессия не проходит эту проверку. Это правило клиента; факт истечения сессии конкретного пользователя должен подтверждаться контекстом его аккаунта, а не выводиться только из жалобы.\n\nВ сервисе есть refreshToken, но наличие метода не гарантирует автоматическое обновление сессии в каждом пользовательском сценарии. Ассистент не обновляет сессии и не получает токены. При повторной проблеме следует передать оператору сборку, время и текст ошибки; токены и SMS-коды не прикладываются.",
+              "rankBefore": 3,
+              "selected": false,
+              "originalRank": 3,
+              "fusionScore": 0.015873015873015872,
+              "relevance": 0,
+              "reason": "Относится к авторизации и сессии",
+              "rankAfter": 4,
+              "rejection": "relevance"
+            },
+            {
+              "source": "support/myfamily/knowledge/profile.md",
+              "title": "MyFamily: сессия и профиль",
+              "section": "MyFamily: сессия и профиль",
+              "chunkId": "structured-6fa5147acac5a2ca",
+              "strategy": "structured",
+              "score": 0.5762035300728187,
+              "text": "# MyFamily: сессия и профиль\n\nОснование: AppServices/Sources/Services/AuthService.swift и XcodeProject/App/Source/Infrastructure/AppCoordinator.swift в локальном MyFamily, снимок fe9030e305306682dfea7a892c23b1a5a1a79dca. Проверены 17 октября 2026 года.",
+              "rankBefore": 4,
+              "selected": false,
+              "originalRank": 4,
+              "fusionScore": 0.015625,
+              "relevance": 1,
+              "reason": "Общая тема: сессия и профиль",
+              "rankAfter": 2,
+              "rejection": "relevance"
+            },
+            {
+              "source": "support/myfamily/knowledge/auth.md",
+              "title": "MyFamily: вход по телефону и SMS",
+              "section": "После запроса SMS не открывается следующий экран",
+              "chunkId": "structured-a1edcd25117afe21",
+              "strategy": "structured",
+              "score": 0.5666204399562692,
+              "text": "## После запроса SMS не открывается следующий экран\n\nВ проверенном снимке MyFamily успешный requestAuth отправляет событие .continue. SignInCoordinator обрабатывает .continue только print(\"succes\"). Переход к экрану ввода SMS и завершение авторизации в этом обработчике не реализованы. Методы confirm существуют в сервисах, но это не означает наличие готового экрана подтверждения.\n\nЕсли пользователь на соответствующей сборке сообщает об остановке после успешного запроса SMS, это согласуется с известным незавершённым переходом. Ассистент должен объяснить ограничение и предложить передать тикет команде MyFamily; не обещать, что перезапуск, сброс пароля или ожидание исправят отсутствующий переход. Для другой сборки причину нужно проверять отдельно. Успешный запрос SMS сам по себе не подтверждает доставку сообщения.\n\nОснование: SignInFlow/Sources/SignInScreen/SignInViewModel.swift, SignInFlow/Sources/SignInCoordinator.swift и SignInInteractor.swift.",
+              "rankBefore": 5,
+              "selected": false,
+              "originalRank": 5,
+              "fusionScore": 0.015384615384615385,
+              "relevance": 0,
+              "reason": "Относится к экранам входа, а не профилю",
+              "rankAfter": 5,
+              "rejection": "relevance"
+            },
+            {
+              "source": "support/myfamily/knowledge/profile.md",
+              "title": "MyFamily: сессия и профиль",
+              "section": "Данные профиля и доступность сервера",
+              "chunkId": "structured-a27bb2c669656f2d",
+              "strategy": "structured",
+              "score": 0.559180951088284,
+              "text": "## Данные профиля и доступность сервера\n\nКлиентская фабрика создаёт GET /profile, AccountRepository.fetchProfile преобразует ответ и обновляет локальный AccountHolder. Наличие запроса не подтверждает доступность backend. Состояние профиля в демонстрационном JSON — тестовый контекст, а не результат живого запроса /profile.",
+              "rankBefore": 6,
+              "selected": false,
+              "originalRank": 6,
+              "fusionScore": 0.015151515151515152,
+              "relevance": 0,
+              "reason": "Относится к серверу и данным профиля",
+              "rankAfter": 6,
+              "rejection": "relevance"
+            }
+          ],
+          "rewrite": {
+            "status": "disabled",
+            "durationMs": 0
+          },
+          "rerank": {
+            "status": "applied",
+            "durationMs": 8886,
+            "attempts": 1,
+            "usage": {
+              "inputTokens": 8293,
+              "promptTokens": 1291,
+              "completionTokens": 160,
+              "totalTokens": 1451
+            }
+          },
+          "timings": {
+            "embeddingMs": 97,
+            "searchMs": 3,
+            "totalMs": 8987
+          },
+          "usage": {
+            "inputTokens": 8293,
+            "promptTokens": 1291,
+            "completionTokens": 160,
+            "totalTokens": 1451
+          },
+          "emptyContext": false
+        },
+        "context": {
+          "capturedAt": "2026-10-17T11:24:54.903Z",
+          "receipt": {
+            "name": "get_support_context",
+            "result": {
+              "product": "MyFamily",
+              "demo": true,
+              "customer": {
+                "id": "mf_maria",
+                "authMethod": "sms",
+                "accountState": "unknown",
+                "myFamily": {
+                  "platform": "ios",
+                  "build": "снимок fe9030e",
+                  "authStage": "signed_in",
+                  "sessionState": "valid",
+                  "profileState": "incomplete"
+                }
+              },
+              "ticket": {
+                "id": "MF-1003",
+                "userId": "mf_maria",
+                "title": "Вместо профиля вижу My Profile Screen",
+                "status": "open",
+                "category": "profile",
+                "description": "Демонстрационный сценарий на снимке fe9030e: пользователь видит надпись My Profile Screen без редактора. В тестовом контексте профиль не заполнен.",
+                "messages": [
+                  {
+                    "author": "user",
+                    "body": "Где изменить имя и фамилию? В профиле только My Profile Screen."
+                  }
+                ]
+              },
+              "messagesOmitted": 0
+            }
+          }
+        },
+        "indexRunId": "4506b249-c3e6-43c7-9457-e7395c0b0e82",
+        "durationMs": 15646
+      }
+    },
+    {
+      "id": "product-faq",
+      "passed": false,
+      "checks": {
+        "outcome": false,
+        "answer": false,
+        "verified": false,
+        "documentationCitation": false
+      },
+      "result": {
+        "question": "Какие экраны готовы в проверенном снимке MyFamily, а какие пока являются заглушками?",
+        "selection": {
+          "userId": "mf_maria"
+        },
+        "provider": "local",
+        "model": "qwen3.5:4b",
+        "answer": "Не удалось подтвердить ответ по базе знаний и данным выбранного пользователя. Передайте вопрос оператору поддержки.",
+        "outcome": "escalate",
+        "grounding": {
+          "status": "unknown",
+          "answer": "Не удалось подтвердить ответ по базе знаний и данным выбранного пользователя. Передайте вопрос оператору поддержки.",
+          "clarification": "Укажите точный текст ошибки, время возникновения и уже выполненные шаги. Не отправляйте пароли и коды подтверждения.",
+          "reason": "insufficient-evidence",
+          "sources": [],
+          "citations": [],
+          "claims": [],
+          "verification": {
+            "status": "abstained",
+            "attempts": 1,
+            "judgments": []
+          },
+          "usage": {
+            "inputTokens": 25604,
+            "promptTokens": 4148,
+            "completionTokens": 12,
+            "totalTokens": 4160
+          }
+        },
+        "sources": [
+          {
+            "source": "mcp://support/get_support_context",
+            "title": "Контекст пользователя и тикета",
+            "section": "get_support_context",
+            "chunkId": "support-context-1d7b6790-d2af-4152-bafb-ec5b2fafcbb0",
+            "strategy": "structured",
+            "score": 1,
+            "text": "MCP get_support_context. Получено: 2026-10-17T11:25:10.537Z.\n\nПродукт: MyFamily.\n\nИсточник: демонстрационный JSON. Это тестовые пользователи и диагностические события; подключения к backend продукта нет.\n\nДанные аккаунта из CRM:\nПользователь: mf_maria.\nСпособ входа: sms.\nСостояние аккаунта: unknown.\nПлатформа: iOS.\nСборка: снимок fe9030e.\nЭтап входа: signed_in.\nСессия: valid.\nЗаполнение профиля: incomplete.\n\nТикет не выбран. Переписка не запрашивалась.\n\nПредыдущие ответы ассистента исключены из доказательств о продукте. Они используются отдельно только для понимания уточняющего вопроса.\n\nНе показано сообщений: 0. Из них исключено предыдущих ответов ассистента: 0. Дополнительное ограничение контекста: нет."
+          },
+          {
+            "source": "support/myfamily/knowledge/product.md",
+            "title": "MyFamily: назначение и готовность функций",
+            "section": "Возможности проверенного снимка",
+            "chunkId": "structured-50f2476e01415813",
+            "strategy": "structured",
+            "score": 0.6826855123588141,
+            "text": "## Возможности проверенного снимка\n\nMyFamily — iOS-приложение на Swift и UIKit. В проверенном снимке есть WelcomeFlow, экран ввода телефона SignInFlow, сервисы запроса и подтверждения SMS, сетевой слой, координаторы и дизайн-система. Полный пользовательский путь авторизации до главного экрана не завершён. Наличие модели данных, метода API или названия MyFamily не доказывает готовность семейных функций.\n\nОснование: README.md, project/docs/implementation-status.md и исходники XcodeProject/Packages/AppModulesPackage/Sources/."
+          },
+          {
+            "source": "support/myfamily/knowledge/auth.md",
+            "title": "MyFamily: вход по телефону и SMS",
+            "section": "После запроса SMS не открывается следующий экран",
+            "chunkId": "structured-a1edcd25117afe21",
+            "strategy": "structured",
+            "score": 0.6448081769362246,
+            "text": "## После запроса SMS не открывается следующий экран\n\nВ проверенном снимке MyFamily успешный requestAuth отправляет событие .continue. SignInCoordinator обрабатывает .continue только print(\"succes\"). Переход к экрану ввода SMS и завершение авторизации в этом обработчике не реализованы. Методы confirm существуют в сервисах, но это не означает наличие готового экрана подтверждения.\n\nЕсли пользователь на соответствующей сборке сообщает об остановке после успешного запроса SMS, это согласуется с известным незавершённым переходом. Ассистент должен объяснить ограничение и предложить передать тикет команде MyFamily; не обещать, что перезапуск, сброс пароля или ожидание исправят отсутствующий переход. Для другой сборки причину нужно проверять отдельно. Успешный запрос SMS сам по себе не подтверждает доставку сообщения.\n\nОснование: SignInFlow/Sources/SignInScreen/SignInViewModel.swift, SignInFlow/Sources/SignInCoordinator.swift и SignInInteractor.swift."
+          },
+          {
+            "source": "support/myfamily/knowledge/product.md",
+            "title": "MyFamily: назначение и готовность функций",
+            "section": "Главный экран, магазин и профиль",
+            "chunkId": "structured-75c262256bec5707",
+            "strategy": "structured",
+            "score": 0.6202244570350431,
+            "text": "## Главный экран, магазин и профиль\n\nВ проверенном снимке HomeCoordinator создаёт три TitleStubViewController: Home Screen, Store Screen и My Profile Screen. Это заглушки, а не готовые пользовательские экраны. Поэтому пустой профиль или магазин в соответствующей сборке согласуется с состоянием разработки; по одному описанию нельзя утверждать о сбое backend или платном ограничении. Ассистент может объяснить ограничение снимка и направить обращение команде MyFamily, но не обещать дату выпуска функций.\n\nОснование: XcodeProject/Packages/AppModulesPackage/Sources/HomeFlow/Sources/HomeCoordinator.swift."
+          },
+          {
+            "source": "support/myfamily/knowledge/auth.md",
+            "title": "MyFamily: вход по телефону и SMS",
+            "section": "MyFamily: вход по телефону и SMS",
+            "chunkId": "structured-a9f647e12e775728",
+            "strategy": "structured",
+            "score": 0.6091562753849663,
+            "text": "# MyFamily: вход по телефону и SMS\n\nОснование: локальные исходники MyFamily, снимок fe9030e305306682dfea7a892c23b1a5a1a79dca, проверены 17 октября 2026 года. Это описание клиентского кода, не проверка работающего backend. Пути ниже относительно MyFamily."
+          }
+        ],
+        "trace": {
+          "originalQuestion": "Какие экраны готовы в проверенном снимке MyFamily, а какие пока являются заглушками?\nКонтекст: вход sms; состояние unknown; iOS; этап signed_in; сессия valid.",
+          "searchQuery": "Какие экраны готовы в проверенном снимке MyFamily, а какие пока являются заглушками?\nКонтекст: вход sms; состояние unknown; iOS; этап signed_in; сессия valid.",
+          "candidateTopK": 6,
+          "topK": 4,
+          "minSimilarity": 0.2,
+          "minRelevance": 2,
+          "candidates": [
+            {
+              "source": "support/myfamily/knowledge/product.md",
+              "title": "MyFamily: назначение и готовность функций",
+              "section": "Возможности проверенного снимка",
+              "chunkId": "structured-50f2476e01415813",
+              "strategy": "structured",
+              "score": 0.6826855123588141,
+              "text": "## Возможности проверенного снимка\n\nMyFamily — iOS-приложение на Swift и UIKit. В проверенном снимке есть WelcomeFlow, экран ввода телефона SignInFlow, сервисы запроса и подтверждения SMS, сетевой слой, координаторы и дизайн-система. Полный пользовательский путь авторизации до главного экрана не завершён. Наличие модели данных, метода API или названия MyFamily не доказывает готовность семейных функций.\n\nОснование: README.md, project/docs/implementation-status.md и исходники XcodeProject/Packages/AppModulesPackage/Sources/.",
+              "rankBefore": 1,
+              "selected": true,
+              "originalRank": 1,
+              "fusionScore": 0.01639344262295082,
+              "relevance": 3,
+              "reason": "Перечисляет готовые экраны и заглушки",
+              "rankAfter": 1
+            },
+            {
+              "source": "support/myfamily/knowledge/auth.md",
+              "title": "MyFamily: вход по телефону и SMS",
+              "section": "После запроса SMS не открывается следующий экран",
+              "chunkId": "structured-a1edcd25117afe21",
+              "strategy": "structured",
+              "score": 0.6448081769362246,
+              "text": "## После запроса SMS не открывается следующий экран\n\nВ проверенном снимке MyFamily успешный requestAuth отправляет событие .continue. SignInCoordinator обрабатывает .continue только print(\"succes\"). Переход к экрану ввода SMS и завершение авторизации в этом обработчике не реализованы. Методы confirm существуют в сервисах, но это не означает наличие готового экрана подтверждения.\n\nЕсли пользователь на соответствующей сборке сообщает об остановке после успешного запроса SMS, это согласуется с известным незавершённым переходом. Ассистент должен объяснить ограничение и предложить передать тикет команде MyFamily; не обещать, что перезапуск, сброс пароля или ожидание исправят отсутствующий переход. Для другой сборки причину нужно проверять отдельно. Успешный запрос SMS сам по себе не подтверждает доставку сообщения.\n\nОснование: SignInFlow/Sources/SignInScreen/SignInViewModel.swift, SignInFlow/Sources/SignInCoordinator.swift и SignInInteractor.swift.",
+              "rankBefore": 2,
+              "selected": true,
+              "originalRank": 2,
+              "fusionScore": 0.016129032258064516,
+              "relevance": 3,
+              "reason": "Описывает отсутствие экрана подтверждения SMS",
+              "rankAfter": 2
+            },
+            {
+              "source": "support/myfamily/knowledge/product.md",
+              "title": "MyFamily: назначение и готовность функций",
+              "section": "Главный экран, магазин и профиль",
+              "chunkId": "structured-75c262256bec5707",
+              "strategy": "structured",
+              "score": 0.6202244570350431,
+              "text": "## Главный экран, магазин и профиль\n\nВ проверенном снимке HomeCoordinator создаёт три TitleStubViewController: Home Screen, Store Screen и My Profile Screen. Это заглушки, а не готовые пользовательские экраны. Поэтому пустой профиль или магазин в соответствующей сборке согласуется с состоянием разработки; по одному описанию нельзя утверждать о сбое backend или платном ограничении. Ассистент может объяснить ограничение снимка и направить обращение команде MyFamily, но не обещать дату выпуска функций.\n\nОснование: XcodeProject/Packages/AppModulesPackage/Sources/HomeFlow/Sources/HomeCoordinator.swift.",
+              "rankBefore": 3,
+              "selected": true,
+              "originalRank": 3,
+              "fusionScore": 0.015873015873015872,
+              "relevance": 3,
+              "reason": "Указывает, что главный экран и профиль — заглушки",
+              "rankAfter": 3
+            },
+            {
+              "source": "support/myfamily/knowledge/profile.md",
+              "title": "MyFamily: сессия и профиль",
+              "section": "Почему приложение считает пользователя неавторизованным",
+              "chunkId": "structured-acaf807807f63463",
+              "strategy": "structured",
+              "score": 0.6114895954129101,
+              "text": "## Почему приложение считает пользователя неавторизованным\n\nВ проверенном снимке MyFamily hasAuthorizedUser возвращает true только при наличии credentials и expirationDate позже текущей даты. Отсутствующая или истёкшая сессия не проходит эту проверку. Это правило клиента; факт истечения сессии конкретного пользователя должен подтверждаться контекстом его аккаунта, а не выводиться только из жалобы.\n\nВ сервисе есть refreshToken, но наличие метода не гарантирует автоматическое обновление сессии в каждом пользовательском сценарии. Ассистент не обновляет сессии и не получает токены. При повторной проблеме следует передать оператору сборку, время и текст ошибки; токены и SMS-коды не прикладываются.",
+              "rankBefore": 4,
+              "selected": false,
+              "originalRank": 4,
+              "fusionScore": 0.015625,
+              "relevance": 1,
+              "reason": "Объясняет логику проверки авторизации",
+              "rankAfter": 6,
+              "rejection": "relevance"
+            },
+            {
+              "source": "support/myfamily/knowledge/auth.md",
+              "title": "MyFamily: вход по телефону и SMS",
+              "section": "MyFamily: вход по телефону и SMS",
+              "chunkId": "structured-a9f647e12e775728",
+              "strategy": "structured",
+              "score": 0.6091562753849663,
+              "text": "# MyFamily: вход по телефону и SMS\n\nОснование: локальные исходники MyFamily, снимок fe9030e305306682dfea7a892c23b1a5a1a79dca, проверены 17 октября 2026 года. Это описание клиентского кода, не проверка работающего backend. Пути ниже относительно MyFamily.",
+              "rankBefore": 5,
+              "selected": true,
+              "originalRank": 5,
+              "fusionScore": 0.015384615384615385,
+              "relevance": 2,
+              "reason": "Дает контекст о клиентском коде входа",
+              "rankAfter": 4
+            },
+            {
+              "source": "support/myfamily/knowledge/auth.md",
+              "title": "MyFamily: вход по телефону и SMS",
+              "section": "Запрос SMS и проверка номера",
+              "chunkId": "structured-ab5145c06f3bd752",
+              "strategy": "structured",
+              "score": 0.5994513288927648,
+              "text": "## Запрос SMS и проверка номера\n\nВ проверенном снимке MyFamily вход начинается с номера телефона. SignInViewModel разрешает продолжение при 10 символах в поле номера. Перед отправкой удаляются символы форматирования и добавляется countryCode из GlobalConfig; в этом снимке countryCode равен \"1\". Эти значения относятся к конфигурации снимка, не ко всем версиям приложения. При проблеме с номером уточните сборку и текст ошибки, не просите SMS-код.\n\nОснование: XcodeProject/Packages/AppModulesPackage/Sources/SignInFlow/Sources/SignInScreen/SignInViewModel.swift и AppBaseFlow/Sources/Configuration.swift в том же пакете.",
+              "rankBefore": 6,
+              "selected": false,
+              "originalRank": 6,
+              "fusionScore": 0.015151515151515152,
+              "relevance": 2,
+              "reason": "Описывает процесс ввода номера телефона",
+              "rankAfter": 5,
+              "rejection": "top-k"
+            }
+          ],
+          "rewrite": {
+            "status": "disabled",
+            "durationMs": 0
+          },
+          "rerank": {
+            "status": "applied",
+            "durationMs": 8913,
+            "attempts": 1,
+            "usage": {
+              "inputTokens": 8414,
+              "promptTokens": 1314,
+              "completionTokens": 158,
+              "totalTokens": 1472
+            }
+          },
+          "timings": {
+            "embeddingMs": 82,
+            "searchMs": 2,
+            "totalMs": 8998
+          },
+          "usage": {
+            "inputTokens": 8414,
+            "promptTokens": 1314,
+            "completionTokens": 158,
+            "totalTokens": 1472
+          },
+          "emptyContext": false
+        },
+        "context": {
+          "capturedAt": "2026-10-17T11:25:10.537Z",
+          "receipt": {
+            "name": "get_support_context",
+            "result": {
+              "product": "MyFamily",
+              "demo": true,
+              "customer": {
+                "id": "mf_maria",
+                "authMethod": "sms",
+                "accountState": "unknown",
+                "myFamily": {
+                  "platform": "ios",
+                  "build": "снимок fe9030e",
+                  "authStage": "signed_in",
+                  "sessionState": "valid",
+                  "profileState": "incomplete"
+                }
+              },
+              "ticket": null,
+              "messagesOmitted": 0
+            }
+          }
+        },
+        "indexRunId": "4506b249-c3e6-43c7-9457-e7395c0b0e82",
+        "durationMs": 16998
+      }
+    },
+    {
+      "id": "unknown",
+      "passed": true,
+      "checks": {
+        "outcome": true
+      },
+      "result": {
+        "question": "Назови текущий инцидент у нашего SMS-провайдера, его причину и точное время восстановления production-сервера.",
+        "selection": {
+          "userId": "mf_anna",
+          "ticketId": "MF-1001"
+        },
+        "provider": "local",
+        "model": "qwen3.5:4b",
+        "answer": "Не удалось подтвердить ответ по базе знаний и данным выбранного пользователя. Передайте вопрос оператору поддержки.",
+        "outcome": "escalate",
+        "grounding": {
+          "status": "unknown",
+          "answer": "Не удалось подтвердить ответ по базе знаний и данным выбранного пользователя. Передайте вопрос оператору поддержки.",
+          "clarification": "Укажите точный текст ошибки, время возникновения и уже выполненные шаги. Не отправляйте пароли и коды подтверждения.",
+          "reason": "insufficient-evidence",
+          "sources": [],
+          "citations": [],
+          "claims": [],
+          "verification": {
+            "status": "abstained",
+            "attempts": 1,
+            "judgments": []
+          },
+          "usage": {
+            "inputTokens": 21814,
+            "promptTokens": 3634,
+            "completionTokens": 12,
+            "totalTokens": 3646
+          }
+        },
+        "sources": [
+          {
+            "source": "mcp://support/get_support_context",
+            "title": "Контекст пользователя и тикета",
+            "section": "get_support_context",
+            "chunkId": "support-context-32f895cb-1ef6-4353-9080-5cc29238ebc2",
+            "strategy": "structured",
+            "score": 1,
+            "text": "MCP get_support_context. Получено: 2026-10-17T11:25:27.550Z.\n\nПродукт: MyFamily.\n\nИсточник: демонстрационный JSON. Это тестовые пользователи и диагностические события; подключения к backend продукта нет.\n\nДанные аккаунта из CRM:\nПользователь: mf_anna.\nСпособ входа: sms.\nСостояние аккаунта: unknown.\nПлатформа: iOS.\nСборка: снимок fe9030e.\nЭтап входа: phone_entry.\nСессия: absent.\nЗаполнение профиля: unknown.\nКод последней ошибки входа: 1101.\nВ последней ошибке указано ожидание: 60 секунд. Это не текущий обратный отсчёт.\n\nДанные тикета из CRM:\nТикет: MF-1001.\nПользователь тикета: mf_anna.\nСтатус: open.\nКатегория: auth.\nКод ошибки: 1101.\nТема: Не получается запросить SMS: ошибка 1101\nОписание: Демонстрационный сценарий: при повторном запросе SMS приложение показывает код 1101 и ожидание 60 секунд. Вход не выполнен.\n\nСообщение пользователя 1 (подтверждает только его слова, не диагноз):\nПочему не работает авторизация? При запросе SMS вижу 1101 и сообщение про 60 секунд.\n\nПредыдущие ответы ассистента исключены из доказательств о продукте. Они используются отдельно только для понимания уточняющего вопроса.\n\nНе показано сообщений: 0. Из них исключено предыдущих ответов ассистента: 0. Дополнительное ограничение контекста: нет."
+          },
+          {
+            "source": "support/myfamily/knowledge/auth.md",
+            "title": "MyFamily: вход по телефону и SMS",
+            "section": "Ошибка 1101: лимит запросов SMS",
+            "chunkId": "structured-568b40a8491cd2d2",
+            "strategy": "structured",
+            "score": 0.6863664461417225,
+            "text": "## Ошибка 1101: лимит запросов SMS\n\nВ проверенном снимке MyFamily код 1101 соответствует exceedLimitSMSCode — превышению лимита запросов SMS. SignInViewModel извлекает цифры из сообщения серверной ошибки и подставляет их в текст ожидания. Фиксированное время ожидания кодом клиента не задано. Конкретное число секунд берётся из последней ошибки выбранного пользователя, а не переносится из другого тикета.\n\nПри 1101 ориентируйтесь на ожидание в показанном сообщении и не запрашивайте SMS многократно подряд. Если время в ошибке неизвестно, ассистент не должен придумывать его. Истёкшее ожидание или успешную доставку SMS нельзя подтвердить по одному старому событию. Если ошибка повторяется после указанного ожидания, передайте оператору время возникновения, сборку и точный текст ошибки без SMS-кода.\n\nОснование: AppBaseFlow/Sources/Configuration.swift (exceedLimitSMSCode = \"1101\"), SignInFlow/Sources/SignInScreen/SignInViewModel.swift (makeScreenError), AppDesignSystem/Sources/StringsLibrary.swift."
+          }
+        ],
+        "trace": {
+          "originalQuestion": "Назови текущий инцидент у нашего SMS-провайдера, его причину и точное время восстановления production-сервера.\nКонтекст: вход sms; состояние unknown; iOS; этап phone_entry; сессия absent; 1101. Тема: Не получается запросить SMS: ошибка 1101; категория auth; код 1101.",
+          "searchQuery": "Назови текущий инцидент у нашего SMS-провайдера, его причину и точное время восстановления production-сервера.\nКонтекст: вход sms; состояние unknown; iOS; этап phone_entry; сессия absent; 1101. Тема: Не получается запросить SMS: ошибка 1101; категория auth; код 1101.",
+          "candidateTopK": 6,
+          "topK": 4,
+          "minSimilarity": 0.2,
+          "minRelevance": 2,
+          "candidates": [
+            {
+              "source": "support/myfamily/knowledge/auth.md",
+              "title": "MyFamily: вход по телефону и SMS",
+              "section": "Ошибка 1101: лимит запросов SMS",
+              "chunkId": "structured-568b40a8491cd2d2",
+              "strategy": "structured",
+              "score": 0.6863664461417225,
+              "text": "## Ошибка 1101: лимит запросов SMS\n\nВ проверенном снимке MyFamily код 1101 соответствует exceedLimitSMSCode — превышению лимита запросов SMS. SignInViewModel извлекает цифры из сообщения серверной ошибки и подставляет их в текст ожидания. Фиксированное время ожидания кодом клиента не задано. Конкретное число секунд берётся из последней ошибки выбранного пользователя, а не переносится из другого тикета.\n\nПри 1101 ориентируйтесь на ожидание в показанном сообщении и не запрашивайте SMS многократно подряд. Если время в ошибке неизвестно, ассистент не должен придумывать его. Истёкшее ожидание или успешную доставку SMS нельзя подтвердить по одному старому событию. Если ошибка повторяется после указанного ожидания, передайте оператору время возникновения, сборку и точный текст ошибки без SMS-кода.\n\nОснование: AppBaseFlow/Sources/Configuration.swift (exceedLimitSMSCode = \"1101\"), SignInFlow/Sources/SignInScreen/SignInViewModel.swift (makeScreenError), AppDesignSystem/Sources/StringsLibrary.swift.",
+              "rankBefore": 1,
+              "selected": true,
+              "originalRank": 1,
+              "fusionScore": 0.01639344262295082,
+              "relevance": 3,
+              "reason": "Описывает ошибку 1101 и время ожидания",
+              "rankAfter": 1
+            },
+            {
+              "source": "support/myfamily/knowledge/faq.md",
+              "title": "MyFamily: FAQ поддержки и границы диагностики",
+              "section": "Можно ли считать запрос SMS успешным входом",
+              "chunkId": "structured-2e5f3839aaf7e4e9",
+              "strategy": "structured",
+              "score": 0.6267931133033628,
+              "text": "## Можно ли считать запрос SMS успешным входом\n\nНет. Успешный запрос SMS, доставка SMS, подтверждение кода и действующая сессия — разные этапы. Если в контексте указан только sms_requested, ассистент не должен утверждать, что SMS доставлено или вход завершён. Если запрос заблокирован ошибкой 1101, нельзя переносить на этот тикет причину незавершённого UI-перехода после успешного запроса.",
+              "rankBefore": 2,
+              "selected": false,
+              "originalRank": 2,
+              "fusionScore": 0.016129032258064516,
+              "relevance": 1,
+              "reason": "Обсуждает статус входа, не отвечает на вопрос",
+              "rankAfter": 2,
+              "rejection": "relevance"
+            },
+            {
+              "source": "support/myfamily/knowledge/auth.md",
+              "title": "MyFamily: вход по телефону и SMS",
+              "section": "После запроса SMS не открывается следующий экран",
+              "chunkId": "structured-a1edcd25117afe21",
+              "strategy": "structured",
+              "score": 0.6037990381827156,
+              "text": "## После запроса SMS не открывается следующий экран\n\nВ проверенном снимке MyFamily успешный requestAuth отправляет событие .continue. SignInCoordinator обрабатывает .continue только print(\"succes\"). Переход к экрану ввода SMS и завершение авторизации в этом обработчике не реализованы. Методы confirm существуют в сервисах, но это не означает наличие готового экрана подтверждения.\n\nЕсли пользователь на соответствующей сборке сообщает об остановке после успешного запроса SMS, это согласуется с известным незавершённым переходом. Ассистент должен объяснить ограничение и предложить передать тикет команде MyFamily; не обещать, что перезапуск, сброс пароля или ожидание исправят отсутствующий переход. Для другой сборки причину нужно проверять отдельно. Успешный запрос SMS сам по себе не подтверждает доставку сообщения.\n\nОснование: SignInFlow/Sources/SignInScreen/SignInViewModel.swift, SignInFlow/Sources/SignInCoordinator.swift и SignInInteractor.swift.",
+              "rankBefore": 3,
+              "selected": false,
+              "originalRank": 3,
+              "fusionScore": 0.015873015873015872,
+              "relevance": 1,
+              "reason": "Обсуждает переходы экранов, не отвечает на вопрос",
+              "rankAfter": 3,
+              "rejection": "relevance"
+            },
+            {
+              "source": "support/myfamily/knowledge/auth.md",
+              "title": "MyFamily: вход по телефону и SMS",
+              "section": "MyFamily: вход по телефону и SMS",
+              "chunkId": "structured-a9f647e12e775728",
+              "strategy": "structured",
+              "score": 0.5468769848266671,
+              "text": "# MyFamily: вход по телефону и SMS\n\nОснование: локальные исходники MyFamily, снимок fe9030e305306682dfea7a892c23b1a5a1a79dca, проверены 17 октября 2026 года. Это описание клиентского кода, не проверка работающего backend. Пути ниже относительно MyFamily.",
+              "rankBefore": 4,
+              "selected": false,
+              "originalRank": 4,
+              "fusionScore": 0.015625,
+              "relevance": 0,
+              "reason": "Введение о проекте, не содержит ответа",
+              "rankAfter": 6,
+              "rejection": "relevance"
+            },
+            {
+              "source": "support/myfamily/knowledge/auth.md",
+              "title": "MyFamily: вход по телефону и SMS",
+              "section": "Запрос SMS и проверка номера",
+              "chunkId": "structured-ab5145c06f3bd752",
+              "strategy": "structured",
+              "score": 0.5393765218053672,
+              "text": "## Запрос SMS и проверка номера\n\nВ проверенном снимке MyFamily вход начинается с номера телефона. SignInViewModel разрешает продолжение при 10 символах в поле номера. Перед отправкой удаляются символы форматирования и добавляется countryCode из GlobalConfig; в этом снимке countryCode равен \"1\". Эти значения относятся к конфигурации снимка, не ко всем версиям приложения. При проблеме с номером уточните сборку и текст ошибки, не просите SMS-код.\n\nОснование: XcodeProject/Packages/AppModulesPackage/Sources/SignInFlow/Sources/SignInScreen/SignInViewModel.swift и AppBaseFlow/Sources/Configuration.swift в том же пакете.",
+              "rankBefore": 5,
+              "selected": false,
+              "originalRank": 5,
+              "fusionScore": 0.015384615384615385,
+              "relevance": 1,
+              "reason": "Описывает проверку номера, не отвечает на вопрос",
+              "rankAfter": 4,
+              "rejection": "relevance"
+            },
+            {
+              "source": "support/myfamily/knowledge/profile.md",
+              "title": "MyFamily: сессия и профиль",
+              "section": "Почему приложение считает пользователя неавторизованным",
+              "chunkId": "structured-acaf807807f63463",
+              "strategy": "structured",
+              "score": 0.5252835578829727,
+              "text": "## Почему приложение считает пользователя неавторизованным\n\nВ проверенном снимке MyFamily hasAuthorizedUser возвращает true только при наличии credentials и expirationDate позже текущей даты. Отсутствующая или истёкшая сессия не проходит эту проверку. Это правило клиента; факт истечения сессии конкретного пользователя должен подтверждаться контекстом его аккаунта, а не выводиться только из жалобы.\n\nВ сервисе есть refreshToken, но наличие метода не гарантирует автоматическое обновление сессии в каждом пользовательском сценарии. Ассистент не обновляет сессии и не получает токены. При повторной проблеме следует передать оператору сборку, время и текст ошибки; токены и SMS-коды не прикладываются.",
+              "rankBefore": 6,
+              "selected": false,
+              "originalRank": 6,
+              "fusionScore": 0.015151515151515152,
+              "relevance": 1,
+              "reason": "Обсуждает авторизацию, не отвечает на вопрос",
+              "rankAfter": 5,
+              "rejection": "relevance"
+            }
+          ],
+          "rewrite": {
+            "status": "disabled",
+            "durationMs": 0
+          },
+          "rerank": {
+            "status": "applied",
+            "durationMs": 9719,
+            "attempts": 1,
+            "usage": {
+              "inputTokens": 9112,
+              "promptTokens": 1463,
+              "completionTokens": 169,
+              "totalTokens": 1632
+            }
+          },
+          "timings": {
+            "embeddingMs": 103,
+            "searchMs": 2,
+            "totalMs": 9825
+          },
+          "usage": {
+            "inputTokens": 9112,
+            "promptTokens": 1463,
+            "completionTokens": 169,
+            "totalTokens": 1632
+          },
+          "emptyContext": false
+        },
+        "context": {
+          "capturedAt": "2026-10-17T11:25:27.550Z",
+          "receipt": {
+            "name": "get_support_context",
+            "result": {
+              "product": "MyFamily",
+              "demo": true,
+              "customer": {
+                "id": "mf_anna",
+                "authMethod": "sms",
+                "accountState": "unknown",
+                "myFamily": {
+                  "platform": "ios",
+                  "build": "снимок fe9030e",
+                  "authStage": "phone_entry",
+                  "sessionState": "absent",
+                  "profileState": "unknown",
+                  "lastAuthError": {
+                    "code": "1101",
+                    "retryAfterSeconds": 60
+                  }
+                }
+              },
+              "ticket": {
+                "id": "MF-1001",
+                "userId": "mf_anna",
+                "title": "Не получается запросить SMS: ошибка 1101",
+                "status": "open",
+                "category": "auth",
+                "description": "Демонстрационный сценарий: при повторном запросе SMS приложение показывает код 1101 и ожидание 60 секунд. Вход не выполнен.",
+                "errorCode": "1101",
+                "messages": [
+                  {
+                    "author": "user",
+                    "body": "Почему не работает авторизация? При запросе SMS вижу 1101 и сообщение про 60 секунд."
+                  }
+                ]
+              },
+              "messagesOmitted": 0
+            }
+          }
+        },
+        "indexRunId": "4506b249-c3e6-43c7-9457-e7395c0b0e82",
+        "durationMs": 17116
+      }
+    }
+  ]
+}
