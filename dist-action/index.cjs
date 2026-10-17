@@ -20333,9 +20333,15 @@ function parseReviewResponse(content, file2, sources) {
   const locations = patchLocations(file2.patch);
   const evidence = new Map([["diff", file2.patch], ["content", file2.content], ...sources.map((source) => [source.id, source.text])]);
   for (const finding of result.findings) {
-    const line = locations.get(`${finding.side}:${finding.line}`);
+    let line = locations.get(`${finding.side}:${finding.line}`);
     if (finding.path !== file2.path || line === void 0) throw new Error("\u0417\u0430\u043C\u0435\u0447\u0430\u043D\u0438\u0435 \u0441\u0441\u044B\u043B\u0430\u0435\u0442\u0441\u044F \u043D\u0430 \u043D\u0435\u0438\u0437\u0432\u0435\u0441\u0442\u043D\u044B\u0439 \u043F\u0443\u0442\u044C \u0438\u043B\u0438 \u0441\u0442\u0440\u043E\u043A\u0443 diff.");
-    if (!finding.citations.some((citation) => citation.sourceId === "diff" && line.includes(citation.quote))) throw new Error("\u041D\u0435\u0442 \u0434\u043E\u0441\u043B\u043E\u0432\u043D\u043E\u0439 \u0446\u0438\u0442\u0430\u0442\u044B \u0438\u0437 \u0443\u043A\u0430\u0437\u0430\u043D\u043D\u043E\u0439 \u0441\u0442\u0440\u043E\u043A\u0438 diff.");
+    const diffCitations = finding.citations.filter((citation) => citation.sourceId === "diff");
+    if (!diffCitations.some((citation) => line.includes(citation.quote))) {
+      const matches = [...locations].filter(([location, text]) => location.startsWith(finding.side + ":") && diffCitations.some((citation) => text.includes(citation.quote)));
+      if (matches.length !== 1) throw new Error("\u041D\u0435\u0442 \u043E\u0434\u043D\u043E\u0437\u043D\u0430\u0447\u043D\u043E\u0439 \u0434\u043E\u0441\u043B\u043E\u0432\u043D\u043E\u0439 \u0446\u0438\u0442\u0430\u0442\u044B \u0438\u0437 \u0441\u0442\u0440\u043E\u043A\u0438 diff.");
+      finding.line = Number(matches[0][0].split(":")[1]);
+      line = matches[0][1];
+    }
     for (const citation of finding.citations) if (!evidence.get(citation.sourceId)?.includes(citation.quote)) throw new Error("\u0426\u0438\u0442\u0430\u0442\u0430 \u043D\u0435 \u043D\u0430\u0439\u0434\u0435\u043D\u0430 \u0432 \u043F\u0435\u0440\u0435\u0434\u0430\u043D\u043D\u043E\u043C \u0438\u0441\u0442\u043E\u0447\u043D\u0438\u043A\u0435.");
   }
   return result.findings;

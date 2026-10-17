@@ -177,6 +177,20 @@ test('fabricated citations, wrong paths/lines and invalid JSON are rejected; mal
   } finally { f.close() }
 })
 
+test('miscounted hunk location resolves from one exact same-side quote; ambiguous matches stay rejected', async () => {
+  const f = fixture()
+  try {
+    const file = (await collectReviewContext(f.root, f.base, f.head)).files[0]
+    const corrected = parseReviewResponse(JSON.stringify({ findings: [{ ...finding, line: 1 }] }), file, [])
+    assert.equal(corrected[0].line, 2)
+    assert.equal(corrected[0].side, 'RIGHT')
+    const ambiguous = { ...file, patch: '@@ -1,3 +1,3 @@\n+return value\n+another line\n+return value\n' }
+    assert.throws(() => parseReviewResponse(JSON.stringify({ findings: [{ ...finding, line: 2,
+      citations: [{ sourceId: 'diff', quote: 'return value' }] }] }), ambiguous, []), /однозначной/)
+    assert.throws(() => parseReviewResponse(JSON.stringify({ findings: [{ ...finding, side: 'LEFT' }] }), file, []))
+  } finally { f.close() }
+})
+
 test('existing cloud model client sends diff and RAG in the actual HTTP request, without grounded-answer adaptation', async () => {
   const f = fixture(), previousKey = process.env.DEEPSEEK_API_KEY
   process.env.DEEPSEEK_API_KEY = 'fixture-key'

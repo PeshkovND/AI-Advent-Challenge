@@ -44,9 +44,18 @@ export function parseReviewResponse(content: string, file: ReviewFile, sources: 
   const locations = patchLocations(file.patch)
   const evidence = new Map([['diff', file.patch], ['content', file.content], ...sources.map((source) => [source.id, source.text] as [string, string])])
   for (const finding of result.findings) {
-    const line = locations.get(`${finding.side}:${finding.line}`)
+    let line = locations.get(`${finding.side}:${finding.line}`)
     if (finding.path !== file.path || line === undefined) throw new Error('Замечание ссылается на неизвестный путь или строку diff.')
-    if (!finding.citations.some((citation) => citation.sourceId === 'diff' && line.includes(citation.quote))) throw new Error('Нет дословной цитаты из указанной строки diff.')
+    const diffCitations = finding.citations.filter((citation) => citation.sourceId === 'diff')
+    if (!diffCitations.some((citation) => line!.includes(citation.quote))) {
+      // Models may miscount hunk lines. Resolve only an unambiguous exact quote
+      // on the same side; never invent text, change sides or guess between matches.
+      const matches = [...locations].filter(([location, text]) => location.startsWith(finding.side + ':')
+        && diffCitations.some((citation) => text.includes(citation.quote)))
+      if (matches.length !== 1) throw new Error('Нет однозначной дословной цитаты из строки diff.')
+      finding.line = Number(matches[0][0].split(':')[1])
+      line = matches[0][1]
+    }
     for (const citation of finding.citations) if (!evidence.get(citation.sourceId)?.includes(citation.quote)) throw new Error('Цитата не найдена в переданном источнике.')
   }
   return result.findings
