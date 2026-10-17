@@ -18,9 +18,9 @@
 
 ## Подключение GitHub
 
-1. Добавить workflow в default branch проверяемого репозитория (обычно `main`). Подключаемый reviewer берётся из версии `PeshkovND/AI-Advent-Challenge@ai-review-v1.0.0`; перенос приложения в этот репозиторий не нужен. Первый PR, устанавливающий workflow, не может проверить себя этим пайплайном. Полная инструкция: [ai-review-action.md](ai-review-action.md).
+1. Добавить workflow в default branch проверяемого репозитория (обычно `main`). Подключаемый reviewer берётся из версии `PeshkovND/AI-Advent-Challenge@ai-review-v1.0.1`; перенос приложения в этот репозиторий не нужен. Первый PR, устанавливающий workflow, не может проверить себя этим пайплайном. Полная инструкция: [ai-review-action.md](ai-review-action.md).
 2. Открыть **Settings → Secrets and variables → Actions → New repository secret** и добавить `DEEPSEEK_API_KEY`. Локальная `.env` не передаётся в GitHub Actions.
-3. При необходимости добавить repository variable `AI_REVIEW_MODEL`. По умолчанию используется существующая в проекте `deepseek-v4-flash`.
+3. При необходимости задать модели input `model` у шага Action. По умолчанию используется существующая в проекте `deepseek-v4-flash`.
 4. Убедиться, что GitHub Actions разрешены и политика репозитория допускает `contents: read` и `pull-requests: write` для workflow. Параметр разрешения создавать и одобрять PR не нужен: публикуется обычный комментарий.
 5. Открыть обычный PR или добавить новый commit в открытый PR. Дождаться **Actions → AI code review**. Проверить комментарий, Job Summary и артефакт.
 
@@ -91,3 +91,5 @@ CLI принимает `--base`, `--head`, `--root`, `--output`, `--local`, `--p
 Локальные проверки: 13 тестов reviewer/Action, 17 существующих тестов ассистента, TypeScript и actionlint; подготовка RAG на настоящем checkout MyFamily — 166 документов/файлов baseline, без изменения репозитория. В этой подготовке base=head: проверяется сбор корпуса, а не качество ревью Swift diff. Переносимость и анализ Swift diff отдельно проверяются на изолированном тестовом репозитории. Инструкция, входы и готовый workflow: [ai-review-action.md](ai-review-action.md).
 
 Опубликован тег `ai-review-v1.0.0` → `e8ecc59d061e2be1d9000d9b9cc1b1c9a8e39d6e`. [Реальная GitHub-проверка](https://github.com/PeshkovND/AI-Advent-Challenge/actions/runs/39008044586) завершилась успешно: переносимый Action и DeepSeek обнаружили намеренную ошибку в Swift-коде, артефакты сохранены. [PR-проверка без облачного ключа](https://github.com/PeshkovND/AI-Advent-Challenge/actions/runs/39008044659) также успешна. Старый временный PR #2 закрыт; draft PR #1 остаётся без слияния в `main` по просьбе пользователя.
+
+MyFamily подключён к автоматическому ревью через собственный workflow в `main` и repository secret. В ходе реальной проверки исправлена классификация Swift-файлов внутри API; опубликован patch `ai-review-v1.0.1` → `24528323c63a16b1e7e817867b397dec488fd853`, 14 тестов reviewer/Action проходят. Подтверждены реальный PR-триггер, обнаружение бага, создание и обновление единственного комментария и сохранение артефактов. [Установка и результаты MyFamily](day-32-myfamily-ai-review.md).

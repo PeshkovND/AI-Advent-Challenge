@@ -43,7 +43,7 @@ jobs:
 
 `ai-review-v1.0.1` — рекомендуемая patch-версия Action. Она доступна независимо от слияния ветки `day-32` в `main` этого репозитория. Для закрепления точного кода можно заменить тег полным SHA: `git ls-remote https://github.com/PeshkovND/AI-Advent-Challenge.git 'refs/tags/ai-review-v1.0.1^{}'` показывает commit annotated tag. Версия поставляется как Git tag, публикация в Marketplace не требуется.
 
-Опубликованная версия `ai-review-v1.0.0` указывает на `e8ecc59d061e2be1d9000d9b9cc1b1c9a8e39d6e`. Для фиксации на неизменяемом SHA: `uses: PeshkovND/AI-Advent-Challenge@e8ecc59d061e2be1d9000d9b9cc1b1c9a8e39d6e`.
+Опубликованная версия `ai-review-v1.0.1` указывает на `24528323c63a16b1e7e817867b397dec488fd853`. Для фиксации на неизменяемом SHA: `uses: PeshkovND/AI-Advent-Challenge@24528323c63a16b1e7e817867b397dec488fd853`.
 
 Первый PR, добавляющий workflow в целевой проект, не проверяет себя: `pull_request_target` использует workflow из default branch. Дополнительное разрешение создавать или одобрять PR не требуется. Токену нужны `contents: read` и `pull-requests: write` для обычного комментария. Политика организации может ограничить использование внешних Actions.
 
@@ -109,11 +109,17 @@ Bundle и `dist-action/THIRD_PARTY_NOTICES.txt` коммитятся вмест�
 
 Workflow `.github/workflows/review-action-check.yml` проверяет исходники, bundle и composite Action на отдельном Swift/Xcode-репозитории. Без ключа выполняется `prepare-only`; на push в доверенную `day-32`, если repository secret настроен, выполняется реальный DeepSeek и проверяется обнаружение намеренной замены умножения сложением. На `pull_request` секрет модели не передаётся.
 
-Версии выпускаются новыми тегами `ai-review-vX.Y.Z`. Опубликованные теги не передвигаются. MyFamily в рамках упаковки Action не изменяется: готовый workflow предоставлен как пример подключения.
+Версии выпускаются новыми тегами `ai-review-vX.Y.Z`. Опубликованные теги не передвигаются. Первоначальный выпуск предоставлял workflow как пример; фактическое подключение MyFamily выполнено отдельно и описано в [day-32-myfamily-ai-review.md](day-32-myfamily-ai-review.md).
 
-## Проверенный выпуск — 17 октября 2026
+## Проверки первоначального выпуска v1.0.0 — 17 октября 2026
 
 - [GitHub-hosted Ubuntu / Node 24, push run](https://github.com/PeshkovND/AI-Advent-Challenge/actions/runs/39008044586) — success: `npm ci --ignore-scripts`, TypeScript, повторная сборка bundle без отличий, 13 тестов, оба вызова composite Action и загрузка артефактов.
 - [PR run без секрета модели](https://github.com/PeshkovND/AI-Advent-Challenge/actions/runs/39008044659) — success: тесты и переносимый Action в режиме подготовки.
 - Реальный `deepseek-v4-flash` вернул `complete`, проверил один Swift-файл и нашёл замену `price * quantity` на `price + quantity` в `Invoice.swift:1`; RAG-корпус содержал 8 документов/файлов baseline. [Сохранённый текст](day-32-action-example-review.md), полный JSON — артефакт `action-smoke-review` push run.
 - Публикация/обновление комментария, пагинация и защита от устаревшего PR проверены тестами с подменённым HTTP transport. Smoke run использует `publish-comment: 'false'`: live-публикация в MyFamily и установка его workflow в этот выпуск не входили.
+
+## Patch v1.0.1 и подключение MyFamily
+
+Первый реальный PR MyFamily выявил ошибку категорий RAG: Swift-код внутри `Sources/API` считался документацией. В `v1.0.1` категория документации дополнительно ограничена текстовыми форматами документов. Новая проверка гарантирует, что `.swift` внутри API/Docs остаётся кодом и не вытесняет Markdown/API-описания из двух слотов документации.
+
+[GitHub CI patch-версии](https://github.com/PeshkovND/AI-Advent-Challenge/actions/runs/39008471910) прошёл: 14 тестов reviewer/Action, TypeScript, точное совпадение пересобранного bundle и реальный вызов DeepSeek. MyFamily использует закреплённый SHA `24528323c63a16b1e7e817867b397dec488fd853`. Результаты реального подключения и ссылки: [day-32-myfamily-ai-review.md](day-32-myfamily-ai-review.md).
