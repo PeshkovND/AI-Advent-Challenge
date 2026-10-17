@@ -43,6 +43,8 @@ jobs:
 
 `ai-review-v1.0.0` — отдельная версия Action. Она доступна независимо от слияния ветки `day-32` в `main` этого репозитория. Для закрепления точного кода можно заменить тег полным SHA: `git ls-remote https://github.com/PeshkovND/AI-Advent-Challenge.git 'refs/tags/ai-review-v1.0.0^{}'` показывает commit annotated tag. Версия поставляется как Git tag, публикация в Marketplace не требуется.
 
+Опубликованная версия `ai-review-v1.0.0` указывает на `e8ecc59d061e2be1d9000d9b9cc1b1c9a8e39d6e`. Для фиксации на неизменяемом SHA: `uses: PeshkovND/AI-Advent-Challenge@e8ecc59d061e2be1d9000d9b9cc1b1c9a8e39d6e`.
+
 Первый PR, добавляющий workflow в целевой проект, не проверяет себя: `pull_request_target` использует workflow из default branch. Дополнительное разрешение создавать или одобрять PR не требуется. Токену нужны `contents: read` и `pull-requests: write` для обычного комментария. Политика организации может ограничить использование внешних Actions.
 
 ## Входы
@@ -108,3 +110,10 @@ Bundle и `dist-action/THIRD_PARTY_NOTICES.txt` коммитятся вмест�
 Workflow `.github/workflows/review-action-check.yml` проверяет исходники, bundle и composite Action на отдельном Swift/Xcode-репозитории. Без ключа выполняется `prepare-only`; на push в доверенную `day-32`, если repository secret настроен, выполняется реальный DeepSeek и проверяется обнаружение намеренной замены умножения сложением. На `pull_request` секрет модели не передаётся.
 
 Версии выпускаются новыми тегами `ai-review-vX.Y.Z`. Опубликованные теги не передвигаются. MyFamily в рамках упаковки Action не изменяется: готовый workflow предоставлен как пример подключения.
+
+## Проверенный выпуск — 17 октября 2026
+
+- [GitHub-hosted Ubuntu / Node 24, push run](https://github.com/PeshkovND/AI-Advent-Challenge/actions/runs/39008044586) — success: `npm ci --ignore-scripts`, TypeScript, повторная сборка bundle без отличий, 13 тестов, оба вызова composite Action и загрузка артефактов.
+- [PR run без секрета модели](https://github.com/PeshkovND/AI-Advent-Challenge/actions/runs/39008044659) — success: тесты и переносимый Action в режиме подготовки.
+- Реальный `deepseek-v4-flash` вернул `complete`, проверил один Swift-файл и нашёл замену `price * quantity` на `price + quantity` в `Invoice.swift:1`; RAG-корпус содержал 8 документов/файлов baseline. [Сохранённый текст](day-32-action-example-review.md), полный JSON — артефакт `action-smoke-review` push run.
+- Публикация/обновление комментария, пагинация и защита от устаревшего PR проверены тестами с подменённым HTTP transport. Smoke run использует `publish-comment: 'false'`: live-публикация в MyFamily и установка его workflow в этот выпуск не входили.
