@@ -10,6 +10,22 @@ async function response<T>(request: Promise<Response>) {
   return body as T
 }
 const historyKey = 'deepchat-coding-day34'
+function activityLabel(step?: string) {
+  const [tool, detail] = (step || '').split(' · ')
+  const file = detail?.split(' → ')[0].split('/').pop()
+  switch (tool) {
+    case 'list_files': return 'Изучает структуру проекта'
+    case 'search_files': return detail ? `Ищет «${detail}»` : 'Ищет по файлам'
+    case 'read_file': return file ? `Читает ${file}` : 'Читает файл'
+    case 'write_file': return file ? `Готовит ${file}` : 'Готовит файл'
+    case 'replace_text': return file ? `Редактирует ${file}` : 'Готовит изменения'
+    case 'get_diff': return 'Проверяет diff'
+    case 'review_changes': return 'Проверяет результат'
+    case 'checkpoint': return 'Обновляет план работы'
+    case 'invalid_model_response': return 'Уточняет следующее действие'
+    default: return 'Работает над задачей…'
+  }
+}
 export default function CodingAssistantPanel({ projectId, projects, onSelect, onFolder, onKnowledge }: {
   projectId: string; projects: DeveloperProject[]; onSelect: (id: string) => void; onFolder: () => void; onKnowledge: () => void
 }) {
@@ -29,7 +45,7 @@ export default function CodingAssistantPanel({ projectId, projects, onSelect, on
   useEffect(() => () => controller.current?.abort(), [])
   useEffect(() => { setGoal(''); setError('') }, [projectId])
   useEffect(() => { try { localStorage.setItem(historyKey, JSON.stringify(runs.slice(-20))) } catch { /* Tasks are also stored on the server. */ } }, [runs])
-  useEffect(() => { bottom.current?.scrollIntoView({ behavior: 'smooth' }) }, [runs, pending, liveSteps])
+  useEffect(() => { bottom.current?.scrollIntoView({ behavior: 'smooth' }) }, [runs, pending])
   async function execute(id?: string) {
     if (controller.current || !id && !goal.trim()) return
     const abort = new AbortController(); controller.current = abort
@@ -61,7 +77,7 @@ export default function CodingAssistantPanel({ projectId, projects, onSelect, on
               const data = JSON.parse(payload)
               if (event === 'error') throw new Error(data.error)
               if (event === 'result') completed = data as CodingRun
-              if (event === 'step') setLiveSteps((items) => [...items, `${data.tool}${data.path ? ` · ${data.path}` : data.query ? ` · ${data.query}` : ''}${data.error ? ` → ${data.error}` : ''}`].slice(-10))
+              if (event === 'step') setLiveSteps((items) => [...items, `${data.tool}${data.path ? ` · ${data.path}` : data.query ? ` · ${data.query}` : ''}${data.error ? ` → ${data.error}` : ''}`])
             }
             if (done) break
           }
@@ -119,7 +135,18 @@ export default function CodingAssistantPanel({ projectId, projects, onSelect, on
           <details className="developer-receipts"><summary>Действия ассистента · {run.steps.length}</summary>{run.steps.map((step, index) => <section key={index}><strong>{index + 1}. {step.tool}</strong><pre>{JSON.stringify({ arguments: step.arguments, result: step.result }, null, 2)}</pre></section>)}</details>
           <small className="developer-answer-meta">Задача {run.id}</small>
         </div></article></div>)}
-        {pending && <div className="rag-chat-thinking" role="status"><p>{pending}<br />Ассистент исследует файлы и проверяет результат…</p>{liveSteps.length > 0 && <ol className="coding-live-steps">{liveSteps.map((step, index) => <li key={index}>{step}</li>)}</ol>}</div>}<div ref={bottom} />
+        {pending && <div className="coding-pending"><p>{pending}</p>
+          <details className="coding-activity">
+            <summary>
+              <span className="coding-activity-spinner" aria-hidden="true" />
+              <span className="coding-activity-label" role="status" aria-live="polite">{activityLabel(liveSteps[liveSteps.length - 1])}</span>
+              {liveSteps.length > 0 && <span className="coding-activity-count">Шагов: {liveSteps.length}</span>}
+              <svg className="coding-activity-chevron" viewBox="0 0 12 12" aria-hidden="true"><path d="m4 2 4 4-4 4" /></svg>
+            </summary>
+            {liveSteps.length > 0 ? <ol className="coding-live-steps">{liveSteps.map((step, index) => <li key={index}>{step}</li>)}</ol>
+              : <p className="coding-activity-empty">Ожидаем первое действие…</p>}
+          </details>
+        </div>}<div ref={bottom} />
       </div></div>
       <div className="rag-chat-composer-area">{error && <p className="rag-chat-error" role="alert">{error}</p>}
         <form className="rag-chat-composer" onSubmit={(event) => { event.preventDefault(); void execute() }}><textarea aria-label="Задача для кодинг-ассистента" placeholder="Опишите цель: что найти, проверить или изменить в проекте?" maxLength={4000} rows={2} disabled={busy} value={goal} onChange={(event) => setGoal(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); event.currentTarget.form?.requestSubmit() } }} />{busy ? <button type="button" aria-label="Остановить задачу" onClick={() => controller.current?.abort()}>■</button> : <button type="submit" aria-label="Выполнить задачу" disabled={!goal.trim() || !projects.length}>↑</button>}</form>
