@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import DeveloperFolderPicker from './DeveloperFolderPicker'
+import CodingAssistantPanel from './CodingAssistantPanel'
 import type { DeveloperAnswer, DeveloperProject, DeveloperProvider, DeveloperStatus } from './developer-types'
 import './chat.css'
 import './developer-assistant.css'
@@ -22,6 +23,7 @@ async function readResponse<T>(response: Response): Promise<T> {
   return data as T
 }
 export default function DeveloperAssistantPage() {
+  const [mode, setMode] = useState<'files' | 'knowledge'>('files')
   const [status, setStatus] = useState<DeveloperStatus>()
   const [projects, setProjects] = useState<DeveloperProject[]>([])
   const [projectId, setProjectId] = useState('current')
@@ -85,10 +87,14 @@ export default function DeveloperAssistantPage() {
       if (mounted.current) { setError(abort.signal.aborted ? 'Запрос остановлен.' : err instanceof Error ? err.message : String(err)); if (operation === 'help') setInput(text) }
     } finally { controller.current = null; if (mounted.current) { setBusy(null); setPending(''); await refresh() } }
   }
+  if (mode === 'files') return <><CodingAssistantPanel projectId={projectId} projects={projects} onSelect={selectProject} onFolder={() => setFolderPicker(true)} onKnowledge={() => setMode('knowledge')} />
+    {folderPicker && <DeveloperFolderPicker initialPath={projects.find(({ id }) => id === projectId)?.root} onClose={() => setFolderPicker(false)} onOpen={(result) => { setProjects(result.projects); selectProject(result.project.id); setFolderPicker(false) }} />}
+  </>
   return <section className="rag-chat-page developer-page" aria-label="Ассистент разработчика">
     <aside className="rag-chat-history developer-context">
       <button className="rag-chat-new" onClick={() => { setMessages((items) => items.filter(({ result }) => (result.projectId || 'current') !== projectId)); setError(''); setNotice('') }} disabled={Boolean(busy)}>＋ Очистить историю</button>
       <h2>Контекст проекта</h2><strong>{status?.project || 'Project'}</strong>
+      <button className="developer-index-button" disabled={Boolean(busy)} onClick={() => setMode('files')}>Работа с файлами · Day 34</button>
       <small className="developer-root">{projects.find(({ id }) => id === projectId)?.root}</small>
       <p className={`developer-index-state${indexReady ? ' ready' : ''}`}>{indexReady ? '● Индекс актуален' : status?.stale ? '● Нужно обновить индекс' : '○ Индекс не создан'}</p>
       {status?.index && <small>{status.index.sourceCount} документов · {status.index.chunkCount} чанков<br />{new Date(status.index.createdAt).toLocaleString('ru-RU')}</small>}

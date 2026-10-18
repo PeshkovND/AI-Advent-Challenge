@@ -33,15 +33,16 @@ export async function localRagStatus(): Promise<LocalRagStatus> {
   return status
 }
 
-export function modelClient(provider: 'local' | 'cloud', signal: AbortSignal | undefined, request: typeof fetch = fetch, options: { localModel?: string; contextSourcePrefix?: string } = {}) {
-  const settings = { ...localRagSettings(), ...(options.localModel ? { model: options.localModel } : {}) }
+export function modelClient(provider: 'local' | 'cloud', signal: AbortSignal | undefined, request: typeof fetch = fetch, options: { localModel?: string; contextSourcePrefix?: string; context?: number; jsonSchema?: Record<string, unknown> } = {}) {
+  const settings = { ...localRagSettings(), ...(options.localModel ? { model: options.localModel } : {}), ...(options.context ? { context: options.context } : {}) }
+  if (options.context !== undefined && (!Number.isSafeInteger(options.context) || options.context < settings.maxTokens + 512 || options.context > 131072)) throw new Error('Некорректный бюджет контекста модели.')
   const stats: LocalRagAnswer = { provider, model: provider === 'local' ? settings.model : settings.cloudModel, calls: 0, promptTokens: 0, outputTokens: 0, durationMs: 0, answerMs: 0 }
   let evalTokens = 0, evalSeconds = 0
   let sources: RagSource[] = []
   const generate = async (prompt: Parameters<RagCompletion>[0], json: boolean, schema?: Record<string, unknown>) => {
     signal?.throwIfAborted()
     const byteEstimate = prompt.reduce((total, item) => total + new TextEncoder().encode(item.content).length + 64, 0)
-    if (byteEstimate + settings.maxTokens + 512 > settings.context) throw new Error('Промпт превышает консервативный бюджет контекста 32К. Уменьшите число кандидатов или увеличьте контекст.')
+    if (byteEstimate + settings.maxTokens + 512 > settings.context) throw new Error('Промпт превышает консервативный бюджет контекста. Уменьшите число кандидатов или увеличьте контекст.')
     stats.calls++
     const timeout = AbortSignal.timeout(300000)
     const requestSignal = signal ? AbortSignal.any([signal, timeout]) : timeout
@@ -163,7 +164,7 @@ export function modelClient(provider: 'local' | 'cloud', signal: AbortSignal | u
         || typeof parsed.taskCheck.reason !== 'string' || !parsed.taskCheck.reason.trim() || parsed.taskCheck.reason.length > 500)) throw new Error('Не удалось проверить соответствие ответа вопросу.')
       return { ...response, content: JSON.stringify({ items, ...(taskCheckRequired ? { taskCheck: parsed.taskCheck } : {}) }) }
     }
-    if (stage !== 'rerank') return generate(prompt, true)
+    if (stage !== 'rerank') return generate(prompt, true, options.jsonSchema)
     const grade = async (messages: Parameters<RagCompletion>[0]) => {
       // Cloud JSON mode uses RagRetriever's native array contract. The keyed
       // aliases below rely on Ollama's enforced schema and are local-only.

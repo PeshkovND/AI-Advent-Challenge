@@ -12,6 +12,7 @@ import { answerWithGrounding } from './rag-grounding'
 import { modelClient, localRagSettings } from './local-rag-service'
 import { readProjectContext } from './project-mcp-client'
 import { branchInventoryAnswer, developerIntent } from './developer-intent'
+import { CodingAssistant } from './coding-assistant'
 
 export class DeveloperError extends Error {
   constructor(message: string, readonly status = 400) { super(message) }
@@ -27,6 +28,7 @@ type Options = {
   root?: string; dataDirectory?: string; embeddings?: OllamaEmbeddingClient
   context?: typeof readProjectContext
   model?: (provider: DeveloperProvider, signal?: AbortSignal) => Pick<ReturnType<typeof modelClient>, 'complete' | 'setSources' | 'stats'>
+  coding?: CodingAssistant
 }
 
 export class DeveloperAssistant {
@@ -35,9 +37,11 @@ export class DeveloperAssistant {
   private readonly manifestPath: string
   private readonly embeddings: OllamaEmbeddingClient
   private busy = false
+  readonly coding: CodingAssistant
   constructor(private readonly options: Options = {}) {
     this.root = options.root || fileURLToPath(new URL('../', import.meta.url))
     const directory = options.dataDirectory || resolve(this.root, 'data')
+    this.coding = options.coding || new CodingAssistant({ root: this.root, directory: resolve(directory, 'coding-runs') })
     this.databasePath = resolve(directory, 'developer-rag.sqlite')
     this.manifestPath = resolve(directory, 'developer-rag-manifest.json')
     this.embeddings = options.embeddings || new OllamaEmbeddingClient()

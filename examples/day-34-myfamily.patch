@@ -1,0 +1,80 @@
+diff --git a/project/docs/client-api.md b/project/docs/client-api.md
+index 9a5beec..924d7cb 100644
+--- a/project/docs/client-api.md
++++ b/project/docs/client-api.md
+@@ -25,6 +25,21 @@ uuid — идентификатор устройства, number — номер
+ 
+ `uploadAvatar(data:)` создаёт UploadImageHttpRequest с endpoint /profile/avatar и multipart-полем avatar. У части задаются fileName image.jpg и MIME image/jpeg. AlamofireHttpClient.sendUploadImageRequest вызывает session.upload с multipartFormData и URL, оставляя HTTP-метод значением по умолчанию Alamofire. В частичном OpenAPI этот путь вынесен в x-client-upload: явный HTTP-метод в собственном Swift-коде не задан.
+ 
++## Поведение refreshToken
++
++Метод `AppAuthService.refreshToken()` в `XcodeProject/Packages/AppModulesPackage/Sources/AppServices/Sources/Services/AuthService.swift` ведёт себя по-разному в зависимости от наличия сохранённых credentials.
++
++**Без credentials.** Если `credentials` равно `nil`, срабатывает ранний `guard let credentials = credentials else`, и метод сразу возвращает `Just(.failure(AppError.unathorized))`. HTTP-запрос `POST /auth/refresh-token` при этом не создаётся и не отправляется, `HttpRequestFactory.refreshToken` не вызывается. Оператор `.handleEvents(receiveOutput:)` подписан только на цепочку, создаваемую после `guard`, поэтому для этого раннего возврата он не выполняется: `removeAccountWithCredentials()` и `notifyThatAuthErrorOccured()` не вызываются, `onAuthErrorOccured` не срабатывает. Подписчик получает `.failure(.unathorized)` без побочных эффектов.
++
++**При наличии credentials.** Метод отправляет `requestFactory.refreshToken(uuid: deviceId, refreshToken: credentials.refreshToken)` с `payloadType: AuthorizedUserPayload.self`. Ответ обрабатывает `handleRefreshResponse`:
++
++- при успехе `networkMapper.accountWithCreds(from:)` строит account и credentials, они сохраняются через `saveAccount` и `saveCredentials`, подписчик получает `.success(credentials)`;
++- при ошибке подписчик получает `.failure(appError)` с исходной ошибкой клиента.
++
++**Ошибка обновления.** Для цепочки с credentials `.handleEvents(receiveOutput:)` при результате `.failure` вызывает `removeAccountWithCredentials()` (удаляет account и credentials из `DefaultsStorage`) и `notifyThatAuthErrorOccured()`, который через `DispatchQueue.main.async` вызывает `onAuthErrorOccured`. То есть при неудачном обновлении с сохранёнными credentials локальные данные авторизации очищаются и приложение уведомляется об ошибке авторизации.
++
++**Использование в интерцепторе.** `OAuthAuthenticator.refresh` в `XcodeProject/Packages/AppModulesPackage/Sources/AppServices/Sources/API/Authenticator.swift` вызывает `authService.refreshToken()`; при `.failure` логирует warning и завершает `completion(.failure(AppError.unathorized))`. `didRequest` возвращает `false`, если `credentials == nil`, иначе считает ошибкой авторизации только `statusCode == 401`.
++
+ ## Ответы и ограничения контракта
+ 
+ AuthorizedUserPayload содержит alreadyRegistered, profile, settings и token. TokenPayload содержит accessToken, refreshToken, expiresIn (String). Это клиентские ожидаемые поля, а не подтверждённый контракт работающего backend. HTTP success-коды, production SLA и полный набор серверных ошибок здесь не установлены.
+
+diff --git a/project/docs/auth-flow.md b/project/docs/auth-flow.md
+new file mode 100644
+index 0000000..c8ebd78
+--- /dev/null
++++ b/project/docs/auth-flow.md
+@@ -0,0 +1,34 @@
++# Поток авторизации
++
++Краткое руководство по фактическому потоку авторизации в текущем коде. Все утверждения подтверждены исходниками; Swift-код не изменялся.
++
++## Компоненты
++
++- `AppAuthService` — реализация `AuthService` (`XcodeProject/Packages/AppModulesPackage/Sources/AppServices/Sources/Services/AuthService.swift`). Хранит account и credentials в `DefaultsStorage`, формирует `deviceId`.
++- `HttpRequestFactory` — фабрика HTTP-запросов (`XcodeProject/Packages/AppModulesPackage/Sources/AppServices/Sources/API/HttpRequestFactory.swift`).
++- `OAuthAuthenticator` — интерцептор Alamofire (`XcodeProject/Packages/AppModulesPackage/Sources/AppServices/Sources/API/Authenticator.swift`).
++- `SignInInteractor` — сценарий входа (`XcodeProject/Packages/AppModulesPackage/Sources/SignInFlow/Sources/SignInInteractor.swift`).
++
++## Шаги входа
++
++1. **Запрос кода.** `SignInInteractor.requestAuth(phoneNumber:)` сохраняет номер и вызывает `authService.requestAuth(phoneNumber:)`. `AppAuthService.requestAuth` сначала вызывает `removeAccountWithCredentials()`, затем отправляет `POST /auth/request` с `Params.RequestAuth{uuid, number, access = "user"}` (`JSONParameterEncoder.default`). Успех даёт `.success(())`, ошибка — `.failure(appError)`.
++2. **Подтверждение кода.** `SignInInteractor.confirm(smsCode:)` вызывает `authService.confirm(phoneNumber:smsCode:)`. `AppAuthService.confirm` отправляет `POST /auth/confirm` с `Params.ConfirmAuth{uuid, number, access, code}` и `payloadType: AuthorizedUserPayload.self`. `handleConfirmResponse` при успехе строит account и credentials через `networkMapper.accountWithCreds(from:)`, сохраняет их (`saveAccount`, `saveCredentials`) и возвращает `AuthState`: `.signIn`, если `account.alreadyRegistered`, иначе `.signUp`. При ошибке — `.failure(appError)`.
++3. **Профиль.** `AccountRepository.fetchProfile()` (`XcodeProject/Packages/AppModulesPackage/Sources/SignInFlow/Sources/AccountRepository.swift`) отправляет `GET /profile`, маппит `UserProfilePayload` и обновляет account через `accountHolder.updateAccount`.
++
++## Обновление токена
++
++`AppAuthService.refreshToken()`:
++
++- без сохранённых credentials срабатывает ранний `guard` и сразу возвращается `Just(.failure(AppError.unathorized))`; HTTP-запрос не создаётся, `handleEvents` не подписан, поэтому очистка и уведомление об ошибке не выполняются;
++- с credentials отправляется `POST /auth/refresh-token` с `Params.RefreshToken{uuid, refreshToken}`; при успехе account и credentials пересохраняются и возвращается `.success(credentials)`;
++- при ошибке возвращается `.failure(appError)`, а `handleEvents(receiveOutput:)` вызывает `removeAccountWithCredentials()` и `notifyThatAuthErrorOccured()` (через `DispatchQueue.main.async` — `onAuthErrorOccured`).
++
++`OAuthAuthenticator.refresh` вызывает `authService.refreshToken()`; при `.failure` логирует warning и завершает `completion(.failure(AppError.unathorized))`. `didRequest` возвращает `false`, если `credentials == nil`, иначе считает ошибкой авторизации только `statusCode == 401`.
++
++## Состояние и выход
++
++- `hasAuthorizedUser` истинно, когда `credentials != nil` и `expirationDate > Date()`.
++- `deviceId` берётся из `DefaultsStorage`, иначе из `identifierForVendor`, иначе генерируется `UUID`.
++- `logout()` отправляет `POST /auth/logout`; при успехе вызывает `removeAccountWithCredentials()` и `notifyThatLogoutCompleted()`.
++
++Подробности контракта запросов и ответов — в [клиентском API](client-api.md).
+
+diff --git a/README.md b/README.md
+index a300510..86817a4 100644
+--- a/README.md
++++ b/README.md
+@@ -28,6 +28,7 @@ MyFamily — заготовка iOS-приложения на Swift и UIKit с
+ - [Архитектура и точки входа](project/docs/project-architecture.md)
+ - [Запуск, схемы, настройки и тесты](project/docs/setup.md)
+ - [Клиентский API авторизации и профиля](project/docs/client-api.md)
++- [Поток авторизации](project/docs/auth-flow.md)
+ - [Частичное OpenAPI-описание клиента](project/docs/api/openapi.json)
+ - [Модели данных и хранение](project/docs/data-models.md)
+ - [Реализованные сценарии и ограничения](project/docs/implementation-status.md)

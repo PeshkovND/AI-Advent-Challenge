@@ -2,8 +2,8 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Developer Assistant API",
-    "version": "1.1.0",
-    "description": "Основной loopback Express-сервер DeepChat. Документация и свежий MCP Git-контекст. Выбор папок относится к файловой системе сервера. Только loopback Host/Origin."
+    "version": "1.2.0",
+    "description": "Локальный ассистент: файловые задачи с diff/применением и прежний RAG с MCP-контекстом. Только loopback Host/Origin."
   },
   "servers": [
     {
@@ -225,6 +225,179 @@
           },
           "503": {
             "description": "Локальный реестр недоступен"
+          }
+        }
+      }
+    },
+    "/tasks": {
+      "post": {
+        "summary": "Выполнить цель через реальные файловые инструменты и подготовить diff без записи в проект",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "goal"
+                ],
+                "properties": {
+                  "projectId": {
+                    "type": "string",
+                    "pattern": "^[a-z0-9][a-z0-9-]{0,63}$",
+                    "default": "current"
+                  },
+                  "goal": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 4000
+                  },
+                  "provider": {
+                    "type": "string",
+                    "enum": [
+                      "cloud",
+                      "local"
+                    ],
+                    "default": "cloud"
+                  },
+                  "previousRunId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "description": "Контекст предыдущей задачи этого проекта; неприменённый diff переносится при совпадении исходников."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "CodingRun: id, projectId, goal, root, provider, model, createdAt, durationMs, status (preview/completed/applied), answer, steps, readFiles, changes (path/before/after/diff)."
+          },
+          "400": {
+            "description": "Некорректный контракт"
+          },
+          "403": {
+            "description": "Внешний Host/Origin"
+          },
+          "404": {
+            "description": "Проект или задача не найдены"
+          },
+          "409": {
+            "description": "Занят или конфликт исходников"
+          },
+          "422": {
+            "description": "Исчерпан лимит шагов; проект не изменён"
+          },
+          "502": {
+            "description": "Ошибка модели"
+          }
+        },
+        "description": "Без Accept возвращает JSON CodingRun. С Accept: text/event-stream возвращает события step (tool/path/query/error), затем result (CodingRun) либо error. После начала SSE ошибки передаются событиями с HTTP 200. Итоговый ответ и diff проверяются отдельным вызовом модели по goalChecks и исходникам.",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Accept",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "application/json",
+                "text/event-stream"
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "/tasks/{id}": {
+      "get": {
+        "summary": "Прочитать сохранённую задачу",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "in": "query",
+            "name": "projectId",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9-]{0,63}$",
+              "default": "current"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "CodingRun: id, projectId, goal, root, provider, model, createdAt, durationMs, status (preview/completed/applied), answer, steps, readFiles, changes (path/before/after/diff)."
+          },
+          "400": {
+            "description": "Некорректный контракт"
+          },
+          "403": {
+            "description": "Внешний Host/Origin"
+          },
+          "404": {
+            "description": "Проект или задача не найдены"
+          },
+          "409": {
+            "description": "Занят или конфликт исходников"
+          }
+        }
+      }
+    },
+    "/tasks/{id}/apply": {
+      "post": {
+        "summary": "Применить серверный снимок diff, проверив все прочитанные источники и изменяемые файлы",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "projectId": {
+                    "type": "string",
+                    "pattern": "^[a-z0-9][a-z0-9-]{0,63}$",
+                    "default": "current"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "CodingRun: id, projectId, goal, root, provider, model, createdAt, durationMs, status (preview/completed/applied), answer, steps, readFiles, changes (path/before/after/diff)."
+          },
+          "400": {
+            "description": "Некорректный контракт"
+          },
+          "403": {
+            "description": "Внешний Host/Origin"
+          },
+          "404": {
+            "description": "Проект или задача не найдены"
+          },
+          "409": {
+            "description": "Занят или конфликт исходников"
           }
         }
       }

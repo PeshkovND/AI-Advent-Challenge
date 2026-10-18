@@ -1,0 +1,100 @@
+{
+  "branch": "day-34",
+  "baselineCommit": "fa8c37187b303509537097449bfa18b08300faa2",
+  "sourceProject": {
+    "name": "MyFamily",
+    "commit": "fe9030e305306682dfea7a892c23b1a5a1a79dca",
+    "isolatedCopy": true,
+    "originalUnchanged": true
+  },
+  "automated": {
+    "developer": {
+      "passed": 31,
+      "failed": 0
+    },
+    "support": {
+      "passed": 34,
+      "failed": 0
+    },
+    "review": {
+      "passed": 27,
+      "failed": 0
+    },
+    "typecheck": "passed",
+    "build": "passed"
+  },
+  "live": {
+    "provider": "cloud",
+    "model": "deepseek-v4-flash",
+    "passed": true,
+    "inventory": {
+      "readFiles": [
+        "XcodeProject/Packages/AppModulesPackage/Sources/AppServices/Sources/Services/AuthService.swift",
+        "XcodeProject/Packages/AppModulesPackage/Sources/AppServices/Sources/API/Authenticator.swift",
+        "XcodeProject/Packages/AppModulesPackage/Sources/SignInFlow/Sources/SignInInteractor.swift",
+        "XcodeProject/App/Source/Infrastructure/AppCoordinator.swift",
+        "XcodeProject/App/Source/Infrastructure/AppContainer.swift",
+        "XcodeProject/Packages/AppModulesPackage/Sources/AppDevTools/Sources/FakeAuthService.swift"
+      ],
+      "durationMs": 41210,
+      "changes": 0
+    },
+    "documentation": {
+      "readFiles": [
+        "project/docs/client-api.md",
+        "README.md",
+        "XcodeProject/Packages/AppModulesPackage/Sources/AppServices/Sources/API/Authenticator.swift",
+        "XcodeProject/Packages/AppModulesPackage/Sources/AppServices/Sources/Services/AuthService.swift",
+        "XcodeProject/Packages/AppModulesPackage/Sources/AppServices/Sources/API/HttpRequestFactory.swift",
+        "XcodeProject/Packages/AppModulesPackage/Sources/AppServices/Sources/API/HttpResponse.swift",
+        "XcodeProject/Packages/AppModulesPackage/Sources/SignInFlow/Sources/SignInInteractor.swift",
+        "XcodeProject/Packages/AppModulesPackage/Sources/SignInFlow/Sources/AccountRepository.swift"
+      ],
+      "durationMs": 35238,
+      "changedFiles": [
+        "project/docs/client-api.md",
+        "project/docs/auth-flow.md",
+        "README.md"
+      ],
+      "reviewPassed": true
+    },
+    "apply": {
+      "status": "applied",
+      "files": [
+        "project/docs/client-api.md",
+        "project/docs/auth-flow.md",
+        "README.md"
+      ],
+      "gitApplyCheck": true
+    },
+    "repeated": {
+      "durationMs": 10382,
+      "readFiles": [
+        "XcodeProject/Packages/AppModulesPackage/Sources/AppServices/Sources/API/Authenticator.swift",
+        "XcodeProject/Packages/AppModulesPackage/Sources/AppServices/Sources/API/HttpRequestFactory.swift",
+        "XcodeProject/Packages/AppModulesPackage/Sources/AppServices/Sources/Services/AuthService.swift",
+        "project/docs/client-api.md",
+        "project/docs/auth-flow.md",
+        "README.md"
+      ],
+      "changes": 0
+    }
+  },
+  "requirements": {
+    "readsProjectFiles": true,
+    "multiFileSearch": true,
+    "analysis": true,
+    "createAndModifyFiles": true,
+    "goalDrivenToolLoop": true,
+    "atLeastTwoScenarios": true,
+    "atLeastThreeReadFiles": true,
+    "durableDiffAndApply": true,
+    "reproducibleCheck": true
+  },
+  "limitations": [
+    "No arbitrary shell execution, deletion or renaming tools",
+    "Full file read limit 14 KB; files on disk up to 64 KiB",
+    "Model-based review can make mistakes; iOS build was not run",
+    "Full live acceptance verified with DeepSeek; local transport is covered by automated tests, earlier local runs were not accepted"
+  ]
+}

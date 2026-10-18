@@ -93,14 +93,15 @@ export class DeveloperProjects {
 }
 
 export function parseDeveloperArguments(args: string[]) {
-  let project = 'current', local = false, cloud = false, index = false, cases: string | undefined
+  let project = 'current', local = false, cloud = false, index = false, cases: string | undefined, apply: string | undefined
   let command = ''
   for (let position = 0; position < args.length; position++) {
     const argument = args[position]
-    if (argument === '--project' || argument === '--cases') {
+    if (argument === '--project' || argument === '--cases' || argument === '--apply') {
       const value = args[++position]
       if (!value || value.startsWith('--')) throw new DeveloperError(`После ${argument} нужно значение.`)
       if (argument === '--project') { if (!projectId.safeParse(value).success) throw new DeveloperError('Укажите зарегистрированный ID проекта.'); project = value }
+      else if (argument === '--apply') apply = z.uuid().parse(value)
       else cases = value
     } else if (argument === '--local') local = true
     else if (argument === '--cloud') cloud = true
@@ -109,5 +110,5 @@ export function parseDeveloperArguments(args: string[]) {
     else { command = args.slice(position).join(' '); break }
   }
   if (local && cloud) throw new DeveloperError('Выберите --local или --cloud.')
-  return { project, local, cloud, index, cases, command }
+  return { project, local, cloud, index, cases, ...(apply ? { apply } : {}), command }
 }

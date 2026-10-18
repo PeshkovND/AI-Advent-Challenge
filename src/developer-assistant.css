@@ -41,3 +41,12 @@
 .developer-folder-dialog footer { display: flex; justify-content: flex-end; gap: 10px; margin-top: 22px; }
 .developer-folder-dialog .developer-folder-confirm { background: #7466bc; color: white; border-color: #7466bc; }
 @media (max-width: 700px) { .developer-page .rag-chat-header { flex-wrap: wrap; padding: 14px; } .developer-header-actions { gap: 4px; } .developer-header-actions select { max-width: 145px; } }
+.coding-changes { margin: 16px 0; padding: 14px; border: 1px solid var(--border, #d4dae5); border-radius: 12px; max-width: 100%; }
+.coding-changes details { margin: 12px 0; }
+.coding-changes summary { overflow-wrap: anywhere; cursor: pointer; font-size: 13px; }
+.coding-changes pre { overflow: auto; max-height: 420px; padding: 12px; border-radius: 8px; background: #111b2a; color: #d9efdf; font-size: 12px; white-space: pre; }
+.coding-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.coding-actions button { border: 1px solid #cbd5e1; border-radius: 8px; padding: 8px 12px; cursor: pointer; }
+.coding-actions button:first-child { background: #2158d1; color: white; border-color: #2158d1; }
+.coding-actions button:disabled { opacity: .5; cursor: default; }
+.coding-live-steps { text-align: left; padding-left: 20px; font: 11px/1.7 monospace; overflow-wrap: anywhere; }
