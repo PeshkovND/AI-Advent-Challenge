@@ -1,6 +1,7 @@
 import 'dotenv/config'
 import './network-config'
 import { createInterface } from 'node:readline/promises'
+import { parseDeveloperCommand } from './developer-assistant'
 import { DeveloperProjects, parseDeveloperArguments } from './developer-projects'
 
 const args = parseDeveloperArguments(process.argv.slice(2))
@@ -12,19 +13,13 @@ async function command(input: string) {
     console.log(`Индекс готов: ${result.index.sourceCount} документов, ${result.index.chunkCount} чанков.`)
     return
   }
-  if (!/^\/help(?:\s|$)/i.test(input)) {
-    const result = await service.coding.run(input.replace(/^\/task\s+/i, ''), provider, undefined, previousRunId,
-      (step) => console.error(`${step.tool} ${JSON.stringify(step.arguments).slice(0, 160)}${step.result.error ? ` → ${step.result.error}` : ''}`))
-    previousRunId = result.id
-    console.log(result.answer)
-    for (const change of result.changes) console.log(change.diff)
-    console.log(`Задача ${result.id} · ${result.status}. ${result.changes.length ? `Применить: npm run developer:cli -- --project ${args.project} --apply ${result.id}` : 'Файлы не изменены.'}`)
-    return
-  }
-  const result = await service.help(input, provider)
+  const goal = /^\/help(?:\s|$)/i.test(input) ? parseDeveloperCommand(input) : input.replace(/^\/task\s+/i, '')
+  const result = await service.coding.run(goal, provider, undefined, previousRunId,
+    (step) => console.error(`${step.tool} ${JSON.stringify(step.arguments).slice(0, 160)}${step.result.error ? ` → ${step.result.error}` : ''}`))
+  previousRunId = result.id
   console.log(result.answer)
-  for (const citation of result.grounding.citations) console.log(`[${citation.id}] ${citation.source} · ${citation.section}\n> ${citation.quote}`)
-  console.log(`MCP: ${result.context.receipts.map((receipt) => receipt.name).join(', ')} · ${result.model} · ${result.durationMs} мс`)
+  for (const change of result.changes) console.log(change.diff)
+  console.log(`Задача ${result.id} · ${result.status}. ${result.changes.length ? `Применить: npm run developer:cli -- --project ${args.project} --apply ${result.id}` : 'Файлы не изменены.'}`)
 }
 let previousRunId: string | undefined
 try {
@@ -34,7 +29,7 @@ try {
   } else if (args.index) await command('/index')
   else if (args.command) await command(args.command)
   else {
-    console.log(`Проект: ${service.root}. Задайте цель для работы с файлами. /help <вопрос> — RAG, /index, /exit. Применение diff: --apply ID.`)
+    console.log(`Проект: ${service.root}. Задайте вопрос или цель: документация, Git и файлы в одной беседе. /index, /exit. Применение diff: --apply ID.`)
     const terminal = createInterface({ input: process.stdin, output: process.stdout })
     terminal.setPrompt('dev> '); terminal.prompt()
     try {

@@ -13,6 +13,7 @@ import { modelClient, localRagSettings } from './local-rag-service'
 import { readProjectContext } from './project-mcp-client'
 import { branchInventoryAnswer, developerIntent } from './developer-intent'
 import { CodingAssistant } from './coding-assistant'
+import { searchCurrentDocuments } from './developer-knowledge'
 
 export class DeveloperError extends Error {
   constructor(message: string, readonly status = 400) { super(message) }
@@ -41,10 +42,30 @@ export class DeveloperAssistant {
   constructor(private readonly options: Options = {}) {
     this.root = options.root || fileURLToPath(new URL('../', import.meta.url))
     const directory = options.dataDirectory || resolve(this.root, 'data')
-    this.coding = options.coding || new CodingAssistant({ root: this.root, directory: resolve(directory, 'coding-runs') })
     this.databasePath = resolve(directory, 'developer-rag.sqlite')
     this.manifestPath = resolve(directory, 'developer-rag-manifest.json')
     this.embeddings = options.embeddings || new OllamaEmbeddingClient()
+    this.coding = options.coding || new CodingAssistant({ root: this.root, directory: resolve(directory, 'coding-runs'),
+      searchDocuments: (query, signal) => this.searchDocuments(query, signal), context: options.context,
+      ...(options.model ? { model: (provider, signal) => { const client = options.model!(provider, signal); return { complete: client.complete, model: client.stats.model } } } : {}),
+    })
+  }
+
+  async searchDocuments(query: string, signal?: AbortSignal): Promise<Record<string, unknown>> {
+    signal?.throwIfAborted()
+    const status = this.status()
+    if (!status.index || status.stale) return searchCurrentDocuments(this.root, query, status.stale ? 'Индекс устарел' : 'Индекс не создан')
+    try {
+      const retriever = new RagRetriever({ store: () => new RagIndexStore(this.databasePath), embeddings: () => this.embeddings })
+      const result = await retriever.retrieve(query, { enabled: true, strategy: 'structured', indexRunId: status.index.id,
+        topK: 4, minSimilarity: 0.2, queryRewrite: false }, undefined, signal)
+      return { method: 'rag', indexRunId: status.index.id,
+        sources: result.sources.map(({ source, section, text }) => ({ source, section, text: text.slice(0, 2400), truncated: text.length > 2400 })),
+        note: 'Фрагменты актуального индекса. Для изменения файла сначала прочитай его read_file. Номера строк подтверждай search_files.' }
+    } catch (error) {
+      signal?.throwIfAborted()
+      return searchCurrentDocuments(this.root, query, `RAG недоступен: ${error instanceof Error ? error.message : String(error)}`)
+    }
   }
 
   status(): DeveloperStatus {

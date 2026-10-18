@@ -102,6 +102,33 @@ test('documentation corpus preserves actual Docs directory casing used by extern
   } finally { f.close() }
 })
 
+test('unified document search uses a current RAG index, falls back for missing/stale index and unavailable embeddings', async () => {
+  const f = fixture()
+  try {
+    const embeddings = new TestEmbeddings()
+    const service = new DeveloperAssistant({ root: f.root, embeddings })
+    const missing = await service.searchDocuments('Express')
+    assert.equal(missing.method, 'text')
+    assert.match(JSON.stringify(missing.sources), /Express/)
+    assert.ok(!JSON.stringify(missing).includes('never-expose'))
+    await service.index()
+    assert.equal((await service.searchDocuments('Express')).method, 'rag')
+    writeFileSync(join(f.root, 'README.md'), '# Project\n\nНовое поведение refreshToken описано здесь.')
+    const stale = await service.searchDocuments('refreshToken')
+    assert.equal(stale.method, 'text')
+    assert.match(String(stale.reason), /устарел/)
+    assert.match(JSON.stringify(stale.sources), /Новое поведение/)
+    await service.index()
+    embeddings.embedQueries = async () => { throw new Error('Ollama недоступна') }
+    const offline = await service.searchDocuments('refreshToken')
+    assert.equal(offline.method, 'text')
+    assert.match(String(offline.reason), /Ollama недоступна/)
+    assert.match(JSON.stringify(offline.sources), /refreshToken/)
+    const abort = new AbortController(); abort.abort()
+    await assert.rejects(service.searchDocuments('refreshToken', abort.signal), /abort/i)
+  } finally { f.close() }
+})
+
 test('long Swift paths and Unicode passages fit the evidence budget without mutating receipts or fabricating quotes', () => {
   const files = Array.from({ length: 120 }, (_, index) => `XcodeProject/Packages/AppModulesPackage/Sources/SomeLongFeatureFlow/Sources/Screen${index}/ScreenViewModel.swift`)
   const receipt = { name: 'list_project_files', result: { files, total: 170, truncated: true } }

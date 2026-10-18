@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import type { CodingRun } from './coding-types'
-import type { DeveloperProject } from './developer-types'
+import type { DeveloperProject, DeveloperStatus } from './developer-types'
 
 async function response<T>(request: Promise<Response>) {
   const res = await request, body = await res.json()
@@ -16,6 +16,9 @@ function activityLabel(step?: string) {
   switch (tool) {
     case 'list_files': return 'Изучает структуру проекта'
     case 'search_files': return detail ? `Ищет «${detail}»` : 'Ищет по файлам'
+    case 'search_documents': return detail ? `Ищет в документации «${detail}»` : 'Ищет в документации'
+    case 'get_project_context': return 'Читает Git-контекст через MCP'
+    case 'index_documents': return 'Обновляет индекс документации'
     case 'read_file': return file ? `Читает ${file}` : 'Читает файл'
     case 'write_file': return file ? `Готовит ${file}` : 'Готовит файл'
     case 'replace_text': return file ? `Редактирует ${file}` : 'Готовит изменения'
@@ -26,8 +29,8 @@ function activityLabel(step?: string) {
     default: return 'Работает над задачей…'
   }
 }
-export default function CodingAssistantPanel({ projectId, projects, onSelect, onFolder, onKnowledge }: {
-  projectId: string; projects: DeveloperProject[]; onSelect: (id: string) => void; onFolder: () => void; onKnowledge: () => void
+export default function CodingAssistantPanel({ projectId, projects, onSelect, onFolder }: {
+  projectId: string; projects: DeveloperProject[]; onSelect: (id: string) => void; onFolder: () => void
 }) {
   const [runs, setRuns] = useState<CodingRun[]>(() => {
     try { return JSON.parse(localStorage.getItem(historyKey) || '[]').filter((run: CodingRun) => run.id && run.projectId && Array.isArray(run.changes) && Array.isArray(run.steps)) } catch { return [] }
@@ -38,11 +41,20 @@ export default function CodingAssistantPanel({ projectId, projects, onSelect, on
   const [pending, setPending] = useState('')
   const [liveSteps, setLiveSteps] = useState<string[]>([])
   const [error, setError] = useState('')
+  const [status, setStatus] = useState<DeveloperStatus>()
   const controller = useRef<AbortController | null>(null)
   const bottom = useRef<HTMLDivElement>(null)
   const visible = runs.filter((run) => run.projectId === projectId)
   const project = projects.find(({ id }) => id === projectId)
   useEffect(() => () => controller.current?.abort(), [])
+  useEffect(() => {
+    const abort = new AbortController()
+    setStatus(undefined)
+    void response<DeveloperStatus>(fetch(`/api/developer/status?projectId=${encodeURIComponent(projectId)}`, { signal: abort.signal }))
+      .then((data) => { if (!abort.signal.aborted) setStatus(data) })
+      .catch(() => { /* File operations remain available if optional index status is unavailable. */ })
+    return () => abort.abort()
+  }, [projectId, runs])
   useEffect(() => { setGoal(''); setError('') }, [projectId])
   useEffect(() => { try { localStorage.setItem(historyKey, JSON.stringify(runs.slice(-20))) } catch { /* Tasks are also stored on the server. */ } }, [runs])
   useEffect(() => { bottom.current?.scrollIntoView({ behavior: 'smooth' }) }, [runs, pending])
@@ -91,6 +103,16 @@ export default function CodingAssistantPanel({ projectId, projects, onSelect, on
       if (!id) setGoal(input)
     } finally { controller.current = null; setBusy(false); setPending('') }
   }
+  async function indexDocuments() {
+    if (controller.current) return
+    const abort = new AbortController(); controller.current = abort
+    setBusy(true); setError(''); setPending('Обновление индекса документации…'); setLiveSteps(['index_documents'])
+    try {
+      await response(fetch('/api/developer/index', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ projectId }), signal: abort.signal }))
+      setStatus(await response<DeveloperStatus>(fetch(`/api/developer/status?projectId=${encodeURIComponent(projectId)}`, { signal: abort.signal })))
+    } catch (err) { setError(abort.signal.aborted ? 'Индексация остановлена.' : err instanceof Error ? err.message : String(err)) }
+    finally { controller.current = null; setBusy(false); setPending('') }
+  }
   async function refreshRun(id: string) {
     try {
       const run = await response<CodingRun>(fetch(`/api/developer/tasks/${id}?projectId=${encodeURIComponent(projectId)}`))
@@ -101,26 +123,31 @@ export default function CodingAssistantPanel({ projectId, projects, onSelect, on
     const url = URL.createObjectURL(new Blob([run.changes.map(({ diff }) => diff).join('\n')], { type: 'text/x-diff;charset=utf-8' }))
     const link = document.createElement('a'); link.href = url; link.download = `task-${run.id}.patch`; link.click(); URL.revokeObjectURL(url)
   }
-  return <section className="rag-chat-page developer-page coding-page" aria-label="Кодинг-ассистент">
+  return <section className="rag-chat-page developer-page coding-page" aria-label="Ассистент разработчика">
     <aside className="rag-chat-history developer-context">
       <button className="rag-chat-new" disabled={busy} onClick={() => setRuns((items) => items.filter((run) => run.projectId !== projectId))}>＋ Новая беседа</button>
-      <h2>Файлы проекта</h2><strong>{project?.name || 'Проект'}</strong><small className="developer-root">{project?.root}</small>
+      <h2>Контекст проекта</h2><strong>{project?.name || 'Проект'}</strong><small className="developer-root">{project?.root}</small>
       <p className="developer-index-state ready">● Прямой доступ к актуальным файлам</p>
-      <p>Задайте цель. Ассистент сам найдёт и прочитает нужные файлы, подготовит правки и проверит diff.</p>
-      <div className="developer-mcp-badge">Инструменты файлов<small>список · поиск · чтение · создание · замена · diff</small></div>
-      <span className="rag-chat-history-note">Индекс не требуется. Правки сохраняются после «Применить изменения». История задач и diff доступны после перезапуска сервера.</span>
-      <button className="developer-index-button" disabled={busy} onClick={onKnowledge}>Вопросы по документации · RAG</button>
+      <p>Задайте вопрос или цель. Ассистент сам найдёт документы, проверит код и Git, при необходимости подготовит правки.</p>
+      <div className="developer-mcp-badge">Документация · MCP · Файлы<small>поиск документов · ветки и изменения · чтение · создание · правки · diff</small></div>
+      <details className="developer-documents"><summary>Документация · {status?.documents.length ?? '…'}</summary>
+        <p>{status?.index && !status.stale ? `Индекс актуален · ${status.index.chunkCount} чанков` : status?.stale ? 'Индекс устарел. Поиск использует текущие документы.' : 'Поиск по текущим документам. Индекс необязателен.'}</p>
+        <button className="developer-index-button" disabled={busy || !projects.length} onClick={() => void indexDocuments()}>{status?.index ? 'Обновить индекс' : 'Индексировать документацию'}</button>
+        <ul>{status?.documents.map((path) => <li key={path}>{path}</li>)}</ul>
+      </details>
+      <span className="rag-chat-history-note">Вопросы и правки — в одной беседе. Правки сохраняются после «Применить изменения». История задач и diff доступны после перезапуска сервера.</span>
     </aside>
     <div className="rag-chat-workspace">
-      <header className="rag-chat-header"><div><strong>Кодинг-ассистент <span>Day 34</span></strong><small>Исследует проект и готовит изменения файлов</small></div><div className="developer-header-actions">
+      <header className="rag-chat-header"><div><strong>Ассистент разработчика <span>Day 34</span></strong><small>Документация, Git-контекст и работа с файлами</small></div><div className="developer-header-actions">
         <button disabled={busy} onClick={onFolder}>▱ Открыть папку</button>
         <button disabled={busy} onClick={() => setRuns((items) => items.filter((run) => run.projectId !== projectId))}>Новая беседа</button>
-        <button disabled={busy} onClick={onKnowledge}>Документация · RAG</button>
         <select aria-label="Проект ассистента" disabled={busy || !projects.length} value={projectId} onChange={(event) => onSelect(event.target.value)}>{projects.map(({ id, name }) => <option key={id} value={id}>{name}</option>)}</select>
         <select aria-label="Модель ассистента" disabled={busy} value={provider} onChange={(event) => setProvider(event.target.value as 'local' | 'cloud')}><option value="cloud">DeepSeek · облако</option><option value="local">Ollama · локально</option></select>
       </div></header>
       <div className="rag-chat-scroll"><div className="rag-chat-thread">
-        {!visible.length && !pending && <div className="rag-chat-empty"><div className="rag-chat-mark">⌘</div><h1>Над чем поработаем в {project?.name || 'проекте'}?</h1><p>Опишите результат — ассистент выберет файлы и инструменты.</p><div className="rag-chat-examples">{[
+        {!visible.length && !pending && <div className="rag-chat-empty"><div className="rag-chat-mark">⌘</div><h1>Над чем поработаем в {project?.name || 'проекте'}?</h1><p>Спросите о проекте или опишите нужный результат — ассистент сам выберет инструменты.</p><div className="rag-chat-examples">{[
+          'Как устроен проект, где точки входа и как его запустить?',
+          'Какая сейчас ветка, какие файлы изменены и какие ветки доступны?',
           'Найди определения и все использования AuthService. Объясни поток авторизации со ссылками на файлы и строки.',
           'Сверь документацию клиентского API с кодом авторизации и обнови найденные расхождения.',
           'Исследуй архитектуру проекта и создай ADR о текущем подходе к внедрению зависимостей.',
@@ -149,7 +176,7 @@ export default function CodingAssistantPanel({ projectId, projects, onSelect, on
         </div>}<div ref={bottom} />
       </div></div>
       <div className="rag-chat-composer-area">{error && <p className="rag-chat-error" role="alert">{error}</p>}
-        <form className="rag-chat-composer" onSubmit={(event) => { event.preventDefault(); void execute() }}><textarea aria-label="Задача для кодинг-ассистента" placeholder="Опишите цель: что найти, проверить или изменить в проекте?" maxLength={4000} rows={2} disabled={busy} value={goal} onChange={(event) => setGoal(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); event.currentTarget.form?.requestSubmit() } }} />{busy ? <button type="button" aria-label="Остановить задачу" onClick={() => controller.current?.abort()}>■</button> : <button type="submit" aria-label="Выполнить задачу" disabled={!goal.trim() || !projects.length}>↑</button>}</form>
+        <form className="rag-chat-composer" onSubmit={(event) => { event.preventDefault(); void execute() }}><textarea aria-label="Вопрос или задача для ассистента" placeholder="Спросите о проекте или опишите, что найти, проверить или изменить" maxLength={4000} rows={2} disabled={busy} value={goal} onChange={(event) => setGoal(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); event.currentTarget.form?.requestSubmit() } }} />{busy ? <button type="button" aria-label="Остановить задачу" onClick={() => controller.current?.abort()}>■</button> : <button type="submit" aria-label="Выполнить задачу" disabled={!goal.trim() || !projects.length}>↑</button>}</form>
         <p>{provider === 'cloud' ? 'DeepSeek · выбранное содержимое файлов отправляется в облако' : 'Ollama · локальная обработка'} · Enter — выполнить</p>
       </div>
     </div>

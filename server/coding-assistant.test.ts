@@ -76,6 +76,53 @@ test('read-only usage inventory spans source files and does not create changes',
   } finally { f.close() }
 })
 
+test('one goal combines documentation search, real MCP Git context and file edits; reviewer receives all evidence', async () => {
+  const f = fixture()
+  try {
+    let index = 0, reviewed = false
+    const replies = [
+      { actions: [{ tool: 'search_documents', query: 'API' }, { tool: 'get_project_context' }] },
+      reads, edits, done,
+    ]
+    const complete: RagCompletion = async (messages) => {
+      const review = messages[0].content.startsWith('Проверь подготовленные изменения')
+      if (review) {
+        const payload = JSON.parse(messages[1].content)
+        assert.ok(payload.evidence.some((entry: { tool: string }) => entry.tool === 'search_documents'))
+        assert.ok(JSON.stringify(payload.evidence).includes('mcp://project/get_git_branch'))
+        assert.ok(JSON.stringify(payload.evidence).includes('main'))
+        assert.ok(payload.sources.some((entry: { path: string }) => entry.path === 'src/api.ts'))
+        reviewed = true
+      }
+      return { content: JSON.stringify(review ? { passed: true, goalChecks: [{ requirement: 'Сверить документацию, Git и код, подготовить правки', satisfied: true }], findings: [] } : replies[index++]), usage: { inputTokens: 1, promptTokens: 1, completionTokens: 1, totalTokens: 2 } }
+    }
+    const agent = new CodingAssistant({ root: f.root, directory: join(f.directory, 'runs'), model: () => ({ complete, model: 'fixture' }) })
+    const run = await agent.run('Изучи документацию и текущую ветку, сверь API с кодом и обнови документы.', 'local')
+    assert.equal(reviewed, true)
+    assert.equal(run.steps.find(({ tool }) => tool === 'search_documents')!.result.method, 'text')
+    assert.equal(run.steps.find(({ tool }) => tool === 'get_project_context')!.result.error, undefined)
+    assert.equal(run.changes.length, 2)
+    assert.equal(f.git('status', '--porcelain'), '')
+    await agent.apply(run.id)
+    assert.match(readFileSync(join(f.root, 'README.md'), 'utf8'), /refresh-token/)
+  } finally { f.close() }
+})
+
+test('unavailable MCP context does not block documentation and file analysis', async () => {
+  const f = fixture()
+  try {
+    let index = 0
+    const replies = [{ actions: [{ tool: 'get_project_context' }, { tool: 'search_documents', query: 'API' }, { tool: 'read_file', path: 'src/api.ts' }] }, { done: true, answer: 'API использует /auth/refresh-token. Git-контекст недоступен.' }]
+    const complete: RagCompletion = async (messages) => ({ content: JSON.stringify(messages[0].content.startsWith('Проверь подготовленные изменения') ? { passed: true, goalChecks: [{ requirement: 'Объяснить API и ограничение Git', satisfied: true }], findings: [] } : replies[index++]), usage: { inputTokens: 1, promptTokens: 1, completionTokens: 1, totalTokens: 2 } })
+    const agent = new CodingAssistant({ root: f.root, directory: join(f.directory, 'runs'), context: async () => { throw new Error('MCP недоступен') }, model: () => ({ complete, model: 'fixture' }) })
+    const run = await agent.run('Объясни API и текущую ветку.', 'local')
+    assert.match(String(run.steps.find(({ tool }) => tool === 'get_project_context')!.result.error), /MCP недоступен/)
+    assert.equal(run.status, 'completed')
+    assert.equal(run.changes.length, 0)
+    assert.deepEqual(run.readFiles, ['src/api.ts'])
+  } finally { f.close() }
+})
+
 test('independent review returns factual errors to the writer before a preview can be released', async () => {
   const f = fixture()
   try {
