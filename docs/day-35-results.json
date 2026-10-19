@@ -1,0 +1,152 @@
+{
+  "date": "2026-10-18",
+  "branch": "day-35",
+  "stage": "first working release preparation flow",
+  "validation": {
+    "releases": {
+      "command": "npm run test:releases",
+      "passed": 10,
+      "total": 10
+    },
+    "reviewRegression": {
+      "command": "npm run test:review",
+      "passed": 27,
+      "total": 27
+    },
+    "typecheck": "passed",
+    "build": "passed"
+  },
+  "liveRun": {
+    "id": "6b3c13d0-8576-47a6-a128-5e2b2ef59399",
+    "projectId": "myfamily",
+    "projectName": "MyFamily",
+    "version": "ci-review-1.1.0",
+    "base": "5701a9a3e443569c69568c013317d0b1d1fe311a",
+    "head": "fe9030e305306682dfea7a892c23b1a5a1a79dca",
+    "model": "qwen3.5:9b",
+    "provider": "local",
+    "state": "ready",
+    "coverage": "complete",
+    "totalFiles": 1,
+    "metrics": {
+      "calls": 2,
+      "promptTokens": 3675,
+      "outputTokens": 476,
+      "durationMs": 57474
+    },
+    "corpusDocuments": 167,
+    "corpusLimited": false,
+    "files": [
+      {
+        "path": ".github/workflows/ai-code-review.yml",
+        "status": "M",
+        "summary": {
+          "text": "Обновление пина внешнего действия AI-Code Review с версии 1.0.2 (commit dc359e7...) на версию 1.1.0 (commit 977c912...). В комментарии указано, что новая версия выводит находки непосредственно на строках diff.",
+          "evidenceIds": [
+            "R27",
+            "R28",
+            "L27",
+            "L28"
+          ]
+        },
+        "userNote": "",
+        "risks": [],
+        "checks": [
+          {
+            "text": "Проверить наличие нового commit SHA в файле .github/workflows/ai-code-review.yml",
+            "evidenceIds": [
+              "R28"
+            ],
+            "steps": [
+              "Открыть файл .github/workflows/ai-code-review.yml",
+              "Найти строку с uses: PeshkovND/AI-Advent-Challenge",
+              "Убедиться, что значение @ равно 977c91233e221f529cb0382909d5e756befeb19c"
+            ],
+            "expected": "В файле указан новый commit SHA 977c91233e221f529cb0382909d5e756befeb19c",
+            "id": ".github/workflows/ai-code-review.yml:0",
+            "status": "passed",
+            "note": "Проверено по Git-снимку fe9030e305306682dfea7a892c23b1a5a1a79dca: строка uses содержит 977c91233e221f529cb0382909d5e756befeb19c. Запуск workflow не проверялся."
+          }
+        ],
+        "evidence": [
+          {
+            "id": "L27",
+            "path": ".github/workflows/ai-code-review.yml",
+            "commit": "5701a9a3e443569c69568c013317d0b1d1fe311a",
+            "line": 27,
+            "side": "LEFT",
+            "quote": "      # RAG AI Code Review v1.0.2, pinned to its verified commit; no npm install.",
+            "changed": true
+          },
+          {
+            "id": "L28",
+            "path": ".github/workflows/ai-code-review.yml",
+            "commit": "5701a9a3e443569c69568c013317d0b1d1fe311a",
+            "line": 28,
+            "side": "LEFT",
+            "quote": "      - uses: PeshkovND/AI-Advent-Challenge@dc359e71221316df806fc4e82cc542ebd35c5e53",
+            "changed": true
+          },
+          {
+            "id": "R27",
+            "path": ".github/workflows/ai-code-review.yml",
+            "commit": "fe9030e305306682dfea7a892c23b1a5a1a79dca",
+            "line": 27,
+            "side": "RIGHT",
+            "quote": "      # RAG AI Code Review v1.1.0, pinned commit; findings appear on diff lines.",
+            "changed": true
+          },
+          {
+            "id": "R28",
+            "path": ".github/workflows/ai-code-review.yml",
+            "commit": "fe9030e305306682dfea7a892c23b1a5a1a79dca",
+            "line": 28,
+            "side": "RIGHT",
+            "quote": "      - uses: PeshkovND/AI-Advent-Challenge@977c91233e221f529cb0382909d5e756befeb19c",
+            "changed": true
+          }
+        ],
+        "limited": false,
+        "verification": {
+          "attempts": 1,
+          "judgments": [
+            {
+              "claimId": 1,
+              "supported": true,
+              "reason": "Цитаты L27/L28 (LEFT) подтверждают версию 1.0.2 и SHA dc359e7..., цитаты R27/R28 (RIGHT) подтверждают версию 1.1.0 и SHA 977c912...; комментарий в правой версии указывает на вывод находок на строках diff."
+            },
+            {
+              "claimId": 2,
+              "supported": true,
+              "reason": "Цитата R28 из файла .github/workflows/ai-code-review.yml (commit fe9030e...) содержит строку с uses: PeshkovND/AI-Advent-Challenge@977c91233e221f529cb0382909d5e756befeb19c, что соответствует ожидаемому SHA в инструкции."
+            }
+          ]
+        }
+      }
+    ],
+    "skipped": [],
+    "fileErrors": [],
+    "reviewed": true
+  },
+  "browser": {
+    "createdFromUI": true,
+    "manualCheckSaved": true,
+    "restoredAfterReload": true,
+    "downloadVerified": true,
+    "downloadFiles": [
+      "release-notes.md",
+      "changelog.md",
+      "test-plan.md",
+      "readiness.json"
+    ],
+    "viewportWidth": 554,
+    "documentWidth": 554,
+    "consoleErrors": []
+  },
+  "limits": [
+    "One real CI workflow change; not a full evaluation of application-code release analysis.",
+    "The manual check verified the pinned SHA in the Git snapshot. The GitHub workflow itself was not executed.",
+    "Semantic checks are probabilistic; early Qwen 4B runs produced unsupported guesses and missed incomplete citations. The final version adds code rules for CI pin changes and both sides of small diffs.",
+    "Tickets, documentation edits, Xcode checks and store publishing are not implemented. Cloud provider was not exercised in this live run."
+  ]
+}

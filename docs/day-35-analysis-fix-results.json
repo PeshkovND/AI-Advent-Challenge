@@ -1,0 +1,42 @@
+{
+  "date": "2026-10-19",
+  "runId": "09d2c601-0640-4246-9ea0-5e7e85e43715",
+  "base": "589ce98dfbe28cf6ee7e87e8035bf98deda63a19",
+  "head": "4a56dcd5f4c2dd5f688379bf10948aba7ac5f6d0",
+  "provider": "cloud",
+  "model": "deepseek-v4-flash",
+  "rootCause": {
+    "field": "summary.evidenceIds",
+    "previousMaximum": 8,
+    "observedCitations": 12,
+    "reproducedOn": "Account.swift"
+  },
+  "before": {
+    "analyzed": 3,
+    "total": 9,
+    "errors": 6,
+    "coverage": "partial"
+  },
+  "after": {
+    "analyzed": 9,
+    "total": 9,
+    "errors": 0,
+    "skipped": 0,
+    "limited": 0,
+    "coverage": "complete",
+    "state": "awaiting_checks",
+    "checks": 24,
+    "metrics": {
+      "calls": 26,
+      "promptTokens": 140717,
+      "outputTokens": 13886,
+      "durationMs": 89272
+    }
+  },
+  "validation": {
+    "testsPassed": 17,
+    "build": "passed",
+    "zipIntegrity": "passed",
+    "allClaimsVerified": true
+  }
+}

@@ -1,0 +1,40 @@
+{
+  "date": "2026-10-19",
+  "runId": "09d2c601-0640-4246-9ea0-5e7e85e43715",
+  "base": "589ce98dfbe28cf6ee7e87e8035bf98deda63a19",
+  "head": "4a56dcd5f4c2dd5f688379bf10948aba7ac5f6d0",
+  "model": "deepseek-v4-flash",
+  "state": "awaiting_checks",
+  "coverage": "complete",
+  "scope": "direct symbol/import candidates; both immutable Git snapshots; heuristic, not compiler resolution",
+  "scannedFiles": 107,
+  "contextFiles": 45,
+  "candidateRelations": 72,
+  "findings": 7,
+  "riskReviews": {
+    "dismissed": 13,
+    "confirmed": 6,
+    "uncertain": 1
+  },
+  "newManualChecks": 6,
+  "totalManualChecks": 30,
+  "verification": {
+    "attempts": 1,
+    "claims": 34,
+    "allSupported": true
+  },
+  "validation": {
+    "testsPassed": 23,
+    "build": "passed",
+    "existingFileResultsPreserved": true,
+    "everyQuoteMatchesGitBlob": true,
+    "crossFileClaimsHaveTwoFiles": true,
+    "zipIntegrity": "passed"
+  },
+  "metrics": {
+    "calls": 34,
+    "promptTokens": 1834964,
+    "outputTokens": 51942,
+    "durationMs": 297160
+  }
+}

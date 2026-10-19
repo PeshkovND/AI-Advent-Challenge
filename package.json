@@ -59,7 +59,11 @@
     "llm:service:start": "tsx server/private-llm-server.ts",
     "llm:service:check": "tsx server/private-llm-check.ts",
     "llm:service:queue-demo": "tsx server/private-llm-queue-demo.ts",
-    "test:llm:service": "node --import tsx --test server/private-llm.test.ts server/local-llm-context.test.ts"
+    "test:llm:service": "node --import tsx --test server/private-llm.test.ts server/local-llm-context.test.ts",
+    "test:releases": "npm --prefix release-copilot test",
+    "releases:dev": "npm --prefix release-copilot run dev",
+    "releases:build": "npm --prefix release-copilot run build",
+    "releases:start": "npm --prefix release-copilot start"
   },
   "dependencies": {
     "@modelcontextprotocol/client": "^2.0.0",

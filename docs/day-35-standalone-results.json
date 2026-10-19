@@ -1,0 +1,135 @@
+{
+  "date": "2026-10-18",
+  "branch": "day-35",
+  "application": "release-copilot",
+  "url": "http://127.0.0.1:8796/",
+  "independent": {
+    "ownPackageAndLock": true,
+    "ownServerAndUI": true,
+    "importsFromDeepChat": false,
+    "ownSettingsAndData": true,
+    "deepChatProcessesStopped": true,
+    "migratedProjects": 1,
+    "migratedRuns": 2
+  },
+  "checks": {
+    "testsPassed": 14,
+    "testsTotal": 14,
+    "standaloneBuild": "passed",
+    "deepChatTypecheckAndBuild": "passed",
+    "ownFolderPicker": "passed",
+    "restoredAfterReload": "passed",
+    "downloadVerified": true,
+    "consoleErrors": []
+  },
+  "liveRun": {
+    "id": "094712e5-7ec8-4dc2-96a9-3f11c010e740",
+    "version": "standalone-check",
+    "base": "5701a9a3e443569c69568c013317d0b1d1fe311a",
+    "head": "fe9030e305306682dfea7a892c23b1a5a1a79dca",
+    "state": "awaiting_checks",
+    "coverage": "complete",
+    "model": "qwen3.5:9b",
+    "provider": "local",
+    "metrics": {
+      "calls": 2,
+      "promptTokens": 3645,
+      "outputTokens": 454,
+      "durationMs": 52562
+    },
+    "totalFiles": 1,
+    "files": [
+      {
+        "path": ".github/workflows/ai-code-review.yml",
+        "status": "M",
+        "summary": {
+          "text": "Обновление пина внешнего действия AI-Code Review с версии 1.0.2 (commit dc359e7...) на версию 1.1.0 (commit 977c912...). В комментарии указано, что новая версия выводит находки непосредственно на строках diff.",
+          "evidenceIds": [
+            "R27",
+            "R28",
+            "L27",
+            "L28"
+          ]
+        },
+        "userNote": "",
+        "risks": [],
+        "checks": [
+          {
+            "text": "Проверить наличие нового commit SHA в файле .github/workflows/ai-code-review.yml",
+            "evidenceIds": [
+              "R28"
+            ],
+            "steps": [
+              "Открыть файл .github/workflows/ai-code-review.yml",
+              "Найти строку с uses: PeshkovND/AI-Advent-Challenge",
+              "Убедиться, что значение @ равно 977c91233e221f529cb0382909d5e756befeb19c"
+            ],
+            "expected": "В файле указан новый commit SHA 977c91233e221f529cb0382909d5e756befeb19c",
+            "id": ".github/workflows/ai-code-review.yml:0",
+            "status": "pending",
+            "note": ""
+          }
+        ],
+        "evidence": [
+          {
+            "id": "L27",
+            "path": ".github/workflows/ai-code-review.yml",
+            "commit": "5701a9a3e443569c69568c013317d0b1d1fe311a",
+            "line": 27,
+            "side": "LEFT",
+            "quote": "      # RAG AI Code Review v1.0.2, pinned to its verified commit; no npm install.",
+            "changed": true
+          },
+          {
+            "id": "L28",
+            "path": ".github/workflows/ai-code-review.yml",
+            "commit": "5701a9a3e443569c69568c013317d0b1d1fe311a",
+            "line": 28,
+            "side": "LEFT",
+            "quote": "      - uses: PeshkovND/AI-Advent-Challenge@dc359e71221316df806fc4e82cc542ebd35c5e53",
+            "changed": true
+          },
+          {
+            "id": "R27",
+            "path": ".github/workflows/ai-code-review.yml",
+            "commit": "fe9030e305306682dfea7a892c23b1a5a1a79dca",
+            "line": 27,
+            "side": "RIGHT",
+            "quote": "      # RAG AI Code Review v1.1.0, pinned commit; findings appear on diff lines.",
+            "changed": true
+          },
+          {
+            "id": "R28",
+            "path": ".github/workflows/ai-code-review.yml",
+            "commit": "fe9030e305306682dfea7a892c23b1a5a1a79dca",
+            "line": 28,
+            "side": "RIGHT",
+            "quote": "      - uses: PeshkovND/AI-Advent-Challenge@977c91233e221f529cb0382909d5e756befeb19c",
+            "changed": true
+          }
+        ],
+        "limited": false,
+        "verification": {
+          "attempts": 1,
+          "judgments": [
+            {
+              "claimId": 1,
+              "supported": true,
+              "reason": "Цитаты L27/R27 подтверждают смену версии пина (v1.0.2 -> v1.1.0) и изменение комментария о выводе находок на строки diff. Цитаты L28/R28 подтверждают смену SHA с dc359e7... на 977c912... в файле .github/workflows/ai-code-review.yml."
+            },
+            {
+              "claimId": 2,
+              "supported": true,
+              "reason": "Цитата R28 из файла .github/workflows/ai-code-review.yml (commit fe9030e...) содержит строку uses: PeshkovND/AI-Advent-Challenge@977c91233e221f529cb0382909d5e756befeb19c, что полностью соответствует ожидаемому результату проверки."
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "limits": [
+    "One real MyFamily CI change, not a comprehensive evaluation of application code.",
+    "Manual check intentionally left pending. No workflow, build or application tests were executed.",
+    "Cloud requests covered by mocked transport test; actual run used local Ollama."
+  ]
+}

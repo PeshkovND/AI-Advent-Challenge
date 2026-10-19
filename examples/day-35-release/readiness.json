@@ -1,0 +1,33 @@
+{
+  "id": "6b3c13d0-8576-47a6-a128-5e2b2ef59399",
+  "project": "MyFamily",
+  "version": "ci-review-1.1.0",
+  "base": "5701a9a3e443569c69568c013317d0b1d1fe311a",
+  "head": "fe9030e305306682dfea7a892c23b1a5a1a79dca",
+  "state": "ready",
+  "coverage": "complete",
+  "reviewed": true,
+  "totalFiles": 1,
+  "analyzedFiles": 1,
+  "checks": [
+    {
+      "id": ".github/workflows/ai-code-review.yml:0",
+      "status": "passed",
+      "note": "Проверено по Git-снимку fe9030e305306682dfea7a892c23b1a5a1a79dca: строка uses содержит 977c91233e221f529cb0382909d5e756befeb19c. Запуск workflow не проверялся."
+    }
+  ],
+  "skipped": [],
+  "fileErrors": [],
+  "limitedFiles": [],
+  "corpusLimited": false,
+  "model": "qwen3.5:9b",
+  "provider": "local",
+  "metrics": {
+    "calls": 2,
+    "promptTokens": 3675,
+    "outputTokens": 476,
+    "durationMs": 57474
+  },
+  "updatedAt": "2026-10-18T13:37:10.588Z",
+  "meaning": "ready означает готовность пакета материалов после ручной проверки, а не публикацию или гарантию качества приложения."
+}

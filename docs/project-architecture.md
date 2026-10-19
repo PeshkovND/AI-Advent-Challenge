@@ -54,6 +54,10 @@ DeepChat — учебное приложение на React, TypeScript, Vite и
 
 Корневой `action.yml` упаковывает тот же сценарий как composite Action для других репозиториев. `server/code-review-action.ts` читает inputs/event, проверяет target checkout, загружает недостающие PR-объекты и формирует отчёты. `server/code-review-github.ts` сверяет координаты с GitHub diff и публикует Review, обновляя собственные обсуждения при повторном запуске. `scripts/build-review-action.mjs` собирает `dist-action/index.cjs` вместе с Zod; runtime не импортирует код или `.env` проверяемого проекта и не устанавливает его зависимости. Внешние проекты подключают версию `ai-review-v1.1.0` и передают свой ключ модели. Swift и текстовые форматы Xcode поддерживаются сборщиком. [Документация Action](ai-review-action.md).
 
+## Отдельное приложение Release Copilot
+
+`release-copilot/` — самостоятельный проект со своим `package.json`, React-интерфейсом, Express-сервером и `data/`. В основной DeepChat не встроен. Алгоритмы чтения Git, chunking, лексического RAG и модельной проверки выделены в собственные модули; импорты исходников DeepChat отсутствуют. API `/api/releases` и выбранные локальные проекты обслуживает только новый сервер. Запуск из каталога приложения: `npm ci`, `npm run build`, `npm start` → `http://127.0.0.1:8796`. [Подробности](../release-copilot/README.md).
+
 ## Приватный сервис
 
 `server/private-llm-server.ts` запускает независимый сервис дня 30, `server/private-llm-app.ts` собирает его маршруты и защиту доступа. Команда `npm run llm:service` предоставляет локальный чат в домашней сети на порту 8788. Этот сервис не публикует маршруты `/api/developer` и не открывает Git-контекст проекта в сеть.
